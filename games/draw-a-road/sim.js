@@ -11,7 +11,7 @@ export const WORLD_H = 18;
 const GRAVITY = 10;
 
 export const CAR = {
-  bodyW: 1.8, bodyH: 0.45,
+  bodyW: 2.0, bodyH: 0.44, bodyY: 0.25, // body sits up above the wheels
   wheelR: 0.55, wheelX: 0.68, wheelY: -0.55, // big monster truck wheels
   speed: 12, boostSpeed: 28, torque: 22,
 };
@@ -51,13 +51,14 @@ export function createSim(level, strokes) {
 
   // ---- car ----
   const sx = level.car.x, sy = level.car.y + CAR.rideH;
-  const chassis = world.createBody({ type: 'dynamic', position: Vec2(sx, sy) });
-  chassis.createFixture(planck.Box(CAR.bodyW / 2, CAR.bodyH / 2), { density: 1.2, friction: 0.4 });
-  chassis.createFixture(planck.Polygon([Vec2(-0.55, 0.2), Vec2(0.35, 0.2), Vec2(0.15, 0.62), Vec2(-0.45, 0.62)]), { density: 0.5, friction: 0.4 });
-  // keep the weight low and a bit forward so the car does not flip on hills
+  // angular damping stops the truck tumbling over too easily
+  const chassis = world.createBody({ type: 'dynamic', position: Vec2(sx, sy), angularDamping: 1 });
+  chassis.createFixture(planck.Box(CAR.bodyW / 2, CAR.bodyH / 2, Vec2(0, CAR.bodyY), 0), { density: 1.2, friction: 0.4 });
+  chassis.createFixture(planck.Polygon([Vec2(-0.45, 0.47), Vec2(0.4, 0.47), Vec2(0.2, 0.92), Vec2(-0.38, 0.92)]), { density: 0.5, friction: 0.4 });
+  // keep the weight low and in the middle so the truck does not flip
   const md = { mass: 0, center: Vec2(), I: 0 };
   chassis.getMassData(md);
-  md.center = Vec2(0.1, -0.5);
+  md.center = Vec2(0, -0.45);
   chassis.setMassData(md);
   const wheels = [-1, 1].map(side => {
     const w = world.createBody({ type: 'dynamic', position: Vec2(sx + side * CAR.wheelX, sy + CAR.wheelY), bullet: true });
@@ -67,7 +68,7 @@ export function createSim(level, strokes) {
   const engine = level.engine !== false;
   const joints = wheels.map(w => world.createJoint(planck.WheelJoint({
     motorSpeed: 0, maxMotorTorque: CAR.torque, enableMotor: engine,
-    frequencyHz: 4, dampingRatio: 0.6,
+    frequencyHz: 6, dampingRatio: 0.9, // firm springs, no wobbly wheels
   }, chassis, w, w.getPosition(), Vec2(0, 1))));
   const parts = [chassis, ...wheels];
 
@@ -152,7 +153,7 @@ export function createSim(level, strokes) {
           placeCar(pt.out.x, pt.out.y);
           const dir = pt.dir || 1;
           const v = chassis.getLinearVelocity();
-          const speed = Math.max(Math.hypot(v.x, v.y), 6);
+          const speed = Math.min(Math.max(Math.hypot(v.x, v.y), 6), 10);
           parts.forEach(p => p.setLinearVelocity(Vec2(speed * dir, 0)));
           events.push('portal');
           state.portalCool = 1;

@@ -255,7 +255,7 @@ export function mount(stage) {
     if (sim.state.status === 'driving' && level.engine !== false && puffTimer <= 0) {
       puffTimer = c.boosting ? 0.03 : 0.09;
       const cos = Math.cos(c.angle), sin = Math.sin(c.angle);
-      smoke.push({ x: c.x - 0.57 * cos - 0.85 * sin, y: c.y - 0.57 * sin + 0.85 * cos, vx: -0.8 + Math.random() * 0.4, vy: 1 + Math.random() * 0.5,
+      smoke.push({ x: c.x - 0.53 * cos - 1.1 * sin, y: c.y - 0.53 * sin + 1.1 * cos, vx: -0.8 + Math.random() * 0.4, vy: 1 + Math.random() * 0.5,
         life: 1, r: 0.18 + Math.random() * 0.08, c: c.boosting ? '#ffb74d' : '#9e9e9e' });
     }
     for (const ev of sim.state.events.splice(0)) {
@@ -634,19 +634,20 @@ export function mount(stage) {
     const cos = Math.cos(c.angle), sin = Math.sin(c.angle);
     const local = (lx, ly) => toScreen(L, c.x + lx * cos - ly * sin, c.y + lx * sin + ly * cos);
 
-    // springy shocks from body to wheels
+    // straight springy shocks from the frame down to each wheel
     c.wheels.forEach((w, i) => {
-      const [ax, ay] = local((i ? 1 : -1) * CAR.wheelX, -0.1);
+      const side = i ? 1 : -1;
+      const [ax, ay] = local(side * CAR.wheelX, 0.05);
       const [bx, by] = toScreen(L, w.x, w.y);
       ctx.lineCap = 'round';
-      ctx.strokeStyle = '#b0bec5'; ctx.lineWidth = s * 0.12;
+      ctx.strokeStyle = '#78909c'; ctx.lineWidth = s * 0.1;
       ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
       const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
-      ctx.strokeStyle = '#e53935'; ctx.lineWidth = s * 0.06;
+      ctx.strokeStyle = '#ffca28'; ctx.lineWidth = s * 0.05;
       ctx.beginPath();
-      for (let k = 0; k <= 8; k++) {
-        const t = 0.1 + k / 8 * 0.6, side = (k % 2 ? 1 : -1) * s * 0.12;
-        ctx.lineTo(ax + dx * t + nx * side, ay + dy * t + ny * side);
+      for (let k = 0; k <= 7; k++) {
+        const t = 0.05 + k / 7 * 0.6, off = (k % 2 ? 1 : -1) * s * 0.1;
+        ctx.lineTo(ax + dx * t + nx * off, ay + dy * t + ny * off);
       }
       ctx.stroke();
     });
@@ -658,77 +659,86 @@ export function mount(stage) {
     ctx.rotate(-c.angle);
     const P = (x, y) => [x * s, -y * s];
     const poly = pts => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(...P(x, y)) : ctx.moveTo(...P(x, y))); ctx.closePath(); };
+    const box = (x1, y1, x2, y2, r) => { roundRect(x1 * s, -y2 * s, (x2 - x1) * s, (y2 - y1) * s, r * s); };
     ctx.lineJoin = 'round';
 
-    // frame under the body
+    // chassis frame between the wheels
     ctx.fillStyle = '#37474f';
-    roundRect(-0.85 * s, 0.12 * s, 1.7 * s, 0.16 * s, 0.06 * s); ctx.fill();
-    // exhaust stack
-    ctx.fillStyle = '#90a4ae';
-    roundRect(-0.62 * s, -0.82 * s, 0.1 * s, 0.6 * s, 0.04 * s); ctx.fill();
+    box(-0.9, -0.1, 0.9, 0.06, 0.05); ctx.fill();
+    // exhaust stack behind the cab
+    ctx.fillStyle = '#b0bec5';
+    box(-0.58, 0.4, -0.48, 1.08, 0.04); ctx.fill();
+    ctx.fillStyle = '#546e7a';
+    box(-0.6, 1.02, -0.46, 1.1, 0.03); ctx.fill();
     // cab
-    poly([[-0.52, 0.2], [0.32, 0.2], [0.14, 0.7], [-0.44, 0.7]]);
+    poly([[-0.45, 0.44], [0.38, 0.44], [0.2, 0.92], [-0.38, 0.92]]);
     ctx.fillStyle = TRUCK.body; ctx.fill();
     ctx.strokeStyle = TRUCK.dark; ctx.lineWidth = s * 0.06; ctx.stroke();
-    poly([[-0.37, 0.27], [0.2, 0.27], [0.07, 0.6], [-0.33, 0.6]]);
+    poly([[-0.31, 0.52], [0.25, 0.52], [0.12, 0.84], [-0.27, 0.84]]);
     ctx.fillStyle = '#b3e5fc'; ctx.fill();
     // driver with a helmet and a big smile
-    ctx.beginPath(); ctx.arc(-0.1 * s, -0.4 * s, 0.13 * s, 0, 7); ctx.fillStyle = '#ffcc80'; ctx.fill();
-    ctx.beginPath(); ctx.arc(-0.1 * s, -0.43 * s, 0.14 * s, Math.PI, 0); ctx.fillStyle = '#e53935'; ctx.fill();
+    ctx.beginPath(); ctx.arc(-0.06 * s, -0.64 * s, 0.12 * s, 0, 7); ctx.fillStyle = '#ffcc80'; ctx.fill();
+    ctx.beginPath(); ctx.arc(-0.06 * s, -0.67 * s, 0.13 * s, Math.PI, 0); ctx.fillStyle = '#e53935'; ctx.fill();
     ctx.fillStyle = '#3e2723';
-    ctx.beginPath(); ctx.arc(-0.03 * s, -0.4 * s, 0.022 * s, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#3e2723'; ctx.lineWidth = s * 0.025;
-    ctx.beginPath(); ctx.arc(-0.05 * s, -0.36 * s, 0.05 * s, 0.2, 2.2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.5)';
-    poly([[0.12, 0.3], [0.17, 0.3], [0.06, 0.57], [0.02, 0.57]]); ctx.fill();
-    // roll bar with lights
+    ctx.beginPath(); ctx.arc(0.0, -0.64 * s, 0.02 * s, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#3e2723'; ctx.lineWidth = s * 0.022;
+    ctx.beginPath(); ctx.arc(-0.02 * s, -0.6 * s, 0.045 * s, 0.2, 2.2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    poly([[0.15, 0.55], [0.2, 0.55], [0.1, 0.81], [0.06, 0.81]]); ctx.fill();
+    // roof lights
     ctx.fillStyle = '#263238';
-    roundRect(-0.42 * s, -0.8 * s, 0.5 * s, 0.1 * s, 0.04 * s); ctx.fill();
+    box(-0.38, 0.92, 0.18, 1.0, 0.03); ctx.fill();
     ctx.fillStyle = '#fff59d';
-    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc((-0.33 + i * 0.16) * s, -0.75 * s, 0.045 * s, 0, 7); ctx.fill(); }
-    // main body
-    poly([[-0.95, -0.15], [0.92, -0.15], [1.0, 0.0], [0.95, 0.2], [0.35, 0.26], [-0.95, 0.28]]);
-    const g = ctx.createLinearGradient(0, -0.3 * s, 0, 0.2 * s);
-    g.addColorStop(0, '#ab47bc'); g.addColorStop(1, TRUCK.body);
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc((-0.28 + i * 0.18) * s, -0.96 * s, 0.04 * s, 0, 7); ctx.fill(); }
+    // main body with flames
+    const bodyPts = [[-1.0, 0.04], [0.96, 0.04], [1.03, 0.16], [1.0, 0.36], [0.4, 0.46], [-1.0, 0.47]];
+    poly(bodyPts);
+    const g = ctx.createLinearGradient(0, -0.47 * s, 0, -0.04 * s);
+    g.addColorStop(0, '#ba68c8'); g.addColorStop(1, TRUCK.body);
     ctx.fillStyle = g; ctx.fill();
-    ctx.strokeStyle = TRUCK.dark; ctx.lineWidth = s * 0.06; ctx.stroke();
-    // flames!
     ctx.save();
-    poly([[-0.95, -0.15], [0.92, -0.15], [1.0, 0.0], [0.95, 0.2], [0.35, 0.26], [-0.95, 0.28]]);
+    poly(bodyPts);
     ctx.clip();
     const flame = (col, k) => {
       ctx.beginPath();
-      ctx.moveTo(...P(1.0, -0.15));
-      ctx.lineTo(...P(1.0, 0.12 * k));
+      ctx.moveTo(...P(1.05, 0.04));
+      ctx.lineTo(...P(1.05, 0.04 + 0.3 * k));
       for (let i = 0; i < 4; i++) {
-        const x = 0.75 - i * 0.32;
-        ctx.quadraticCurveTo(...P(x + 0.1, 0.16 * k), ...P(x - 0.2, 0.1 * k + 0.06));
-        ctx.quadraticCurveTo(...P(x - 0.05, 0.02 * k), ...P(x - 0.1, -0.02));
+        const x = 0.8 - i * 0.33;
+        ctx.quadraticCurveTo(...P(x + 0.08, 0.04 + 0.34 * k), ...P(x - 0.2, 0.04 + 0.26 * k + 0.04));
+        ctx.quadraticCurveTo(...P(x - 0.04, 0.04 + 0.16 * k), ...P(x - 0.1, 0.1));
       }
-      ctx.lineTo(...P(-0.5, -0.15));
+      ctx.lineTo(...P(-0.55, 0.04));
       ctx.closePath();
       ctx.fillStyle = col; ctx.fill();
     };
     flame(TRUCK.flame2, 1);
     flame(TRUCK.flame1, 0.55);
     ctx.restore();
+    poly(bodyPts);
+    ctx.strokeStyle = TRUCK.dark; ctx.lineWidth = s * 0.06; ctx.stroke();
+    // door line + handle
+    ctx.strokeStyle = 'rgba(74,20,140,.5)'; ctx.lineWidth = s * 0.03;
+    ctx.beginPath(); ctx.moveTo(...P(0.3, 0.44)); ctx.lineTo(...P(0.3, 0.08)); ctx.stroke();
     // truck bed rim
     ctx.fillStyle = TRUCK.dark;
-    roundRect(-0.98 * s, -0.36 * s, 0.5 * s, 0.1 * s, 0.04 * s); ctx.fill();
-    // bumper + headlight
+    box(-1.03, 0.45, -0.5, 0.55, 0.04); ctx.fill();
+    // bumpers + headlight
     ctx.fillStyle = '#cfd8dc';
-    roundRect(0.88 * s, 0.02 * s, 0.18 * s, 0.14 * s, 0.05 * s); ctx.fill();
-    roundRect(-1.04 * s, 0.02 * s, 0.14 * s, 0.14 * s, 0.05 * s); ctx.fill();
-    ctx.beginPath(); ctx.arc(0.9 * s, -0.08 * s, 0.07 * s, 0, 7); ctx.fillStyle = '#fff176'; ctx.fill();
+    box(0.96, 0.04, 1.14, 0.2, 0.05); ctx.fill();
+    box(-1.12, 0.04, -0.96, 0.2, 0.05); ctx.fill();
+    ctx.beginPath(); ctx.arc(0.95 * s, -0.3 * s, 0.07 * s, 0, 7); ctx.fillStyle = '#fff176'; ctx.fill();
     ctx.strokeStyle = '#f9a825'; ctx.lineWidth = s * 0.02; ctx.stroke();
+    ctx.fillStyle = '#e53935';
+    box(-1.03, 0.26, -0.97, 0.38, 0.02); ctx.fill();
     if (c.boosting) {
       ctx.fillStyle = '#ff9800';
       ctx.beginPath();
-      ctx.moveTo(-1.0 * s, -0.1 * s); ctx.lineTo((-1.5 - Math.random() * 0.5) * s, 0.02 * s); ctx.lineTo(-1.0 * s, 0.12 * s);
+      ctx.moveTo(-1.1 * s, -0.06 * s); ctx.lineTo((-1.6 - Math.random() * 0.5) * s, -0.14 * s); ctx.lineTo(-1.1 * s, -0.24 * s);
       ctx.fill();
       ctx.fillStyle = '#fff176';
       ctx.beginPath();
-      ctx.moveTo(-1.0 * s, -0.04 * s); ctx.lineTo((-1.3 - Math.random() * 0.3) * s, 0.02 * s); ctx.lineTo(-1.0 * s, 0.08 * s);
+      ctx.moveTo(-1.1 * s, -0.1 * s); ctx.lineTo((-1.4 - Math.random() * 0.3) * s, -0.14 * s); ctx.lineTo(-1.1 * s, -0.19 * s);
       ctx.fill();
     }
     ctx.restore();
