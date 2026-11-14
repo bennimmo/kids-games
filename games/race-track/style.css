@@ -236,3 +236,10 @@
   .rt-keypad { grid-template-columns: repeat(4, 64px); }
   .rt-keypad button, .rt-code span { width: 64px; height: 64px; font-size: 38px; }
 }
+.rt-badge-pen { font-size: 34px; animation: rt-pen 1s ease-in-out infinite; }
+@keyframes rt-pen { 50% { transform: translate(4px, -4px) rotate(-10deg); } }
+.rt-badge-wait, .rt-netwait { font-size: 26px; animation: rt-pulse .8s infinite; }
+.rt-netwait {
+  position: absolute; top: 90px; left: 14px; background: rgba(255,255,255,.9);
+  padding: 6px 10px; border-radius: 999px; pointer-events: none;
+}
