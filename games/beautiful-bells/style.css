@@ -262,3 +262,112 @@
   .bb-held { bottom: 10px; }
   .bb-held-pic { width: 52px; height: 52px; }
 }
+
+/* ---------- play with friends ---------- */
+.bb-friends-btn {
+  display: block; margin: 4px auto 0; padding: 12px 26px; border-radius: 999px;
+  font-size: 26px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #7b6cff, #c56cff); box-shadow: 0 6px 0 #6a3fb0;
+}
+.bb-friends-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #6a3fb0; }
+.bb-roombar {
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
+  margin: 6px auto 0; padding: 8px 14px; max-width: 640px;
+  background: rgba(255,255,255,.85); border-radius: 999px; box-shadow: 0 4px 0 rgba(150,60,150,.2);
+}
+.bb-roombar-l { font-weight: 700; font-size: 20px; color: #8a3fb0; }
+.bb-roombar-f { font-size: 28px; letter-spacing: 2px; }
+.bb-leave { padding: 8px 16px; border-radius: 999px; background: #ffe0e6; font-size: 18px; font-weight: 700; }
+.bb-code { display: inline-flex; gap: 4px; font-size: 32px; }
+.bb-code span { background: #fff; border-radius: 12px; padding: 2px 6px; box-shadow: 0 2px 0 rgba(0,0,0,.1); }
+.bb-code.big { font-size: clamp(30px, 5vw, 48px); gap: 8px; }
+.bb-code.small { font-size: 18px; position: absolute; right: 8px; top: 8px; opacity: .85; }
+
+.bb-mp { height: 100%; overflow-y: auto; padding: 24px 16px 40px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.bb-mp .bb-title { padding: 0 80px; }
+.bb-mp-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 24px; margin-top: 20px; }
+.bb-big {
+  width: 240px; max-width: 80vw; padding: 26px 16px; border-radius: 32px; background: #fff;
+  box-shadow: 0 8px 0 rgba(150,60,150,.2);
+  display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 28px; font-weight: 700;
+}
+.bb-big .i { font-size: 80px; line-height: 1; }
+.bb-big:active { transform: translateY(5px); }
+.bb-mp-msg { font-size: 24px; font-weight: 700; color: #8a3fb0; min-height: 1.2em; text-align: center; }
+.bb-slots { display: flex; gap: 12px; }
+.bb-slots span {
+  width: 72px; height: 72px; border-radius: 18px; background: #fff; border: 4px dashed #f7b6da;
+  display: grid; place-items: center; font-size: 44px;
+}
+.bb-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; }
+.bb-keypad button {
+  width: 72px; height: 72px; border-radius: 18px; background: #fff; font-size: 42px;
+  box-shadow: 0 5px 0 rgba(150,60,150,.2);
+}
+.bb-keypad button:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(150,60,150,.2); }
+.bb-rub { padding: 10px 28px; border-radius: 999px; background: #ffe0e6; font-size: 30px; }
+
+/* two big girls side by side */
+.bb-dolls { flex: 1; min-height: 0; display: flex; gap: 10px; margin: 0 8px 0 84px; }
+.bb-dolls .bb-doll { flex: 1; margin: 0; min-width: 0; }
+.bb-friend {
+  flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column;
+  background: rgba(255,255,255,.4); border-radius: 28px; margin-bottom: 8px;
+}
+.bb-friend-name { text-align: center; font-size: 22px; font-weight: 700; padding-top: 8px; color: #8a3fb0; }
+.bb-friend-girl { flex: 1; min-height: 0; position: relative; }
+.bb-friend-girl svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bb-friend.ping .bb-friend-girl svg { animation: bb-ping .7s ease-out; }
+.bb-friend-thumbs { display: flex; justify-content: center; gap: 8px; padding: 6px; }
+.bb-friend-thumbs button {
+  position: relative; width: 60px; height: 60px; border-radius: 50%; overflow: hidden;
+  background: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.12);
+}
+.bb-friend-thumbs button.on { box-shadow: 0 0 0 4px #ff4fa0; }
+.bb-friend-thumbs svg { width: 100%; height: 100%; }
+.bb-friend-thumbs span { position: absolute; right: -2px; bottom: -4px; font-size: 20px; }
+.bb-friend-wait { margin: auto; text-align: center; padding: 16px; font-size: 20px; font-weight: 700; color: #8a3fb0; }
+.bb-friend-wait p { margin: 6px 0; }
+.bb-showoff {
+  position: absolute; right: 14px; bottom: 120px; z-index: 5;
+  width: 84px; height: 84px; border-radius: 50%;
+  background: linear-gradient(135deg, #ffd23f, #ff8a3d); color: #fff; font-size: 34px; line-height: 1;
+  box-shadow: 0 6px 0 #c8641a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.bb-showoff span { font-size: 14px; font-weight: 700; }
+.bb-showoff:active { transform: translateY(4px); box-shadow: 0 2px 0 #c8641a; }
+@keyframes bb-ping {
+  0% { filter: drop-shadow(0 0 0 #fff); transform: scale(1); }
+  40% { filter: drop-shadow(0 0 16px #fff) drop-shadow(0 0 20px #ff9bd2); transform: scale(1.02); }
+  100% { filter: none; transform: scale(1); }
+}
+@media (max-aspect-ratio: 1/1) {
+  .bb-dolls { margin: 80px 8px 0; gap: 6px; }
+  .bb-dolls .bb-doll { margin: 0; }
+  .bb-friend-name { font-size: 16px; }
+  .bb-friend-thumbs button { width: 44px; height: 44px; }
+  .bb-showoff { width: 64px; height: 64px; font-size: 26px; bottom: 96px; }
+  .bb-code.small { display: none; }
+  .bb-keypad { grid-template-columns: repeat(4, 64px); }
+  .bb-keypad button { width: 64px; height: 64px; font-size: 36px; }
+}
+.bb-me-name {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 2; pointer-events: none;
+  text-align: center; font-size: 22px; font-weight: 700; color: #ff4fa0; padding-top: 8px;
+}
+.bb-friend .bb-code.small { position: static; justify-content: center; padding: 0 0 8px; }
+@media (min-aspect-ratio: 1/1) {
+  .bb-salon.mp .bb-title-small { padding-right: 190px; text-align: left; padding-left: 100px; }
+  .bb-salon.mp .bb-photo, .bb-salon.mp .bb-showoff { top: 12px; bottom: auto; width: 76px; height: 76px; font-size: 30px; }
+  .bb-salon.mp .bb-photo { right: 12px; }
+  .bb-salon.mp .bb-showoff { right: 98px; }
+  .bb-salon.mp .bb-photo span, .bb-salon.mp .bb-showoff span { font-size: 13px; }
+  .bb-salon.mp .bb-dolls { margin-top: 18px; }
+}
+@media (max-aspect-ratio: 1/1) {
+  .bb-me-name { font-size: 15px; padding-top: 4px; }
+  .bb-salon.mp .bb-photo { width: 64px; height: 64px; font-size: 26px; }
+  .bb-salon.mp .bb-photo span { font-size: 13px; }
+  .bb-salon.mp .bb-showoff { bottom: 86px; }
+}
