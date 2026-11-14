@@ -137,14 +137,17 @@ function collide(cars, ev) {
       const d = Math.hypot(dx, dy);
       if (d === 0 || d > CAR_R * 2) continue;
       const nx = dx / d, ny = dy / d;
-      const push = (CAR_R * 2 - d) / 2;
-      a.x -= nx * push; a.y -= ny * push;
-      b.x += nx * push; b.y += ny * push;
+      if (a.remote && b.remote) continue; // the other devices handle that
+      // online cars are moved by their owner, so only push our own car
+      const wa = a.remote ? 0 : b.remote ? 1 : 0.5, wb = 1 - wa;
+      const push = CAR_R * 2 - d;
+      a.x -= nx * push * wa; a.y -= ny * push * wa;
+      b.x += nx * push * wb; b.y += ny * push * wb;
       const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
       if (rel < 0) {
         const k = -rel * 0.8;
-        a.vx -= nx * k / 2 * 1; a.vy -= ny * k / 2;
-        b.vx += nx * k / 2; b.vy += ny * k / 2;
+        a.vx -= nx * k * wa; a.vy -= ny * k * wa;
+        b.vx += nx * k * wb; b.vy += ny * k * wb;
         if (-rel > 80) ev.push({ type: 'bump' });
       }
     }
@@ -164,6 +167,7 @@ export function stepRace(race, track, items, inputs, dt) {
   }
 
   for (const car of race.cars) {
+    if (car.remote) continue; // position comes from the network
     const live = race.phase === 'racing' && !car.finished;
     updateCar(car, live ? (inputs[car.id] || {}) : {}, track, items, dt, ev);
 
@@ -172,6 +176,7 @@ export function stepRace(race, track, items, inputs, dt) {
       car.lap = lap;
       if (car.prog >= LAPS * n) {
         car.finished = true;
+        car.finishT = race.t - race.goT;
         race.finishOrder.push(car.id);
         car.place = race.finishOrder.length;
         ev.push({ type: 'finish', id: car.id, place: car.place });
@@ -182,7 +187,7 @@ export function stepRace(race, track, items, inputs, dt) {
   }
   collide(race.cars, ev);
 
-  if (race.phase === 'racing' && race.finishOrder.length) {
+  if (race.phase === 'racing' && race.cars.some(c => c.finished)) {
     race.endTimer -= dt;
     if (race.cars.every(c => c.finished) || race.endTimer <= 0) {
       race.phase = 'done';
@@ -197,9 +202,9 @@ export function lapsDone(car, track) {
   return Math.max(0, Math.min(LAPS, Math.floor(car.prog / track.n)));
 }
 
-// finishing order, then everyone else by how far they got
+// finishing order (by finish time, works online too), then everyone else by how far they got
 export function standings(race) {
-  const done = race.finishOrder.map(id => race.cars.find(c => c.id === id));
+  const done = race.cars.filter(c => c.finished).sort((a, b) => (a.finishT ?? 1e9) - (b.finishT ?? 1e9));
   const rest = race.cars.filter(c => !c.finished).sort((a, b) => b.prog - a.prog);
   return [...done, ...rest];
 }
