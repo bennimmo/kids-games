@@ -360,8 +360,9 @@ export function mount(stage) {
   }
   function clampCam() {
     const hw = view.width / 2 / cam.z, hh = view.height / 2 / cam.z;
-    cam.x = W < hw * 2 ? W / 2 : Math.min(W - hw, Math.max(hw, cam.x));
-    const top = -500 + hh, bottom = H - hh;
+    const pad = overview ? 0 : 320;   // a bit of sea past each end, so edge tanks can be in the middle
+    cam.x = W + pad * 2 < hw * 2 ? W / 2 : Math.min(W + pad - hw, Math.max(hw - pad, cam.x));
+    const top = -500 + hh, bottom = H + (overview ? 0 : 200) - hh;
     cam.y = bottom < top ? (top + bottom) / 2 : Math.min(bottom, Math.max(top, cam.y));
   }
   function updateCamera(dt) {
