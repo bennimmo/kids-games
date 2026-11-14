@@ -4,7 +4,7 @@
 // Actions carry everything they need (even random keys and brush points),
 // so every friend's screen ends up the same when they replay them.
 // Bump this when the look changes shape. Saved girls from older versions are simply dropped.
-export const LOOK_VERSION = 2;
+export const LOOK_VERSION = 3;
 
 const MAX_PLACED = 40;
 const MAX_PAINT_POINTS = 12000; // numbers (x and y) kept across all brush strokes
@@ -24,6 +24,12 @@ export function newLook(girl) {
     topStyle: girl.topStyle || 'tee',
     topColor: girl.topColor || 'pink',
     topPattern: 'plain',
+    bottom: girl.bottom || null,
+    dress: girl.dress || null,  // a dress hides the top and bottoms
+    socks: girl.socks || null,
+    shoes: girl.shoes || null,
+    bag: null,
+    bracelet: null,
     mascara: null,
     eyeliner: null,
     earrings: null,
@@ -63,7 +69,7 @@ export function presetStrokes(layer, item) {
 export function reduce(s, a) {
   switch (a.type) {
     case 'set': {
-      const out = { ...s, [a.key]: a.value };
+      const out = { ...s, [a.key]: a.value, ...(a.also || {}) };
       if (a.key === 'hairLength') out.cut = null;
       return out;
     }
