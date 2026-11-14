@@ -4,9 +4,71 @@ import { sound } from './engine/sound.js';
 const app = document.getElementById('app');
 let cleanup = null;
 
+// ---------- install as an app / full screen ----------
+const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const canFullscreen = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+let installPrompt = null;
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installPrompt = e;
+  if (!location.hash.replace(/^#\/?/, '')) showMenu();
+});
+window.addEventListener('appinstalled', () => { installPrompt = null; showMenu(); });
+
+function toggleFullscreen() {
+  const d = document;
+  if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+  else {
+    const el = d.documentElement;
+    const r = (el.requestFullscreen || el.webkitRequestFullscreen).call(el);
+    if (r && r.catch) r.catch(() => {});
+  }
+}
+
+function appButtons() {
+  if (standalone) return '';
+  const b = [];
+  if (installPrompt || isIOS) b.push('<button class="app-btn app-install" aria-label="Install app">📲</button>');
+  if (canFullscreen) b.push('<button class="app-btn app-full" aria-label="Full screen">⛶</button>');
+  return b.length ? `<div class="app-btns">${b.join('')}</div>` : '';
+}
+
+function iosHelp() {
+  const o = document.createElement('div');
+  o.className = 'app-help';
+  o.innerHTML = `<div class="app-help-card">
+      <div class="app-help-steps"><span>⬆️</span><span>➜</span><span>➕</span><span>➜</span><span>🎮</span></div>
+      <p>Tap <b>Share</b> <span class="ios-share">⬆️</span> at the top of Safari, then <b>Add to Home Screen</b>.</p>
+      <button class="app-btn">✔️</button>
+    </div>`;
+  o.addEventListener('click', () => o.remove());
+  document.body.appendChild(o);
+}
+
+function wireAppButtons() {
+  const full = app.querySelector('.app-full');
+  if (full) full.addEventListener('click', () => { sound.pop(); toggleFullscreen(); });
+  const inst = app.querySelector('.app-install');
+  if (inst) inst.addEventListener('click', async () => {
+    sound.pop();
+    if (installPrompt) {
+      installPrompt.prompt();
+      await installPrompt.userChoice.catch(() => {});
+      installPrompt = null;
+      showMenu();
+    } else if (isIOS) iosHelp();
+  });
+}
+
 function showMenu() {
   app.innerHTML = `
     <div class="menu">
+      ${appButtons()}
       <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
       <div class="grid">
         ${GAMES.map(g => `
@@ -16,6 +78,7 @@ function showMenu() {
           </button>`).join('')}
       </div>
     </div>`;
+  wireAppButtons();
   app.querySelectorAll('.tile').forEach(btn => {
     btn.addEventListener('click', () => {
       sound.pop();
