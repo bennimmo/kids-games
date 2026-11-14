@@ -1,14 +1,17 @@
 // Beautiful Bells – a makeover game.
 // Screens: pick a girl → choose hair colour / length / eyes → salon (drag things on).
+// Everything is drag and drop. Brushes (lipstick, eyeshadow, blusher, face paint)
+// paint as you rub, and stay in your hand until you put them down. Scissors cut hair.
 // Every girl you make is saved in this browser (last 20) so you can carry on later.
 import { sound } from '../../js/engine/sound.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
-import { renderGirl, swatch, drawThing, tiePoints } from './draw.js';
-import { createStore, newLook, newKey } from './look.js';
+import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD } from './draw.js';
+import { createStore, newLook, newKey, migrate, presetStrokes } from './look.js';
 import { loadGallery, saveToGallery, removeFromGallery } from './gallery.js';
 
 const HAIR_SPOTS = [[132, 128], [268, 128], [160, 104], [240, 104], [118, 172], [282, 172], [200, 96]];
-const FACE_SPOTS = [[142, 262], [258, 262], [124, 236], [276, 236], [200, 312]];
+const isTool = it => it && (it.action === 'paint' || it.action === 'cut');
+const MIN_CUT = 250;
 
 export function mount(stage) {
   const css = document.createElement('link');
@@ -25,7 +28,7 @@ export function mount(stage) {
   let saving = false;    // only save once she reaches the salon
   let unsub = null;
   let saveTimer = null;
-  let tab = 'lipstick';
+  let tab = 'lips';
   let teardownSalon = null;
   const timers = new Set();
   const later = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
@@ -50,7 +53,7 @@ export function mount(stage) {
   // ---------- 1. Pick a girl ----------
   function pickScreen() {
     clearScreen();
-    const saved = loadGallery();
+    const saved = loadGallery().map(s => ({ ...s, look: migrate(s.look) }));
     root.innerHTML = `
       <div class="bb-pick">
         <h1 class="bb-title">Beautiful Bells</h1>
@@ -58,7 +61,7 @@ export function mount(stage) {
         <div class="bb-girls">
           ${GIRLS.map(g => `
             <button class="bb-card" data-girl="${g.id}">
-              <div class="bb-card-pic">${renderGirl(newLook(g), { viewBox: '30 20 340 440' })}</div>
+              <div class="bb-card-pic">${renderGirl(newLook(g), { viewBox: '20 10 360 460' })}</div>
               <span>${g.name}</span>
             </button>`).join('')}
         </div>
@@ -68,7 +71,7 @@ export function mount(stage) {
             ${saved.map(s => `
               <div class="bb-card-wrap">
                 <button class="bb-card" data-saved="${s.id}">
-                  <div class="bb-card-pic">${renderGirl(s.look, { viewBox: '20 20 360 460' })}</div>
+                  <div class="bb-card-pic">${renderGirl(s.look, { viewBox: '20 10 360 460' })}</div>
                   <span>${s.look.name}</span>
                 </button>
                 <button class="bb-del" data-del="${s.id}" aria-label="Delete">🗑️</button>
@@ -81,7 +84,7 @@ export function mount(stage) {
       setupScreen();
     }));
     root.querySelectorAll('[data-saved]').forEach(b => b.addEventListener('click', () => {
-      const s = loadGallery().find(x => x.id === b.dataset.saved);
+      const s = saved.find(x => x.id === b.dataset.saved);
       if (!s) return;
       sound.pop();
       startSession(s.look, s.id);
@@ -124,7 +127,7 @@ export function mount(stage) {
             <div class="bb-row">
               ${Object.entries(HAIR_LENGTHS).map(([k, l]) => `
                 <button class="bb-len ${look.hairLength === k ? 'on' : ''}" data-set="hairLength" data-v="${k}">
-                  ${renderGirl({ ...look, hairLength: k, hairStyle: 'down' }, { viewBox: '30 40 340 490', noPlaced: true })}
+                  ${renderGirl({ ...look, hairLength: k, hairStyle: 'down', cut: null }, { viewBox: '30 40 340 490', noPlaced: true })}
                   <span>${l.name}</span>
                 </button>`).join('')}
             </div>
@@ -168,7 +171,12 @@ export function mount(stage) {
             <button data-tool="girls" aria-label="My girls">👭</button>
           </div>
           <div class="bb-doll"></div>
+          <div class="bb-held" hidden>
+            <div class="bb-held-pic"></div>
+            <button class="bb-held-x" aria-label="Put down">✖</button>
+          </div>
           <button class="bb-photo" aria-label="Save picture">📸<span>Save</span></button>
+          <div class="bb-toast" hidden></div>
         </div>
         <div class="bb-panel">
           <div class="bb-tabs">
@@ -179,8 +187,11 @@ export function mount(stage) {
       </div>`;
     const doll = root.querySelector('.bb-doll');
     const itemsEl = root.querySelector('.bb-items');
+    const held = root.querySelector('.bb-held');
+    const toastEl = root.querySelector('.bb-toast');
+    let active = null; // the brush or scissors in your hand
 
-    const drawDoll = () => { doll.innerHTML = renderGirl(store.get()); };
+    const drawDoll = (look = store.get()) => { doll.innerHTML = renderGirl(look); };
     const drawItems = () => {
       const look = store.get();
       const t = TABS.find(x => x.id === tab) || TABS[0];
@@ -188,7 +199,7 @@ export function mount(stage) {
       itemsEl.innerHTML = t.groups.map(g => `
         ${g.label ? `<div class="bb-group">${g.label}</div>` : ''}
         ${g.items.map(it => `
-          <button class="bb-item ${isOn(it, look) ? 'on' : ''}" data-id="${it.id}" aria-label="${it.label}">
+          <button class="bb-item ${isOn(it, look) ? 'on' : ''} ${active && active.id === it.id ? 'held' : ''}" data-id="${it.id}" aria-label="${it.label}">
             <div class="bb-item-pic">${swatch(it, look)}</div>
             <span>${it.label}</span>
           </button>`).join('')}`).join('');
@@ -198,6 +209,24 @@ export function mount(stage) {
     const drawAll = () => { drawDoll(); drawItems(); };
     const off = store.subscribe(drawAll);
     drawAll();
+
+    const setActive = item => {
+      active = item;
+      held.hidden = !item;
+      if (item) held.querySelector('.bb-held-pic').innerHTML = swatch(item, store.get());
+      doll.classList.toggle('bb-has-tool', !!item);
+      drawItems();
+    };
+    held.querySelector('.bb-held-x').addEventListener('click', () => { sound.pop(); setActive(null); });
+
+    let toastTimer = null;
+    const toast = text => {
+      toastEl.textContent = text;
+      toastEl.hidden = false;
+      toastEl.classList.remove('show'); void toastEl.offsetWidth; toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2200);
+    };
 
     root.querySelectorAll('.bb-tab').forEach(b => b.addEventListener('click', () => {
       sound.pop();
@@ -219,32 +248,107 @@ export function mount(stage) {
     });
     root.querySelector('.bb-photo').addEventListener('click', () => savePicture());
 
-    // ----- drag and drop (tap works too) -----
-    let drag = null;
+    // ----- helpers -----
+    const svgEl = () => doll.querySelector('svg');
     const svgPoint = (x, y) => {
-      const svg = doll.querySelector('svg');
-      const p = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM().inverse());
-      return { x: Math.max(20, Math.min(380, p.x)), y: Math.max(30, Math.min(505, p.y)) };
+      const p = new DOMPoint(x, y).matrixTransform(svgEl().getScreenCTM().inverse());
+      return { x: Math.round(p.x), y: Math.round(p.y) };
     };
+    const clampPt = p => ({ x: Math.max(20, Math.min(380, p.x)), y: Math.max(30, Math.min(505, p.y)) });
     const overDoll = (x, y) => {
       const r = doll.getBoundingClientRect();
       return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     };
+    const makeGhost = (item, tool) => {
+      const g = document.createElement('div');
+      g.className = 'bb-ghost' + (tool ? ' bb-ghost-tool' : '');
+      g.innerHTML = item ? swatch(item, store.get()) : '';
+      root.appendChild(g);
+      return g;
+    };
+    const moveGhost = (g, x, y) => {
+      const r = root.getBoundingClientRect();
+      g.style.transform = `translate(${x - r.left}px, ${y - r.top}px)`;
+    };
+
+    // ----- brushes and scissors -----
+    function toolMove(d, x, y) {
+      if (!overDoll(x, y)) return;
+      const p = svgPoint(x, y);
+      if (d.item.action === 'paint') {
+        if (!d.stroke) {
+          const a = strokeAttrs(d.item, svgEl().dataset.rainbow);
+          const layer = svgEl().querySelector(`[data-strokes="${d.item.layer}"]`);
+          if (!layer) return;
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', a.stroke);
+          path.setAttribute('stroke-width', a.width);
+          path.setAttribute('opacity', a.opacity);
+          path.setAttribute('stroke-linecap', 'round');
+          path.setAttribute('stroke-linejoin', 'round');
+          layer.appendChild(path);
+          d.stroke = { pts: [p.x, p.y], path };
+          path.setAttribute('d', ptsToD(d.stroke.pts));
+          d.used = true;
+          return;
+        }
+        const pts = d.stroke.pts;
+        if (Math.hypot(p.x - pts[pts.length - 2], p.y - pts[pts.length - 1]) < 3) return;
+        pts.push(p.x, p.y);
+        d.stroke.path.setAttribute('d', ptsToD(pts));
+        const now = performance.now();
+        if (!d.lastSound || now - d.lastSound > 110) { d.lastSound = now; sound.tone(260 + Math.random() * 120, .06, 'triangle', .035); }
+      } else if (d.item.action === 'cut') {
+        d.used = true;
+        if (d.cut === undefined) d.cut = hairBottom(store.get());
+        if (p.x < 50 || p.x > 350 || p.y < MIN_CUT || p.y > d.cut - 4) return;
+        d.cut = p.y;
+        drawDoll({ ...store.get(), cut: d.cut });
+        snip(x, y);
+      }
+    }
+    function toolEnd(d) {
+      if (d.item.action === 'paint' && d.stroke) {
+        store.dispatch({ type: 'paint', item: d.item.id, layer: d.item.layer, pts: d.stroke.pts });
+      } else if (d.item.action === 'cut' && d.cut !== undefined && d.cut < hairBottom(store.get())) {
+        store.dispatch({ type: 'set', key: 'cut', value: d.cut });
+      }
+    }
+
+    // ----- drag and drop -----
+    let drag = null;
+    let hover = null; // ghost that follows the mouse while holding a tool
     const onDown = e => {
       if (e.button > 0) return;
       const itemEl = e.target.closest('.bb-item');
       const placedEl = e.target.closest('.bb-placed');
-      if (!itemEl && !placedEl) return;
-      if (placedEl) e.preventDefault();
-      drag = {
-        id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, ghost: null,
-        item: itemEl ? ITEMS[itemEl.dataset.id] : null,
-        placedKey: placedEl ? placedEl.dataset.placed : null,
-        el: itemEl || placedEl,
-      };
+      const onDoll = e.target.closest('.bb-doll');
+      if (itemEl) {
+        drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, item: ITEMS[itemEl.dataset.id], el: itemEl };
+      } else if (placedEl && !active) {
+        e.preventDefault();
+        drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, placedKey: placedEl.dataset.placed, el: placedEl };
+      } else if (onDoll && active) {
+        e.preventDefault();
+        drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: true, item: active, fromDoll: true };
+        drag.ghost = makeGhost(active, true);
+        moveGhost(drag.ghost, e.clientX, e.clientY);
+        if (hover) hover.style.display = 'none';
+        toolMove(drag, e.clientX, e.clientY);
+      }
     };
     const onMove = e => {
-      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag) {
+        // Show the held tool under the mouse.
+        if (active && e.pointerType === 'mouse' && overDoll(e.clientX, e.clientY)) {
+          if (!hover) hover = makeGhost(active, true);
+          hover.style.display = '';
+          moveGhost(hover, e.clientX, e.clientY);
+        } else if (hover) hover.style.display = 'none';
+        return;
+      }
+      if (e.pointerId !== drag.id) return;
       if (!drag.moving && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 10) {
         drag.moving = true;
         let item = drag.item;
@@ -253,18 +357,15 @@ export function mount(stage) {
           item = p && ITEMS[p.item];
           drag.el.style.opacity = '0';
         }
-        drag.ghost = document.createElement('div');
-        drag.ghost.className = 'bb-ghost';
-        drag.ghost.innerHTML = item ? swatch(item, store.get()) : '';
-        root.appendChild(drag.ghost);
+        drag.ghost = makeGhost(item, isTool(item));
+        if (hover) hover.style.display = 'none';
         sound.tone(700, .06, 'sine', .12);
       }
-      if (drag.moving) {
-        e.preventDefault();
-        const r = root.getBoundingClientRect();
-        drag.ghost.style.transform = `translate(${e.clientX - r.left}px, ${e.clientY - r.top}px)`;
-        doll.classList.toggle('bb-over', overDoll(e.clientX, e.clientY));
-      }
+      if (!drag.moving) return;
+      e.preventDefault();
+      moveGhost(drag.ghost, e.clientX, e.clientY);
+      if (isTool(drag.item)) toolMove(drag, e.clientX, e.clientY);
+      else doll.classList.toggle('bb-over', overDoll(e.clientX, e.clientY));
     };
     const onUp = e => {
       if (!drag || e.pointerId !== drag.id) return;
@@ -273,10 +374,11 @@ export function mount(stage) {
       if (d.ghost) d.ghost.remove();
       doll.classList.remove('bb-over');
       const inside = overDoll(e.clientX, e.clientY);
+
       if (d.placedKey) {
         if (!d.moving) return;
         if (inside) {
-          const p = svgPoint(e.clientX, e.clientY);
+          const p = clampPt(svgPoint(e.clientX, e.clientY));
           store.dispatch({ type: 'move', key: d.placedKey, x: p.x, y: p.y });
           sparkle(e.clientX, e.clientY);
         } else {
@@ -286,13 +388,23 @@ export function mount(stage) {
         return;
       }
       if (!d.item) return;
-      if (!d.moving) applyItem(d.item, null, e.clientX, e.clientY);
-      else if (inside) applyItem(d.item, svgPoint(e.clientX, e.clientY), e.clientX, e.clientY);
+      if (!d.moving) { tapItem(d.item, d.el); return; }
+      if (isTool(d.item)) {
+        toolEnd(d);
+        if (d.used && !d.fromDoll) {
+          setActive(d.item);
+          toast(d.item.action === 'cut' ? 'Keep snipping! ✂️' : 'Keep painting! 🖌️');
+        }
+        if (!d.used && !d.fromDoll) toast(d.item.action === 'cut' ? 'Swipe the scissors across her hair ✂️' : 'Rub it on her face! 🖌️');
+        return;
+      }
+      if (inside) applyItem(d.item, clampPt(svgPoint(e.clientX, e.clientY)), e.clientX, e.clientY);
     };
     const onCancel = e => {
       if (!drag || e.pointerId !== drag.id) return;
       if (drag.ghost) drag.ghost.remove();
       if (drag.placedKey) drag.el.style.opacity = '';
+      if (drag.stroke) toolEnd(drag);
       doll.classList.remove('bb-over');
       drag = null;
     };
@@ -301,49 +413,56 @@ export function mount(stage) {
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
 
-    function applyItem(item, pt, sx, sy) {
+    // Tapping only hints – things go on by dragging. Tapping something she's wearing takes it off.
+    function tapItem(item, el) {
       const look = store.get();
-      if (item.action === 'slot') {
-        const cur = look[item.key];
-        const v = cur === item.value && !item.required ? null : item.value;
-        if (v === cur) { sparkleOnDoll(); return; }
-        store.dispatch({ type: 'set', key: item.key, value: v });
-        if (v === null) { sound.tone(500, .12, 'sine', .2, 300); return; }
-      } else if (item.action === 'toggle') {
-        const wasOn = isOn(item, look);
-        store.dispatch({ type: 'toggle', key: item.key, value: item.value });
-        if (wasOn) { sound.tone(500, .12, 'sine', .2, 300); return; }
-      } else if (item.action === 'place') {
-        let p = pt;
-        if (!p) {
-          const inZone = look.placed.filter(q => ITEMS[q.item]?.zone === item.zone).length;
-          let spots = item.zone === 'hair' ? HAIR_SPOTS : FACE_SPOTS;
-          if (item.kind === 'bobble') {
-            const ties = tiePoints(look);
-            if (ties.length) spots = ties;
-          }
-          const [x, y] = spots[inZone % spots.length];
-          p = { x, y };
-        }
-        store.dispatch({ type: 'place', key: newKey(), item: item.id, x: p.x, y: p.y });
-        if (!pt) { sparkleAtSvg(p); twinkle(); return; }
+      if (isOn(item, look) && !item.required) {
+        if (item.action === 'slot') store.dispatch({ type: 'set', key: item.key, value: null });
+        else store.dispatch({ type: 'toggle', key: item.key, value: item.value });
+        sound.tone(500, .12, 'sine', .2, 300);
+        return;
       }
-      if (pt) sparkle(sx, sy); else sparkleOnDoll();
+      if (active && active.id === item.id) { setActive(null); sound.pop(); return; }
+      el.classList.remove('bb-shake'); void el.offsetWidth; el.classList.add('bb-shake');
+      sound.tone(420, .08, 'sine', .12);
+      toast(item.action === 'cut' ? 'Drag the scissors onto her hair! ✂️'
+        : item.action === 'paint' ? 'Drag it onto her face and rub! 🖌️'
+          : 'Drag it onto her! 👆');
+    }
+
+    function applyItem(item, p, sx, sy) {
+      const look = store.get();
+      setActive(null);
+      if (item.action === 'slot') {
+        if (look[item.key] === item.value) { sparkle(sx, sy); return; }
+        store.dispatch({ type: 'set', key: item.key, value: item.value });
+      } else if (item.action === 'toggle') {
+        if (!isOn(item, look)) store.dispatch({ type: 'toggle', key: item.key, value: item.value });
+      } else if (item.action === 'place') {
+        let pt = p;
+        if (item.kind === 'bobble') {
+          // Bobbles snap onto a hair tie if one is close.
+          const tie = tiePoints(look).find(([x, y]) => Math.hypot(x - p.x, y - p.y) < 40);
+          if (tie) pt = { x: tie[0], y: tie[1] };
+        }
+        store.dispatch({ type: 'place', key: newKey(), item: item.id, x: pt.x, y: pt.y });
+      } else if (item.action === 'clear') {
+        store.dispatch({ type: 'clearPaint', layer: item.layer });
+        sound.tone(400, .3, 'sine', .15, 900);
+      } else if (item.action === 'grow') {
+        if (look.cut) {
+          store.dispatch({ type: 'set', key: 'cut', value: null });
+          sound.win();
+        }
+      }
+      sparkle(sx, sy);
       twinkle();
     }
 
-    const sparkleOnDoll = () => {
-      const r = doll.getBoundingClientRect();
-      sparkle(r.left + r.width / 2, r.top + r.height * .45);
-    };
-    const sparkleAtSvg = p => {
-      const svg = doll.querySelector('svg');
-      const s = new DOMPoint(p.x, p.y).matrixTransform(svg.getScreenCTM());
-      sparkle(s.x, s.y);
-    };
-
     teardownSalon = () => {
       off();
+      clearTimeout(toastTimer);
+      if (hover) hover.remove();
       root.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
@@ -355,6 +474,28 @@ export function mount(stage) {
   function twinkle() {
     sound.tone(1200, .08, 'sine', .14, 1800);
     later(() => sound.tone(1600, .1, 'sine', .12, 2200), 70);
+  }
+
+  let lastSnip = 0;
+  function snip(x, y) {
+    const now = performance.now();
+    if (now - lastSnip < 90) return;
+    lastSnip = now;
+    sound.tone(2200, .03, 'square', .07);
+    later(() => sound.tone(1500, .03, 'square', .06), 40);
+    const r = root.getBoundingClientRect();
+    const col = (HAIR_COLORS[store.get().hairColor] || HAIR_COLORS.brown).base;
+    for (let i = 0; i < 3; i++) {
+      const s = document.createElement('span');
+      s.className = 'bb-hairbit';
+      s.style.left = `${x - r.left + (Math.random() - .5) * 40}px`;
+      s.style.top = `${y - r.top}px`;
+      s.style.background = col;
+      s.style.setProperty('--rot', `${Math.random() * 180}deg`);
+      s.style.setProperty('--dx', `${(Math.random() - .5) * 60}px`);
+      root.appendChild(s);
+      later(() => s.remove(), 1200);
+    }
   }
 
   function sparkle(x, y) {
@@ -466,30 +607,36 @@ function isOn(it, look) {
 
 function randomLook(look) {
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-  const fromTab = (id, chance = .85) => {
-    const items = TABS.find(t => t.id === id).groups.flatMap(g => g.items);
-    return Math.random() < chance ? pick(items).value : null;
+  const group = (tabId, label) => {
+    const t = TABS.find(x => x.id === tabId);
+    return (label ? t.groups.find(g => g.label === label) : t.groups[0]).items;
   };
-  const hairbits = TABS.find(t => t.id === 'hairbits').groups;
-  const heads = hairbits.find(g => g.label === 'Headbands').items;
-  const exts = hairbits.find(g => g.label === 'Extensions').items;
+  const maybe = (items, chance) => Math.random() < chance ? pick(items).value : null;
+  const paintItems = layer => group(layer).filter(i => i.action === 'paint');
+  const paint = [];
+  for (const [layer, chance] of [['lips', .9], ['shadow', .8], ['blush', .85]]) {
+    if (Math.random() < chance) paint.push(...presetStrokes(layer, pick(paintItems(layer)).id));
+  }
   const out = {
     ...look,
-    hairStyle: fromTab('hairStyle', 1),
-    top: fromTab('top', 1),
-    lipstick: fromTab('lipstick'),
-    eyeshadow: fromTab('eyeshadow'),
-    mascara: fromTab('mascara'),
-    blush: fromTab('blush'),
-    earrings: fromTab('earrings'),
-    necklace: fromTab('necklace', .7),
-    headwear: Math.random() < .4 ? pick(heads).value : null,
-    extensions: Math.random() < .3 ? [pick(exts).value] : [],
+    hairStyle: pick(group('hair', 'Hairstyles')).value,
+    cut: null,
+    topStyle: pick(group('top', 'Styles')).value,
+    topColor: pick(group('top', 'Colours')).value,
+    topPattern: Math.random() < .4 ? pick(group('top', 'Patterns')).value : 'plain',
+    mascara: maybe(group('lashes', 'Mascara'), .8),
+    eyeliner: maybe(group('lashes', 'Eyeliner'), .3),
+    earrings: maybe(group('earrings'), .85),
+    necklace: maybe(group('necklace'), .7),
+    headwear: maybe(group('hairbits', 'Headbands'), .4),
+    glasses: maybe(group('glasses'), .15),
+    extensions: Math.random() < .3 ? [pick(group('hairbits', 'Extensions')).value] : [],
     freckles: Math.random() < .2,
+    paint,
     placed: [],
   };
   if (Math.random() < .6) {
-    const bits = [...hairbits[0].items, ...hairbits[1].items];
+    const bits = [...group('hairbits', 'Bows'), ...group('hairbits', 'Clips'), ...group('hairbits', 'Flowers')];
     const [x, y] = pick(HAIR_SPOTS);
     out.placed.push({ key: newKey(), item: pick(bits).id, x, y });
   }

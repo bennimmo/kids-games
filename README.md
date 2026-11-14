@@ -53,8 +53,11 @@ Draw lines with your finger/mouse so the car gets to the flag 🏁.
 
 ### 💄 Beautiful Bells (`games/beautiful-bells/`)
 - Pick a girl, then hair colour, length and eye colour.
-- Drag (or tap) makeup, hairstyles, hair bits, earrings, necklaces and tops onto her.
-- 📸 saves a PNG. Last 20 girls kept in the browser ("My girls").
+- Everything is drag and drop (tapping a worn item takes it off).
+- Lipstick, eyeshadow, blusher and face paint are brushes: rub to paint, colours blend. The brush stays in your hand until ✖.
+- ✂️ Scissors cut the hair, 🧪 grow potion brings it back.
+- Tops: 11 styles, 16 colours, 10 patterns. Plus hairstyles, glasses, earrings, necklaces, hair bits.
+- 📸 saves a PNG. Last 20 girls kept in the browser ("My girls"); old saves are upgraded by `migrate()`.
 - Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `game.js` (screens).
 
 ## Design rules
