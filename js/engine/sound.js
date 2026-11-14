@@ -54,4 +54,5 @@ export const sound = {
   bump: () => tone(150, 0.15, 'square', 0.15, 80),
   splash: () => noise(0.45, 900, 0.35),
   tone,
+  noise,
 };

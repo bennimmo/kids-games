@@ -30,6 +30,13 @@ export const GAMES = [
     load: () => import('../games/balloon-pop/game.js'),
   },
   {
+    id: 'tank-tantrum',
+    name: 'Tank Tantrum',
+    icon: '💥',
+    color: '#ffab91',
+    load: () => import('../games/tank-tantrum/game.js'),
+  },
+  {
     id: 'paint',
     name: 'Paint Party',
     icon: '🎨',
