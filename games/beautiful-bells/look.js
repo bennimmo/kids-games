@@ -3,7 +3,8 @@
 // to Firebase, e.g. rooms/{room}/players/{playerId}/look, and render what comes back.
 // Actions carry everything they need (even random keys and brush points),
 // so every friend's screen ends up the same when they replay them.
-import { GIRLS, ITEMS } from './items.js';
+// Bump this when the look changes shape. Saved girls from older versions are simply dropped.
+export const LOOK_VERSION = 2;
 
 const MAX_PLACED = 40;
 const MAX_PAINT_POINTS = 12000; // numbers (x and y) kept across all brush strokes
@@ -11,7 +12,7 @@ const WEARABLES = ['mascara', 'eyeliner', 'earrings', 'necklace', 'headwear', 'g
 
 export function newLook(girl) {
   return {
-    v: 2,
+    v: LOOK_VERSION,
     girl: girl.id,
     name: girl.name,
     skin: girl.skin,
@@ -34,27 +35,6 @@ export function newLook(girl) {
     paint: [],            // [{ item, layer, pts: [x, y, x, y, …] }]
     placed: [],           // [{ key, item, x, y }]
   };
-}
-
-// Brings old saved girls up to date.
-export function migrate(look) {
-  const girl = GIRLS.find(g => g.id === look.girl) || GIRLS[0];
-  const out = { ...newLook(girl), ...look, v: 2 };
-  if (!look.v) {
-    out.paint = [];
-    for (const [key, layer] of [['lipstick', 'lips'], ['eyeshadow', 'shadow'], ['blush', 'blush']]) {
-      if (look[key] && ITEMS[look[key]]) out.paint.push(...presetStrokes(layer, look[key]));
-      delete out[key];
-    }
-    const old = (look.top || '').replace('top-', '');
-    out.topStyle = 'tee';
-    out.topColor = { sparkpink: 'hotpink', sparkpurple: 'purple', rainbow: 'pink' }[old] || old || 'pink';
-    if (old === 'rainbow') out.topPattern = 'rainbow';
-    delete out.top;
-  }
-  out.placed = (out.placed || []).filter(p => ITEMS[p.item]);
-  out.paint = (out.paint || []).filter(s => ITEMS[s.item] && Array.isArray(s.pts));
-  return out;
 }
 
 // Ready-made brush strokes (used by "surprise me" and old saves).
