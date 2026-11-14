@@ -29,7 +29,18 @@ Then open http://localhost:8000
 - `sound.js` – little beeps, no audio files needed
 - `coming-soon.js` – placeholder screen
 
-## Plans
-- 🏎️ Race Track – draw a track with jumps and tunnels, race a friend on one keyboard
-- ✏️ Draw a Road – draw a line for the car to get from start to flag
-- Later: physics (e.g. Matter.js / Planck.js) and online multiplayer (Firebase)
+## Games
+### 🏎️ Raffy Race (`games/race-track/`)
+- Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
+- Drag extras onto the track: jump, water, tunnel. Drag to 🗑️ to remove.
+- Up to 2 players: arrows and WASD. Tap a car to pick its colour.
+- 5 laps. Then 🔁 race again or ✏️ redraw (edit or start fresh).
+- Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
+
+### ✏️ Draw a Road – coming soon
+
+## Design rules
+- Icons, not words (players are 4–6).
+- Multiplayer-ready: game state is plain data, and the simulation is
+  `step(state, inputs, dt)`. Inputs come from "controls" (keyboard now,
+  a friend over Firebase later).

@@ -3,7 +3,7 @@
 export const GAMES = [
   {
     id: 'race-track',
-    name: 'Race Track',
+    name: 'Raffy Race',
     icon: '🏎️',
     color: '#ffd54f',
     load: () => import('../games/race-track/game.js'),
