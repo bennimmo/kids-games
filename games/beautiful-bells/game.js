@@ -212,12 +212,14 @@ export function mount(stage) {
 
     const setActive = item => {
       active = item;
+      if (hover) { hover.remove(); hover = null; }
       held.hidden = !item;
       if (item) held.querySelector('.bb-held-pic').innerHTML = swatch(item, store.get());
       doll.classList.toggle('bb-has-tool', !!item);
       drawItems();
     };
-    held.querySelector('.bb-held-x').addEventListener('click', () => { sound.pop(); setActive(null); });
+    // Tapping anywhere on the "in your hand" badge puts the tool down.
+    held.addEventListener('click', () => { sound.pop(); setActive(null); });
 
     let toastTimer = null;
     const toast = text => {
@@ -231,6 +233,7 @@ export function mount(stage) {
     root.querySelectorAll('.bb-tab').forEach(b => b.addEventListener('click', () => {
       sound.pop();
       tab = b.dataset.tab;
+      if (active) setActive(null);
       itemsEl.scrollTop = 0; itemsEl.scrollLeft = 0;
       drawItems();
     }));
@@ -319,8 +322,19 @@ export function mount(stage) {
     // ----- drag and drop -----
     let drag = null;
     let hover = null; // ghost that follows the mouse while holding a tool
+    // Stops a drag without dropping anything, and makes sure no floating picture is left behind.
+    const cancelDrag = () => {
+      if (drag) {
+        if (drag.placedKey && drag.el) drag.el.style.opacity = '';
+        if (drag.stroke) toolEnd(drag);
+        drag = null;
+      }
+      root.querySelectorAll('.bb-ghost').forEach(g => { if (g !== hover) g.remove(); });
+      doll.classList.remove('bb-over');
+    };
     const onDown = e => {
-      if (e.button > 0) return;
+      if (e.button > 0 || !e.isPrimary) return; // ignore extra fingers
+      if (drag) cancelDrag(); // a lost finger-lift must never leave a picture stuck
       const itemEl = e.target.closest('.bb-item');
       const placedEl = e.target.closest('.bb-placed');
       const onDoll = e.target.closest('.bb-doll');
@@ -368,11 +382,13 @@ export function mount(stage) {
       else doll.classList.toggle('bb-over', overDoll(e.clientX, e.clientY));
     };
     const onUp = e => {
-      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag || e.pointerId !== drag.id) {
+        if (!drag) cancelDrag(); // tidy up any stray picture
+        return;
+      }
       const d = drag;
       drag = null;
-      if (d.ghost) d.ghost.remove();
-      doll.classList.remove('bb-over');
+      cancelDrag();
       const inside = overDoll(e.clientX, e.clientY);
 
       if (d.placedKey) {
@@ -402,13 +418,12 @@ export function mount(stage) {
     };
     const onCancel = e => {
       if (!drag || e.pointerId !== drag.id) return;
-      if (drag.ghost) drag.ghost.remove();
-      if (drag.placedKey) drag.el.style.opacity = '';
-      if (drag.stroke) toolEnd(drag);
-      doll.classList.remove('bb-over');
-      drag = null;
+      cancelDrag();
     };
+    const onBlur = () => { cancelDrag(); if (hover) hover.style.display = 'none'; };
     root.addEventListener('pointerdown', onDown);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onBlur);
     window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -467,6 +482,8 @@ export function mount(stage) {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onBlur);
     };
   }
 
