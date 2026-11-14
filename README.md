@@ -29,8 +29,25 @@ Then open http://localhost:8000
 - `sound.js` – little beeps, no audio files needed
 - `coming-soon.js` – placeholder screen
 
-## Plans
-- 🏎️ Race Track – draw a track with jumps and tunnels, race a friend on one keyboard
-- ✏️ Draw a Road – draw a line for the car to get from start to flag
-- 💄 Beautiful Bells – makeover game for Bella: pick a girl, hair, eyes, then drag on makeup, hairstyles, earrings, necklaces and hair bits. Saves a PNG and keeps the last 20 girls in the browser.
-- Later: physics (e.g. Matter.js / Planck.js) and online multiplayer (Firebase)
+## Games
+### 🏎️ Raffy Race (`games/race-track/`)
+- Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
+- Drag extras onto the track: jump, water, tunnel. Drag to 🗑️ to remove.
+- Up to 2 players: arrows and WASD. Tap a car to pick its colour.
+- 5 laps. Then 🔁 race again or ✏️ redraw (edit, start fresh, or pick a saved track).
+- 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
+- Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
+
+### ✏️ Draw a Road – coming soon
+
+### 💄 Beautiful Bells (`games/beautiful-bells/`)
+- Pick a girl, then hair colour, length and eye colour.
+- Drag (or tap) makeup, hairstyles, hair bits, earrings, necklaces and tops onto her.
+- 📸 saves a PNG. Last 20 girls kept in the browser ("My girls").
+- Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `game.js` (screens).
+
+## Design rules
+- Icons, not words (players are 4–6).
+- Multiplayer-ready: game state is plain data, and the simulation is
+  `step(state, inputs, dt)`. Inputs come from "controls" (keyboard now,
+  a friend over Firebase later).

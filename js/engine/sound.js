@@ -22,6 +22,11 @@ function tone(freq, dur = 0.12, type = 'sine', vol = 0.2, slideTo = null) {
   } catch (e) { /* sound is optional */ }
 }
 
+// Shared audio context (for things like engine sounds).
+export function audioCtx() {
+  try { return ac(); } catch (e) { return null; }
+}
+
 export const sound = {
   pop: () => tone(600, 0.12, 'sine', 0.25, 1200),
   win: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.2, 'triangle'), i * 120)),
