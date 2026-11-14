@@ -390,3 +390,5 @@
   .bb-views { padding: 8px 8px 0; }
   .bb-views button { font-size: 18px; padding: 8px 4px; }
 }
+/* Friend on the left, your girl on the right (next to the menu) */
+.bb-friend { order: -1; }
