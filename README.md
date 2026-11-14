@@ -61,6 +61,17 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - 👭 Play with friends (uses `js/engine/net.js`): make a room or join with 4 pictures. Everyone makes their own girl; your girl and one friend's girl show big side by side, others as small faces to tap. 🎉 Show off sends confetti to everyone. Friends' girls are checked by `sanitizeLook()` before drawing.
 - Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `online.js` (friends), `game.js` (screens).
 
+### 🎨 Paint Party (`games/paint/`)
+A simple paint program, like old Windows Paint.
+- Tools: pen, rainbow pen, spray can, rubber, fill bucket, stickers, line, box, circle (outline or filled)
+- 18 colours + 🎨 any colour, 4 sizes. ↩️ undo / ↪️ redo (Ctrl+Z / Ctrl+Y), 🗑️ clear (can be undone)
+- Saves itself in the browser (last 12, oldest go first if storage is full). 🖼️ opens them, ➕ new page
+- 📥 downloads a PNG
+- 👫 Draw with friends: make a room or join with 4 pictures. Everyone draws on the same page and sees friends' lines as they draw.
+  Each device writes its own strokes (`live/<pid>/<opId>`). If a friend leaves, the host keeps their strokes.
+- A drawing is a list of plain "ops" (`ops.js`), checked by `sanitizeOp()` before drawing friends' ones.
+- Files: `ops.js` (drawing + fill), `gallery.js` (saving), `online.js` (friends), `game.js` (screen)
+
 ## Online play (Firebase)
 - Shared code: `js/engine/net.js` (any game can use it).
 - One Realtime Database for all games: `games/<game>/rooms/<code>/...`

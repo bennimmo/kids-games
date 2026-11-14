@@ -29,4 +29,11 @@ export const GAMES = [
     color: '#ff8a80',
     load: () => import('../games/balloon-pop/game.js'),
   },
+  {
+    id: 'paint',
+    name: 'Paint Party',
+    icon: '🎨',
+    color: '#90caf9',
+    load: () => import('../games/paint/game.js'),
+  },
 ];
