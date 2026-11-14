@@ -41,6 +41,7 @@ export function mount(stage) {
   let smoke = [];          // exhaust puffs
   let shake = 0;           // screen wobble on big bumps
   let puffTimer = 0;
+  let bounceAt = {};       // when each trampoline was last landed on
   let lastTick = 0;
   let loseTimer = 0;
   let winTimer = 0;
@@ -259,7 +260,12 @@ export function mount(stage) {
         life: 1, r: 0.18 + Math.random() * 0.08, c: c.boosting ? '#ffb74d' : '#9e9e9e' });
     }
     for (const ev of sim.state.events.splice(0)) {
-      if (ev === 'bounce') { shake = 0.25; sound.tone(200, 0.35, 'sine', 0.25, 900); burst(c.x, c.y - 0.5, 10, ['#fff', '#ffeb3b']); }
+      if (ev === 'bounce') {
+        let best = 0, bd = 1e9;
+        (level.bouncers || []).forEach((b, n) => { const d = Math.abs(b.x + b.w / 2 - c.x); if (d < bd) { bd = d; best = n; } });
+        bounceAt[best] = time;
+        shake = 0.25; sound.tone(200, 0.35, 'sine', 0.25, 900); burst(c.x, c.y - 0.5, 10, ['#fff', '#ffeb3b']);
+      }
       if (ev === 'boost') { sound.tone(300, 0.4, 'sawtooth', 0.08, 1400); }
       if (ev === 'portal') { sound.tone(1200, 0.3, 'sine', 0.15, 300); burst(c.x, c.y, 16, ['#ce93d8', '#ff9800', '#fff']); }
       if (ev === 'win') { sound.win(); burst(level.flag.x, level.flag.y + 2, 60, CRAYONS, 9); }
@@ -485,48 +491,94 @@ export function mount(stage) {
         ctx.globalAlpha = 1;
       }
     }
-    for (const b of level.bouncers || []) {
-      const [x, y] = toScreen(L, b.x, b.y);
-      const w = b.w * L.s;
-      ctx.strokeStyle = '#546e7a';
-      ctx.lineWidth = L.s * 0.1;
-      for (let i = 0; i <= 3; i++) {
-        const lx = x + w * (i / 3);
-        ctx.beginPath(); ctx.moveTo(lx, y); ctx.lineTo(lx, y + L.s * 0.3); ctx.stroke();
+    level.portals?.forEach((pt, n) => drawPortalPair(L, pt, PORTAL_COLOURS[n % PORTAL_COLOURS.length]));
+  }
+
+  // each in/out pair shares a colour so you can see where the truck will pop out
+  const PORTAL_COLOURS = [['#ab47bc', '#e1bee7'], ['#00acc1', '#b2ebf2'], ['#fb8c00', '#ffe0b2']];
+
+  function drawPortalPair(L, pt, [c1, c2]) {
+    // sparkly dotted trail from the in door to the out door
+    const [ax, ay] = toScreen(L, pt.in.x, pt.in.y), [bx, by] = toScreen(L, pt.out.x, pt.out.y);
+    const mx = (ax + bx) / 2, my = Math.min(ay, by) - L.s * 2.5;
+    const at = t => [(1 - t) * (1 - t) * ax + 2 * (1 - t) * t * mx + t * t * bx, (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * my + t * t * by];
+    ctx.fillStyle = c1;
+    for (let i = 0; i < 14; i++) {
+      const t = (i / 14 + time * 0.35) % 1;
+      const [x, y] = at(t);
+      ctx.globalAlpha = 0.25 + 0.35 * Math.sin(t * Math.PI);
+      ctx.beginPath(); ctx.arc(x, y, L.s * 0.1, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    [[pt.in, 1], [pt.out, -1]].forEach(([p, spin]) => {
+      const [px, py] = toScreen(L, p.x, p.y);
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.scale(0.6, 1);
+      for (let i = 3; i >= 1; i--) {
+        ctx.beginPath();
+        ctx.arc(0, 0, L.s * (0.45 + i * 0.25 + Math.sin(time * 4 + i) * 0.05), 0, 7);
+        ctx.fillStyle = i % 2 ? c1 : c2;
+        ctx.fill();
       }
-      roundRect(x, y - L.s * 0.25, w, L.s * 0.3, L.s * 0.15);
-      const sg = ctx.createLinearGradient(x, 0, x + w, 0);
-      for (let i = 0; i <= 6; i++) sg.addColorStop(i / 6, i % 2 ? '#fff' : '#e53935');
-      ctx.fillStyle = sg;
-      ctx.fill();
-      ctx.strokeStyle = '#b71c1c';
-      ctx.lineWidth = L.s * 0.06;
-      ctx.stroke();
-    }
-    for (const pt of level.portals || []) {
-      [[pt.in, '#ab47bc', '#e1bee7'], [pt.out, '#fb8c00', '#ffe0b2']].forEach(([p, c1, c2], k) => {
-        const [px, py] = toScreen(L, p.x, p.y);
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.scale(0.6, 1);
-        for (let i = 3; i >= 1; i--) {
+      ctx.restore();
+      // white sparkles spin in on the way in, out on the way out
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(time * 3 * spin);
+      ctx.fillStyle = '#fff';
+      for (let i = 0; i < 4; i++) {
+        ctx.rotate(Math.PI / 2);
+        const r = ((spin > 0 ? 1 - (time % 1) : time % 1) * 0.6 + 0.15) * L.s;
+        ctx.beginPath(); ctx.arc(r, 0, L.s * 0.08, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+
+  // trampolines: a bright pad on top of big coil springs that squash when you land
+  function drawBouncers(L) {
+    (level.bouncers || []).forEach((b, n) => {
+      const since = time - (bounceAt[n] ?? -9);
+      const squash = since < 0.6 ? Math.sin(since * 18) * Math.exp(-since * 6) * 0.25 : Math.sin(time * 3 + n) * 0.03;
+      const [x, top] = toScreen(L, b.x, b.y);
+      const w = b.w * L.s, depth = L.s * 1.4;
+      const padY = top + squash * L.s;
+      // spring box set into the ground
+      roundRect(x - L.s * 0.1, top - L.s * 0.05, w + L.s * 0.2, depth + L.s * 0.1, L.s * 0.12);
+      ctx.fillStyle = '#455a64'; ctx.fill();
+      ctx.strokeStyle = '#263238'; ctx.lineWidth = L.s * 0.06; ctx.stroke();
+      // coils
+      const coils = Math.max(2, Math.round(b.w / 1.5));
+      for (let i = 0; i < coils; i++) {
+        const cx = x + w * ((i + 0.5) / coils), cw = L.s * 0.4, y0 = padY + L.s * 0.1, y1 = top + depth;
+        ctx.lineCap = 'round';
+        for (const [col, lw] of [['#b71c1c', 0.24], ['#ff5252', 0.13]]) {
+          ctx.strokeStyle = col; ctx.lineWidth = L.s * lw;
           ctx.beginPath();
-          ctx.arc(0, 0, L.s * (0.45 + i * 0.25 + Math.sin(time * 4 + i + k) * 0.05), 0, 7);
-          ctx.fillStyle = i % 2 ? c1 : c2;
-          ctx.fill();
+          for (let k = 0; k <= 6; k++) ctx.lineTo(cx + (k % 2 ? cw : -cw), y0 + (y1 - y0) * k / 6);
+          ctx.stroke();
         }
-        ctx.restore();
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(time * (k ? -3 : 3));
-        ctx.fillStyle = '#fff';
-        for (let i = 0; i < 4; i++) {
-          ctx.rotate(Math.PI / 2);
-          ctx.beginPath(); ctx.arc(L.s * 0.5, 0, L.s * 0.08, 0, 7); ctx.fill();
-        }
-        ctx.restore();
-      });
-    }
+      }
+      // pad
+      roundRect(x - L.s * 0.2, padY - L.s * 0.3, w + L.s * 0.4, L.s * 0.4, L.s * 0.2);
+      const sg = ctx.createLinearGradient(x, 0, x + w, 0);
+      for (let i = 0; i <= 8; i++) sg.addColorStop(i / 8, i % 2 ? '#fff' : '#ffca28');
+      ctx.fillStyle = sg; ctx.fill();
+      ctx.strokeStyle = '#f57f17'; ctx.lineWidth = L.s * 0.06; ctx.stroke();
+      // bouncing arrows show it is springy
+      ctx.strokeStyle = '#f57f17';
+      ctx.lineWidth = L.s * 0.18;
+      for (let i = 0; i < 2; i++) {
+        const t = (time * 1.2 + i * 0.5) % 1;
+        const ay = padY - L.s * (0.6 + t * 1.4);
+        ctx.globalAlpha = Math.sin(t * Math.PI);
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2 - L.s * 0.35, ay + L.s * 0.25); ctx.lineTo(x + w / 2, ay); ctx.lineTo(x + w / 2 + L.s * 0.35, ay + L.s * 0.25);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    });
   }
 
   function drawFlag(L) {
@@ -761,6 +813,7 @@ export function mount(stage) {
     if (!level || mode === 'menu') { ctx.restore(); return; }
     drawSpecials(L);
     drawGround(L);
+    drawBouncers(L);
     drawFlag(L);
     strokes.forEach(s => drawStroke(L, s));
     if (drawing) drawStroke(L, drawing);
