@@ -30,6 +30,23 @@ const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼' };
 const PLAYERS_KEY = 'raffy-race-players-v1';
 const GAME = 'raffy-race';
 const SEND_EVERY = 1 / 15;
+const DRAFT_EVERY = 0.1;              // host's half-drawn line is sent 10x a second
+const REJOIN_KEY = 'raffy-race-room-v1';
+const REJOIN_MS = 15 * 60 * 1000;     // come back within 15 min = rejoin without the pictures
+
+function rememberRoom(code) {
+  try { localStorage.setItem(REJOIN_KEY, JSON.stringify({ code, t: Date.now() })); } catch (e) { /* ignore */ }
+}
+function forgetRoom() {
+  try { localStorage.removeItem(REJOIN_KEY); } catch (e) { /* ignore */ }
+}
+function rememberedRoom() {
+  try {
+    const r = JSON.parse(localStorage.getItem(REJOIN_KEY));
+    if (r && r.code && Date.now() - r.t < REJOIN_MS) return r.code;
+  } catch (e) { /* ignore */ }
+  return null;
+}
 
 function loadPlayers() {
   const def = [{ id: 'p1', color: COLORS[0], style: 'truck', decal: 'none', controls: 'arrows' }];
@@ -99,7 +116,8 @@ export function mount(stage) {
     if (S.phase === 'online') onlineUI();
     if (S.phase === 'join') joinUI();
     if (S.phase === 'lobby') lobbyUI();
-    if (S.net && S.phase === 'build') badgeUI();
+    if (S.net && S.phase === 'build') badgeUI(false);
+    if (S.net && S.net.status === 'waiting' && S.phase !== 'build' && S.phase !== 'lobby') ui.appendChild(el(`<div class="rt-netwait">📶⏳</div>`));
     if (S.busy) ui.appendChild(el(`<div class="rt-overlay"><div class="rt-wait">⏳</div></div>`));
     if (S.time < S.sad) ui.appendChild(el(`<div class="rt-overlay rt-sad"><div class="rt-wait">😢</div></div>`));
   }
@@ -447,10 +465,16 @@ export function mount(stage) {
 
   // everyone in the room, in a fixed order (same on every device)
   function roster() {
+    const used = new Set();
     return Object.entries(S.net.players)
       .sort((a, b) => (a[1].joined - b[1].joined) || (a[0] < b[0] ? -1 : 1))
       .slice(0, 6)
-      .map(([id, p]) => ({ id, color: p.color, style: p.style, decal: p.decal }));
+      .map(([id, p]) => {
+        // two friends picked the same colour: the later one gets a free colour (same on every device)
+        const color = used.has(p.color) ? (COLORS.find(c => !used.has(c)) || p.color) : p.color;
+        used.add(color);
+        return { id, color, style: p.style, decal: p.decal };
+      });
   }
 
   function syncMyPlayers() {
@@ -466,8 +490,15 @@ export function mount(stage) {
   }
 
   function goOnline(room) {
-    S.net = { room, isHost: room.isHost, code: room.code, meta: null, players: {}, live: {}, raceId: 0, trackKey: '', synced: new Set(), joined: room.now(), sendAcc: 0, unsubs: [] };
+    S.net = { room, isHost: room.isHost, code: room.code, meta: null, players: {}, live: {}, raceId: 0, trackKey: '', synced: new Set(), joined: room.now(), sendAcc: 0, unsubs: [], status: 'ok', draftAt: 0 };
+    if (!room.isHost) rememberRoom(room.code);
+    keepAwake(true);
     S.net.unsubs.push(room.onMeta(onMeta));
+    if (room.onStatus) S.net.unsubs.push(room.onStatus(st => {
+      if (!S.net || S.net.status === st) return;
+      S.net.status = st;
+      render();
+    }));
     S.net.unsubs.push(room.onPlayers(p => {
       if (!S.net) return;
       S.net.players = p;
@@ -494,19 +525,22 @@ export function mount(stage) {
     render();
   }
 
-  async function tryJoin(code) {
+  async function tryJoin(code, silent = false) {
     S.busy = true; render();
     try {
       const room = await joinRoom(GAME, code);
       S.busy = false;
-      if (!room) { S.joinCode = ''; S.sad = S.time + 1.5; sound.bump(); render(); return; }
+      if (!room) {
+        if (silent) { forgetRoom(); render(); return; }
+        S.joinCode = ''; S.sad = S.time + 1.5; sound.bump(); render(); return;
+      }
       goOnline(room);
       S.phase = 'lobby';
     } catch (e) {
       console.warn('online failed', e);
       S.busy = false;
       S.joinCode = '';
-      S.sad = S.time + 2;
+      if (!silent) S.sad = S.time + 2;
     }
     render();
   }
@@ -515,6 +549,8 @@ export function mount(stage) {
     if (!S.net) return;
     const net = S.net;
     S.net = null;
+    forgetRoom();
+    keepAwake(false);
     net.unsubs.forEach(u => u && u());
     net.room.leave();
     stopEngines();
@@ -629,9 +665,51 @@ export function mount(stage) {
     node.querySelectorAll('.rt-room-cars canvas').forEach((c, i) => drawCarIcon(c, list[i]));
   }
 
-  // host: code + who is here, shown on the drawing screen
-  function badgeUI() {
-    const b = el(`<div class="rt-badge">${picsHTML(S.net.code)}${carsHTML()}<button class="rt-btn rt-leave">🚪</button></div>`);
+  // keep the iPad screen on while playing online
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { wakeLock.release(); wakeLock = null; }
+    } catch (e) { /* not supported */ }
+  }
+  const onVisible = () => { if (S.net && document.visibilityState === 'visible') keepAwake(true); };
+  document.addEventListener('visibilitychange', onVisible);
+
+  // host: send the half-drawn line / dragged extra so friends can watch
+  function sendDraft(force) {
+    const n = S.net;
+    if (!n || !n.isHost) return;
+    if (!force && S.time - n.draftAt < DRAFT_EVERY) return;
+    n.draftAt = S.time;
+    let draft = null;
+    if (S.stroke && S.stroke.length > 1) {
+      const step = Math.ceil(S.stroke.length / 300);
+      draft = { stroke: S.stroke.filter((_, i) => i % step === 0 || i === S.stroke.length - 1).map(p => [Math.round(p.x), Math.round(p.y)]) };
+    } else if (S.drag) {
+      const it = S.drag.item;
+      draft = { drag: { type: it.type, x: Math.round(it.x), y: Math.round(it.y), a: 0 } };
+    }
+    if (!draft && !n.draftSent) return;
+    n.draftSent = !!draft;
+    n.room.setMeta({ draft });
+  }
+  function guestDraft() {
+    const d = S.net && !S.net.isHost && S.phase === 'lobby' && S.net.meta && S.net.meta.draft;
+    if (!d) return {};
+    return {
+      stroke: d.stroke ? d.stroke.map(([x, y]) => ({ x, y })) : null,
+      drag: d.drag || null,
+    };
+  }
+
+  // code + who is here (+ ✏️ while a friend watches the host draw)
+  function badgeUI(watching) {
+    const wait = S.net.status === 'waiting' ? '<span class="rt-badge-wait">📶⏳</span>' : '';
+    const pen = watching ? '<span class="rt-badge-pen">✏️</span>' : '';
+    const b = el(`<div class="rt-badge">${picsHTML(S.net.code)}${carsHTML()}${pen}${wait}<button class="rt-btn rt-leave">🚪</button></div>`);
     fillCars(b);
     click(b.querySelector('.rt-leave'), () => leaveOnline());
     ui.appendChild(b);
@@ -671,17 +749,9 @@ export function mount(stage) {
     ui.appendChild(box);
   }
 
-  // guest: waiting for the host to start
+  // guest: watch the host draw, until the host starts the race
   function lobbyUI() {
-    const box = el(`<div class="rt-overlay rt-lobby"><div class="rt-card">
-      ${picsHTML(S.net.code)}
-      ${carsHTML()}
-      <div class="rt-wait rt-wait-small">⏳</div>
-      <button class="rt-btn rt-back rt-leave">🚪</button>
-    </div></div>`);
-    fillCars(box);
-    click(box.querySelector('.rt-leave'), () => leaveOnline());
-    ui.appendChild(box);
+    badgeUI(true);
   }
 
   function startRace() {
@@ -797,6 +867,7 @@ export function mount(stage) {
       const b = $('.rt-bin');
       if (b) b.classList.toggle('hot', overBin(e));
     }
+    if (S.stroke || S.drag) sendDraft(false);
   };
 
   const onUp = e => {
@@ -828,6 +899,7 @@ export function mount(stage) {
       }
       sceneChanged();
     }
+    sendDraft(true);
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
@@ -856,13 +928,14 @@ export function mount(stage) {
   }, () => {
     const building = S.phase === 'build';
     if (S.sad && S.time >= S.sad) { S.sad = 0; render(); }
+    const gd = guestDraft();
     R.frame({
       insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: TOUCH ? 40 : 8 },
       cars: S.race ? S.race.cars : previewCars(),
       live: !!S.race && !S.paused,
       dt: S.paused ? 0 : (S._dt || 0),
-      stroke: S.stroke,
-      drag: S.drag && S.drag.item,
+      stroke: S.stroke || gd.stroke,
+      drag: (S.drag && S.drag.item) || gd.drag,
       hint: building && !S.track && !S.stroke,
       time: S.time,
     });
@@ -870,9 +943,13 @@ export function mount(stage) {
 
   R.setScene(null, []);
   render();
+  const again = rememberedRoom();
+  if (again) tryJoin(again, true); // came back (reload, 🏠 by mistake): rejoin without the pictures
 
   return () => {
     if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; }
+    keepAwake(false);
+    document.removeEventListener('visibilitychange', onVisible);
     stopLoop();
     stopEngines();
     keys.destroy();
