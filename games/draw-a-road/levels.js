@@ -1,4 +1,4 @@
-// Draw a Road – levels. World is 32 wide x 18 tall (metres), y goes UP.
+// Monster Doodle – levels. World is 32 wide x 18 tall (metres), y goes UP.
 // ground:   lines of solid land (filled down to the bottom unless float: true)
 // blocks:   solid boxes  {x, y, w, h}  (x,y = bottom-left)
 // bouncers: trampolines  {x, y, w, power}  (y = top surface)
