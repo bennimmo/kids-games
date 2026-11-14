@@ -343,7 +343,8 @@ export function mount(stage) {
   function renderTop() {
     const html = net ? `
       <div class="pt-room">
-        <span class="pt-code">${net.pics.map(p => `<span>${p}</span>`).join('')}</span>
+        <span class="pt-code"><b>🔑</b>${net.pics.map(p => `<span>${p}</span>`).join('')}</span>
+        <span class="pt-sep"></span>
         <span class="pt-people">${net.players().map(p => `<span class="${p.me ? 'me' : ''}">${p.emoji}</span>`).join('')}</span>
         <button class="pt-leave" aria-label="Leave">🚪</button>
       </div>` : '';

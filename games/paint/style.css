@@ -39,9 +39,15 @@
   display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px;
   background: rgba(255,255,255,.9); border-radius: 999px; box-shadow: 0 4px 0 rgba(40,50,120,.15);
 }
-.pt-code { display: inline-flex; gap: 4px; font-size: 28px; }
-.pt-code span { background: #eef4ff; border-radius: 10px; padding: 0 5px; }
-.pt-people { display: inline-flex; gap: 2px; font-size: 26px; }
+/* room code: its own yellow box with a key, so friends' faces aren't mistaken for code pictures */
+.pt-code {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 28px;
+  background: #fff3c4; border: 3px solid #ffb300; border-radius: 14px; padding: 2px 6px;
+}
+.pt-code b { font-size: 20px; margin-right: 2px; }
+.pt-code span { background: #fff; border-radius: 10px; padding: 0 5px; }
+.pt-sep { width: 2px; align-self: stretch; background: #d6d9e8; border-radius: 2px; }
+.pt-people { display: inline-flex; gap: 2px; font-size: 20px; opacity: .9; }
 .pt-people .me { background: #fff6a8; border-radius: 50%; }
 .pt-leave { width: 46px; height: 46px; border-radius: 50%; background: #ffe0e0; font-size: 26px; }
 

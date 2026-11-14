@@ -276,9 +276,13 @@
   background: rgba(255,255,255,.85); border-radius: 999px; box-shadow: 0 4px 0 rgba(150,60,150,.2);
 }
 .bb-roombar-l { font-weight: 700; font-size: 20px; color: #8a3fb0; }
-.bb-roombar-f { font-size: 28px; letter-spacing: 2px; }
+.bb-roombar-f { font-size: 22px; letter-spacing: 2px; opacity: .9; }
 .bb-leave { padding: 8px 16px; border-radius: 999px; background: #ffe0e6; font-size: 18px; font-weight: 700; }
 .bb-code { display: inline-flex; gap: 4px; font-size: 32px; }
+/* room code in its own yellow box with a key, so friends' faces aren't mistaken for code pictures */
+.bb-code-key { align-items: center; background: #fff3c4; border: 3px solid #ffb300; border-radius: 16px; padding: 3px 6px; }
+.bb-code-key b { font-size: 22px; margin-right: 2px; }
+.bb-sep { width: 2px; align-self: stretch; background: #e3c6e8; border-radius: 2px; }
 .bb-code span { background: #fff; border-radius: 12px; padding: 2px 6px; box-shadow: 0 2px 0 rgba(0,0,0,.1); }
 .bb-code.big { font-size: clamp(30px, 5vw, 48px); gap: 8px; }
 .bb-code.small { font-size: 18px; position: absolute; right: 8px; top: 8px; opacity: .85; }

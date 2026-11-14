@@ -172,7 +172,8 @@ export function mount(stage) {
         <h1 class="bb-title">Beautiful Bells</h1>
         ${net ? `
           <div class="bb-roombar">
-            <span class="bb-roombar-l">Room</span><span class="bb-code">${codeHtml()}</span>
+            <span class="bb-code bb-code-key"><b>🔑</b>${codeHtml()}</span>
+            <span class="bb-sep"></span>
             <span class="bb-roombar-f">${friendDots()}</span>
             <button class="bb-leave">Leave 🚪</button>
           </div>` : `
