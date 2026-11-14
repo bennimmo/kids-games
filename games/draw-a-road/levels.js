@@ -72,8 +72,8 @@ export const LEVELS = [
   },
   {
     name: 'Magic Door',
-    car: { x: 2.5, y: 3 }, flag: { x: 29, y: 3 },
-    ground: [{ pts: [[0, 3], [12, 3]] }, { pts: [[25, 3], [32, 3]] }],
+    car: { x: 2.5, y: 3 }, flag: { x: 29.5, y: 3 },
+    ground: [{ pts: [[0, 3], [12, 3]] }, { pts: [[27, 3], [32, 3]] }],
     blocks: [{ x: 12, y: 0, w: 1.4, h: 18 }],
     portals: [{ in: { x: 10, y: 4.2 }, out: { x: 16, y: 13 }, dir: 1 }],
     ink: 30, stars: [18, 13],
@@ -162,9 +162,9 @@ export const LEVELS = [
   },
   {
     name: 'Double Boing',
-    car: { x: 2.5, y: 3 }, flag: { x: 29, y: 11 },
-    ground: [{ pts: [[0, 3], [11, 3]] }, { pts: [[20, 6], [24, 6]], float: true }, { pts: [[26, 11], [32, 11]] }],
-    bouncers: [{ x: 8, y: 3, w: 3, power: 10 }, { x: 20.5, y: 6, w: 3, power: 11 }],
+    car: { x: 2.5, y: 3 }, flag: { x: 29, y: 10.5 },
+    ground: [{ pts: [[0, 3], [11, 3]] }, { pts: [[20, 6], [24, 6]], float: true }, { pts: [[25, 10.5], [32, 10.5]] }],
+    bouncers: [{ x: 8, y: 3, w: 3, power: 10 }, { x: 20.5, y: 6, w: 3, power: 12 }],
     ink: 16, stars: [10, 7],
   },
   {
@@ -187,7 +187,7 @@ export const LEVELS = [
     ground: [{ pts: [[0, 7], [7, 7]] }, { pts: [[27, 14], [32, 14]] }],
     blocks: [{ x: 22.5, y: 0, w: 1.2, h: 14 }],
     boosters: [{ x: 2, y: 7, w: 4, h: 1.5, dir: 1 }],
-    portals: [{ in: { x: 21.6, y: 10.5 }, out: { x: 24.5, y: 16.5 }, dir: 1 }],
+    portals: [{ in: { x: 21.6, y: 9.2 }, out: { x: 24.5, y: 16.5 }, dir: 1 }],
     floaty: [{ x: 11, y: 0, w: 6, h: 18, lift: 2 }],
     ink: 12, stars: [5, 3.2],
   },

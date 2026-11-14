@@ -12,9 +12,10 @@ const GRAVITY = 10;
 
 export const CAR = {
   bodyW: 1.8, bodyH: 0.45,
-  wheelR: 0.38, wheelX: 0.6, wheelY: -0.32,
-  speed: 17, boostSpeed: 40, torque: 14,
+  wheelR: 0.55, wheelX: 0.68, wheelY: -0.55, // big monster truck wheels
+  speed: 12, boostSpeed: 28, torque: 22,
 };
+CAR.rideH = CAR.wheelR - CAR.wheelY; // chassis height above the ground
 
 export function strokeLength(pts) {
   let len = 0;
@@ -49,14 +50,14 @@ export function createSim(level, strokes) {
   strokes.forEach(s => addChain(s.pts, { friction: 1 }));
 
   // ---- car ----
-  const sx = level.car.x, sy = level.car.y + 0.75;
+  const sx = level.car.x, sy = level.car.y + CAR.rideH;
   const chassis = world.createBody({ type: 'dynamic', position: Vec2(sx, sy) });
   chassis.createFixture(planck.Box(CAR.bodyW / 2, CAR.bodyH / 2), { density: 1.2, friction: 0.4 });
   chassis.createFixture(planck.Polygon([Vec2(-0.55, 0.2), Vec2(0.35, 0.2), Vec2(0.15, 0.62), Vec2(-0.45, 0.62)]), { density: 0.5, friction: 0.4 });
   // keep the weight low and a bit forward so the car does not flip on hills
   const md = { mass: 0, center: Vec2(), I: 0 };
   chassis.getMassData(md);
-  md.center = Vec2(0.1, -0.2);
+  md.center = Vec2(0.1, -0.5);
   chassis.setMassData(md);
   const wheels = [-1, 1].map(side => {
     const w = world.createBody({ type: 'dynamic', position: Vec2(sx + side * CAR.wheelX, sy + CAR.wheelY), bullet: true });
@@ -66,7 +67,7 @@ export function createSim(level, strokes) {
   const engine = level.engine !== false;
   const joints = wheels.map(w => world.createJoint(planck.WheelJoint({
     motorSpeed: 0, maxMotorTorque: CAR.torque, enableMotor: engine,
-    frequencyHz: 5, dampingRatio: 0.7,
+    frequencyHz: 4, dampingRatio: 0.6,
   }, chassis, w, w.getPosition(), Vec2(0, 1))));
   const parts = [chassis, ...wheels];
 
@@ -85,11 +86,11 @@ export function createSim(level, strokes) {
     stuckFor: 0, flipFor: 0, boostFor: 0, portalCool: 0, started: 0.6,
   };
 
-  function moveCar(dx, dy) {
-    parts.forEach(p => {
-      const pos = p.getPosition();
-      p.setTransform(Vec2(pos.x + dx, pos.y + dy), p.getAngle());
-    });
+  // pop the car out upright at (x, y) – no spinning out of a portal
+  function placeCar(x, y) {
+    chassis.setTransform(Vec2(x, y), 0);
+    chassis.setAngularVelocity(0);
+    wheels.forEach((w, i) => w.setTransform(Vec2(x + (i ? 1 : -1) * CAR.wheelX, y + CAR.wheelY), w.getAngle()));
   }
 
   function step() {
@@ -120,7 +121,10 @@ export function createSim(level, strokes) {
     // trampoline
     if (bounceQueue) {
       const up = bounceQueue.power || 14;
-      parts.forEach(p => p.setLinearVelocity(Vec2(p.getLinearVelocity().x, up)));
+      // big wheels lose speed on the bounce, so give a little push forward too
+      const vx = chassis.getLinearVelocity().x;
+      const fwd = Math.abs(vx) < 4.5 ? (vx < 0 ? -4.5 : 4.5) : vx;
+      parts.forEach(p => p.setLinearVelocity(Vec2(fwd, up)));
       events.push('bounce');
       bounceQueue = null;
     }
@@ -145,7 +149,7 @@ export function createSim(level, strokes) {
     if (state.portalCool <= 0) {
       for (const pt of level.portals || []) {
         if (Math.hypot(pos.x - pt.in.x, pos.y - pt.in.y) < 1.0) {
-          moveCar(pt.out.x - pos.x, pt.out.y - pos.y);
+          placeCar(pt.out.x, pt.out.y);
           const dir = pt.dir || 1;
           const v = chassis.getLinearVelocity();
           const speed = Math.max(Math.hypot(v.x, v.y), 6);
