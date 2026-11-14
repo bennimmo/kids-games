@@ -83,7 +83,7 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 ### 🎈 Balloon Pop (`games/balloon-pop/`)
 For age 2+. Tap balloons to pop them. No losing, no timer.
 - Each pop plays a bubbly pop sound (pitch changes with the colour)
-- Every 15–20 sec a digger 🚜 or train 🚂 floats up on balloons. Tap it: it drops, then beeps/toots and drives off (+3 stars)
+- Every 15–20 sec a digger 🚜 or train 🚂 floats up on balloons (meep meep / toot toot). Tap it: wheee, it drops, then drives off with engine putter or choo-choo chuffs (+3 stars)
 - Fill 10 stars → fireworks party, then start again
 - Big tap areas, palm slaps ignored
 - Nothing floats in the bottom middle (Android app-switch bar). Balloons there pop in higher up instead

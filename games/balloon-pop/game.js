@@ -3,7 +3,7 @@
 // No losing, no timer. Fill the stars for a party.
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
-import { sound } from '../../js/engine/sound.js';
+import { sound, audioCtx } from '../../js/engine/sound.js';
 
 const COLOURS = [
   { name: 'Red', fill: '#ef5350', dark: '#c62828', note: 523 },
@@ -22,6 +22,27 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- Sounds ----------
+// Short burst of filtered noise (train chuff, bucket scrape).
+function hiss(dur, freq, vol, type = 'bandpass') {
+  try {
+    const a = audioCtx();
+    if (!a) return;
+    const len = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 2;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    const f = a.createBiquadFilter();
+    f.type = type; f.frequency.value = freq; f.Q.value = 1;
+    const g = a.createGain();
+    g.gain.value = vol;
+    src.connect(f).connect(g).connect(a.destination);
+    src.start();
+  } catch (e) { /* sound is optional */ }
+}
+const later = (ms, fn) => setTimeout(fn, ms);
+
 const sfx = {
   pop(note) {
     sound.tone(note, 0.15, 'sine', 0.25, note * 2);
@@ -36,6 +57,35 @@ const sfx = {
     sound.tone(780, 0.35, 'triangle', 0.12);
     setTimeout(() => { sound.tone(620, 0.6, 'triangle', 0.18); sound.tone(780, 0.6, 'triangle', 0.12); }, 420);
   },
+  // ---- Train ----
+  whistle() { // "toot toot!" when it appears
+    [0, 300].forEach(t => later(t, () => {
+      sound.tone(880, 0.22, 'triangle', 0.14, 940);
+      sound.tone(1110, 0.22, 'triangle', 0.08, 1180);
+    }));
+  },
+  chuff: () => hiss(0.12, 1800, 0.18),
+  choochoo() { // big "choo-choo!" when it lands
+    [0, 260].forEach(t => later(t, () => hiss(0.22, 1400, 0.35)));
+    later(600, () => sfx.toot());
+  },
+  bell() { // ding-ding
+    [0, 220].forEach(t => later(t, () => { sound.tone(1568, 0.4, 'sine', 0.12); sound.tone(2350, 0.3, 'sine', 0.05); }));
+  },
+  // ---- Digger ----
+  honk() { // "meep meep!" when it appears
+    [0, 260].forEach(t => later(t, () => { sound.tone(440, 0.18, 'square', 0.08); sound.tone(554, 0.18, 'square', 0.06); }));
+  },
+  putter: () => sound.tone(rand(60, 75), 0.08, 'sawtooth', 0.1),
+  vroom() { // engine revs up
+    sound.tone(70, 0.7, 'sawtooth', 0.14, 160);
+    later(150, () => sound.tone(90, 0.6, 'square', 0.06, 200));
+  },
+  clank() { // bucket clank-clank
+    [0, 200].forEach(t => later(t, () => { sound.tone(1900, 0.12, 'square', 0.05); sound.tone(2700, 0.08, 'triangle', 0.06); hiss(0.08, 3000, 0.12); }));
+  },
+  // ---- Both ----
+  wheee: () => sound.tone(1300, 0.9, 'sine', 0.16, 350), // slide whistle down
   thud: () => sound.tone(120, 0.2, 'sine', 0.3, 60),
   giggle() { // quick bubbly trill
     const base = rand(700, 1000);
@@ -97,6 +147,7 @@ export function mount(stage) {
 
   function addVehicle() {
     lastVehicle = lastVehicle === 'digger' ? 'train' : 'digger';
+    if (lastVehicle === 'train') sfx.whistle(); else sfx.honk();
     const s = size() * 1.25;
     const x = Math.random() < 0.5 ? s * 1.8 : W() - s * 1.8;
     // Narrow screens: if it would still touch the middle column, pop in above the no-go zone.
@@ -183,6 +234,8 @@ export function mount(stage) {
     v.balloonColours.forEach((c, i) => burst(v.x + (i - 1) * v.s * 0.7, v.y - v.s * 2.4, c.fill, 12));
     sfx.pop(784);
     sfx.boing();
+    later(200, () => sfx.wheee());
+    if (v.kind === 'train') later(250, () => sfx.bell()); else later(250, () => sfx.clank());
     giveStars(v.x, v.y - v.s, VEHICLE_STARS);
   }
 
@@ -256,17 +309,23 @@ export function mount(stage) {
           v.state = 'drive';
           v.vx = v.dir * v.s * 1.6;
           sfx.thud();
-          setTimeout(() => (v.kind === 'digger' ? sfx.beep() : sfx.toot()), 250);
+          if (v.kind === 'digger') { later(200, () => sfx.vroom()); later(800, () => sfx.beep()); }
+          else later(200, () => sfx.choochoo());
         }
       } else if (v.state === 'drive') {
         v.x += v.vx * dt;
         v.wheel += (v.vx / (v.s * 0.2)) * dt;
         v.smokeT -= dt;
         if (v.smokeT <= 0) {
-          v.smokeT = v.kind === 'train' ? 0.18 : 0.35;
+          v.smokeT = v.kind === 'train' ? 0.28 : 0.35;
           const cx = v.kind === 'train' ? v.x + v.dir * v.s * 0.55 : v.x - v.dir * v.s * 0.35;
           const cy = v.kind === 'train' ? v.y - v.s * 1.35 : v.y - v.s * 1.25;
           bits.push({ kind: 'smoke', x: cx, y: cy, vx: -v.dir * 20, vy: -50, life: 1.4, max: 1.4, w: v.s * 0.18 });
+          if (v.kind === 'train') sfx.chuff();
+        }
+        if (v.kind === 'digger') {
+          v.engineT = (v.engineT ?? 0) - dt;
+          if (v.engineT <= 0) { v.engineT = 0.11; sfx.putter(); }
         }
         if (v.x < -v.s * 3 || v.x > W() + v.s * 3) v.gone = true;
       }
