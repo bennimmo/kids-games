@@ -1,0 +1,150 @@
+.tt { position: absolute; inset: 0; overflow: hidden; background: #7cc8ff; color: #2b2140; user-select: none; -webkit-user-select: none; }
+.tt-ui { position: absolute; inset: 0; pointer-events: none; }
+.tt-ui > * { pointer-events: auto; }
+.tt-ui > .tt-hud { pointer-events: none; }
+.tt-hud > * { pointer-events: auto; }
+.tt-hud > .tt-top, .tt-hud > .tt-hint, .tt-hud > .tt-room { pointer-events: none; }
+:where(.tt button) { font-family: inherit; color: inherit; cursor: pointer; border: 0; padding: 0; }
+.tt button:disabled { opacity: .4; cursor: default; }
+.tt [hidden] { display: none !important; }
+
+/* ---------- menus ---------- */
+.tt-menu {
+  position: absolute; inset: 0; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center;
+  padding: 92px 16px 24px; background: rgba(20, 20, 60, .25);
+}
+.tt-panel {
+  width: min(820px, 100%); margin: auto 0; background: rgba(255,255,255,.95); border-radius: 30px; padding: 22px 18px 26px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: 0 10px 0 rgba(30,30,80,.25);
+  animation: tt-pop .3s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.tt-panel h2 { margin: 0; font-size: clamp(28px, 5vw, 42px); color: #d84315; text-align: center; }
+.tt-panel h3 { margin: 6px 0 0; font-size: 24px; color: #5d4037; }
+.tt-title {
+  margin: 0; font-size: clamp(40px, 9vw, 76px); color: #ff7043; text-align: center; line-height: 1.05;
+  text-shadow: 0 4px 0 #bf360c, 0 8px 0 rgba(0,0,0,.15);
+  animation: tt-wobble 2.4s ease-in-out infinite;
+}
+.tt-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 18px; }
+.tt-big {
+  width: 230px; max-width: 80vw; padding: 20px 14px; border-radius: 28px; background: #fff3e0;
+  box-shadow: 0 6px 0 rgba(120,60,20,.25);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 26px; font-weight: 700;
+}
+.tt-big .i { font-size: 72px; line-height: 1; }
+.tt-big small { font-size: 16px; font-weight: 500; opacity: .75; }
+.tt-big:active, .tt-btn:active, .tt-mytank:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(120,60,20,.25); }
+.tt-mytank {
+  display: flex; align-items: center; gap: 10px; background: #e3f2fd; border-radius: 999px; padding: 4px 22px 4px 8px;
+  font-size: 22px; box-shadow: 0 5px 0 rgba(30,60,120,.2);
+}
+.tt-btn {
+  min-height: 64px; padding: 0 26px; border-radius: 22px; background: #ff7043; color: #fff !important;
+  font-size: 26px; font-weight: 700; box-shadow: 0 6px 0 #bf360c;
+}
+.tt-btn.alt { background: #eceff1; color: #37474f !important; box-shadow: 0 6px 0 rgba(0,0,0,.18); }
+.tt-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; }
+.tt-msg { margin: 0; font-size: 22px; font-weight: 700; color: #6a1b9a; min-height: 1.2em; text-align: center; }
+.tt-sub { margin: -6px 0 0; font-size: 18px; color: #6d4c41; }
+
+.tt-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; width: 100%; }
+.tt-slot { background: #fff8e1; border-radius: 22px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 0 rgba(120,60,20,.15); }
+.tt-slot.off { background: #f1f1f1; }
+.tt-slot.off canvas { opacity: .25; filter: grayscale(1); }
+.tt-slot-tank { background: none; display: flex; flex-direction: column; align-items: center; font-size: 20px; }
+.tt-slot-tank small { font-size: 14px; }
+.tt-slot-type { width: 100%; min-height: 50px; border-radius: 16px; background: #fff; font-size: 19px; font-weight: 700; box-shadow: 0 4px 0 rgba(0,0,0,.12); }
+.tt .tt-slot-type:disabled { opacity: 1; background: #ffe0b2; }
+.tt-maps { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.tt-map { width: 96px; padding: 8px 4px; border-radius: 18px; background: #f5f5f5; display: flex; flex-direction: column; align-items: center; font-size: 16px; font-weight: 700; box-shadow: 0 4px 0 rgba(0,0,0,.12); }
+.tt-map .i { font-size: 40px; line-height: 1.1; }
+.tt-map.on { background: #fff59d; box-shadow: 0 0 0 4px #ff9800, 0 4px 0 4px rgba(0,0,0,.1); }
+
+.tt-code { display: inline-flex; align-items: center; gap: 4px; font-size: 28px; background: #fff3c4; border: 3px solid #ffb300; border-radius: 14px; padding: 2px 6px; }
+.tt-code b { font-size: 20px; margin-right: 2px; }
+.tt-code span { background: #fff; border-radius: 10px; padding: 0 5px; }
+.tt-code.big { font-size: 48px; }
+.tt-players { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.tt-pl { position: relative; background: #f5f5f5; border-radius: 18px; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; font-size: 18px; min-width: 100px; }
+.tt-pl.me { background: #fff59d; }
+.tt-rm { position: absolute; top: -8px; right: -8px; width: 34px; height: 34px; border-radius: 50%; background: #ffcdd2 !important; font-size: 16px; }
+.tt-codeslots { display: flex; gap: 10px; }
+.tt-codeslots span { width: 64px; height: 64px; border-radius: 16px; border: 4px dashed #ffab91; display: grid; place-items: center; font-size: 40px; }
+.tt-keypad { display: grid; grid-template-columns: repeat(4, 64px); gap: 8px; }
+.tt-keypad button { width: 64px; height: 64px; border-radius: 16px; background: #fff3e0; font-size: 36px; box-shadow: 0 4px 0 rgba(120,60,20,.18); }
+.tt-keypad button:active { transform: translateY(3px); }
+
+/* tank maker */
+.tt-modal { position: absolute; inset: 0; z-index: 30; background: rgba(20,20,60,.5); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.tt-edit { width: min(560px, 100%); margin: auto 0; background: #fff; border-radius: 28px; padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 10px 0 rgba(30,30,80,.25); animation: tt-pop .3s cubic-bezier(.3, 1.6, .5, 1) both; }
+.tt-input { width: min(320px, 100%); font: inherit; font-size: 28px; font-weight: 700; text-align: center; padding: 8px 12px; border-radius: 16px; border: 3px solid #ffab91; color: #2b2140; user-select: text; -webkit-user-select: text; }
+.tt-swatches { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.tt-sw { width: 44px; height: 44px; border-radius: 50%; background: var(--c) !important; box-shadow: inset 0 0 0 2px rgba(0,0,0,.2); }
+.tt-sw.on { box-shadow: 0 0 0 4px #fff, 0 0 0 7px #ff7043; }
+.tt-picks { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.tt-picks button { min-width: 50px; height: 50px; padding: 0 6px; border-radius: 14px; background: #f5f5f5; font-size: 26px; }
+.tt-picks button.on { background: #fff59d; box-shadow: 0 0 0 3px #ff9800; }
+
+/* ---------- in game ---------- */
+.tt-hud { position: absolute; inset: 0; }
+.tt-top { position: absolute; top: 12px; left: 96px; right: 96px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.tt-who, .tt-wind { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9); border-radius: 999px; padding: 4px 14px 4px 6px; box-shadow: 0 4px 0 rgba(0,0,0,.15); font-size: 22px; font-weight: 700; }
+.tt-wind { padding: 4px 14px; }
+.tt-wind b { color: #1565c0; min-width: 1em; }
+.tt-timer { min-width: 40px; height: 40px; border-radius: 50%; background: #e3f2fd; display: grid; place-items: center; font-size: 20px; }
+.tt-timer:empty { display: none; }
+.tt-timer.low { background: #ff5252; color: #fff; animation: tt-pulse .5s ease-in-out infinite alternate; }
+.tt-room { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); }
+.tt-room .tt-code { font-size: 20px; }
+.tt-side { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 10px; }
+.tt-round { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,.9); font-size: 30px; box-shadow: 0 5px 0 rgba(0,0,0,.18); }
+.tt-round:active { transform: translateY(3px); }
+.tt-drive { position: absolute; left: 14px; bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.tt-drive button { width: 84px; height: 84px; border-radius: 26px; background: rgba(255,255,255,.92); font-size: 40px; box-shadow: 0 6px 0 rgba(0,0,0,.2); touch-action: none; }
+.tt-drive button.on { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.2); background: #fff59d; }
+.tt-fuel { position: relative; width: 70px; height: 22px; border-radius: 11px; background: rgba(0,0,0,.35); overflow: hidden; }
+.tt-fuel i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #ffca28, #66bb6a); }
+.tt-fuel span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; }
+.tt-arms { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 10px; align-items: flex-end; }
+.tt-weapon { width: 96px; height: 96px; border-radius: 28px; background: rgba(255,255,255,.95); box-shadow: 0 6px 0 rgba(0,0,0,.2); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.tt-weapon .i { font-size: 52px; line-height: 1; }
+.tt-weapon .c { font-size: 18px; font-weight: 700; }
+.tt-weapon:active, .tt-fire:active { transform: translateY(4px); }
+.tt-fire { min-width: 96px; height: 96px; padding: 0 14px; border-radius: 28px; background: #ff5252; color: #fff !important; font-size: 30px; font-weight: 700; box-shadow: 0 6px 0 #b71c1c; }
+.tt-hint { position: absolute; left: 50%; top: 120px; transform: translateX(-50%); max-width: calc(100% - 32px); background: rgba(0,0,0,.55); color: #fff; border-radius: 999px; padding: 8px 18px; font-size: 20px; font-weight: 700; text-align: center; }
+.tt-banner {
+  position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); pointer-events: none !important;
+  font-size: clamp(36px, 8vw, 72px); font-weight: 700; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,.4); white-space: nowrap;
+  animation: tt-pop .3s cubic-bezier(.3, 1.6, .5, 1) both;
+}
+.tt-bp { position: absolute; inset: 0; z-index: 20; background: rgba(20,20,60,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.tt-bp-card { position: relative; width: min(900px, 100%); max-height: 100%; overflow-y: auto; background: #fff; border-radius: 28px; padding: 18px; box-shadow: 0 10px 0 rgba(30,30,80,.25); animation: tt-pop .25s cubic-bezier(.3, 1.6, .5, 1) both; }
+.tt-bp-card h2 { margin: 0 0 12px; text-align: center; font-size: 32px; color: #6d4c41; }
+.tt-x { position: absolute; top: 12px; right: 12px; width: 48px; height: 48px; border-radius: 50%; background: #eceff1; font-size: 22px; }
+.tt-bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tt-wp { position: relative; background: #fff8e1; border-radius: 20px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; box-shadow: 0 4px 0 rgba(120,60,20,.18); text-align: center; }
+.tt-wp .i { font-size: 44px; line-height: 1.1; }
+.tt-wp b { font-size: 17px; }
+.tt-wp small { font-size: 13px; opacity: .75; }
+.tt-wp .n { position: absolute; top: 6px; right: 8px; font-size: 15px; font-weight: 700; color: #bf360c; }
+.tt-wp.on { background: #fff59d; box-shadow: 0 0 0 4px #ff9800; }
+.tt-wp:disabled { filter: grayscale(1); }
+.tt-card-wrap { position: absolute; inset: 0; z-index: 15; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(20,20,60,.35); }
+.tt-card-wrap.low { align-items: flex-end; background: none; pointer-events: none !important; }
+.tt-card { pointer-events: auto; background: rgba(255,255,255,.95); border-radius: 28px; padding: 18px 22px 22px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 10px 0 rgba(30,30,80,.25); animation: tt-pop .3s cubic-bezier(.3, 1.6, .5, 1) both; max-width: 100%; }
+.tt-card h2 { margin: 0; font-size: clamp(30px, 6vw, 48px); color: #d84315; text-align: center; }
+
+@keyframes tt-pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+.tt-banner { animation-name: tt-pop-c; }
+@keyframes tt-pop-c { from { transform: translate(-50%, -50%) scale(.6); opacity: 0; } to { transform: translate(-50%, -50%); opacity: 1; } }
+@keyframes tt-wobble { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg) scale(1.03); } }
+@keyframes tt-pulse { to { transform: scale(1.15); } }
+
+@media (max-width: 600px) {
+  .tt-drive button { width: 66px; height: 66px; font-size: 32px; }
+  .tt-weapon, .tt-fire { width: 76px; min-width: 76px; height: 76px; }
+  .tt-weapon .i { font-size: 40px; }
+  .tt-top { left: 88px; right: 80px; }
+  .tt-who, .tt-wind { font-size: 18px; }
+  .tt-hint { top: 150px; font-size: 16px; }
+}
