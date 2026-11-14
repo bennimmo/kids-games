@@ -34,7 +34,7 @@ export function sanitizeLook(raw) {
   if (has(EYE_COLORS, raw.eyeColor)) out.eyeColor = raw.eyeColor;
   if (has(TOP_COLORS, raw.topColor)) out.topColor = raw.topColor;
   for (const k of ['hairStyle', 'topStyle', 'topPattern']) if (valueOk(k)(raw[k])) out[k] = raw[k];
-  for (const k of ['mascara', 'eyeliner', 'earrings', 'necklace', 'headwear', 'glasses']) out[k] = slotOk(k)(raw[k]) ? raw[k] : null;
+  for (const k of ['mascara', 'eyeliner', 'earrings', 'necklace', 'headwear', 'glasses', 'bottom', 'dress', 'socks', 'shoes', 'bag', 'bracelet']) out[k] = slotOk(k)(raw[k]) ? raw[k] : null;
   out.cut = num(raw.cut, 250, 600);
   out.freckles = raw.freckles === true;
   out.extensions = list(raw.extensions).filter(v => typeof v === 'string' && ITEMS['ext-' + v]).slice(0, 10);
