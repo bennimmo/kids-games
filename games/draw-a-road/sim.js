@@ -1,4 +1,4 @@
-// Draw a Road – physics simulation.
+// Monster Doodle – physics simulation.
 // No DOM in here: it takes a level + the player's lines and steps the world.
 // Fixed time step, so the same lines always give the same result
 // (handy later for multiplayer: just send the lines, everyone sees the same run).

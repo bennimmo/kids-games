@@ -10,8 +10,8 @@ export const GAMES = [
   },
   {
     id: 'draw-a-road',
-    name: 'Draw a Road',
-    icon: '✏️',
+    name: 'Monster Doodle',
+    icon: '🛻',
     color: '#81c784',
     load: () => import('../games/draw-a-road/game.js'),
   },

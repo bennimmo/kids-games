@@ -1,4 +1,4 @@
-// Draw a Road – draw lines with your finger so the car can get to the flag.
+// Monster Doodle – draw lines with your finger so the car can get to the flag.
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
@@ -66,8 +66,8 @@ export function mount(stage) {
     mode = 'menu';
     ui.innerHTML = `
       <div class="dar-menu">
-        <h2>✏️ Draw a Road</h2>
-        <p>Draw a line so the car gets to the flag 🏁</p>
+        <h2>🛻 Monster Doodle</h2>
+        <p>Draw a road so the monster truck gets to the flag 🏁</p>
         <div class="dar-levels">
           ${LEVELS.map((lv, i) => {
             const open = unlocked(i);

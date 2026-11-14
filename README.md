@@ -40,8 +40,8 @@ Then open http://localhost:8000
 - 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
 - Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
 
-### ✏️ Draw a Road (`games/draw-a-road/`)
-Draw lines with your finger/mouse so the car gets to the flag 🏁.
+### 🛻 Monster Doodle (`games/draw-a-road/`)
+Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - 24 levels: gaps, hills, walls, trampolines, speed arrows, magic doors, no-engine and floaty zones, ski jumps, low bridges, zig zags and a grand finale
 - Up to 3 stars – use less crayon for more stars (saved on the device)
 - Space = go/stop, Z = undo
