@@ -73,12 +73,24 @@ export function mount(stage) {
   for (let i = 0; i < 4; i++) clouds.push({ x: rand(0, 1), y: rand(0.08, 0.5), s: rand(0.7, 1.3), v: rand(0.004, 0.01) });
 
   // ---------- Spawning ----------
+  // Bottom-middle of the screen is where Android's "switch app" bar lives.
+  // Keep balloons out of it so little fingers don't swipe away the game.
+  const NO_GO = { left: 0.3, right: 0.7, top: 0.75 };
+  const inNoGoColumn = (x, halfW) => x + halfW > W() * NO_GO.left && x - halfW < W() * NO_GO.right;
+
   function addBalloon(y) {
     const r = size() * rand(0.9, 1.1);
     const c = pick(COLOURS);
+    const x = rand(r + 10, W() - r - 10);
+    const safeY = H() * NO_GO.top - r * 1.2; // balloon body stays above the no-go zone
+    let grow = 1;
+    if (inNoGoColumn(x, r + 20)) {
+      // Middle column: pop in above the zone instead of rising from the bottom.
+      if (y === undefined || y > safeY) { y = safeY; grow = 0; }
+    }
     balloons.push({
-      x: rand(r + 10, W() - r - 10), y: y ?? H() + r * 1.5,
-      r, c, vy: -rand(0.55, 0.85) * r, // px/s, slow
+      x, y: y ?? H() + r * 1.5, grow,
+      r, c, vy: -rand(0.7, 1.05) * r, // px/s
       sway: rand(0, Math.PI * 2), swaySpeed: rand(0.6, 1.1),
     });
   }
@@ -86,9 +98,12 @@ export function mount(stage) {
   function addVehicle() {
     lastVehicle = lastVehicle === 'digger' ? 'train' : 'digger';
     const s = size() * 1.25;
+    const x = Math.random() < 0.5 ? s * 1.8 : W() - s * 1.8;
+    // Narrow screens: if it would still touch the middle column, pop in above the no-go zone.
+    const tooClose = inNoGoColumn(x, s * 1.7 + 20);
     vehicles.push({
-      kind: lastVehicle, s,
-      x: rand(s * 1.5, W() - s * 1.5), y: H() + s * 3,
+      kind: lastVehicle, s, grow: tooClose ? 0 : 1,
+      x, y: tooClose ? H() * NO_GO.top - s * 1.0 : H() + s * 3,
       vy: -s * 0.45, vx: 0, state: 'float', sway: rand(0, 6), wheel: 0,
       dir: Math.random() < 0.5 ? -1 : 1, smokeT: 0,
       balloonColours: [pick(COLOURS), pick(COLOURS), pick(COLOURS)],
@@ -218,7 +233,8 @@ export function mount(stage) {
     }
 
     for (const b of balloons) {
-      b.y += b.vy * dt;
+      b.grow = Math.min(1, b.grow + dt * 3);
+      b.y += b.vy * dt * b.grow;
       b.sway += b.swaySpeed * dt;
       b.x += Math.sin(b.sway) * 12 * dt;
     }
@@ -227,7 +243,8 @@ export function mount(stage) {
     for (const v of vehicles) {
       v.sway += dt;
       if (v.state === 'float') {
-        v.y += v.vy * dt;
+        v.grow = Math.min(1, v.grow + dt * 3);
+        v.y += v.vy * dt * v.grow;
         v.x += Math.sin(v.sway * 0.8) * 15 * dt;
         if (v.y < -v.s * 1.5) v.gone = true;
       } else if (v.state === 'fall') {
@@ -471,6 +488,20 @@ export function mount(stage) {
   }
 
   function drawVehicle(v) {
+    const g = v.grow, k = 1.7;
+    const e = g >= 1 ? 1 : 1 + (k + 1) * (g - 1) ** 3 + k * (g - 1) ** 2;
+    if (e < 0.02) return;
+    if (e !== 1) {
+      ctx.save();
+      ctx.translate(v.x, v.y - v.s);
+      ctx.scale(e, e);
+      ctx.translate(-v.x, -(v.y - v.s));
+    }
+    drawVehicleInner(v);
+    if (e !== 1) ctx.restore();
+  }
+
+  function drawVehicleInner(v) {
     const s = v.s;
     if (v.state === 'float') {
       // Three balloons holding it up.
@@ -557,7 +588,12 @@ export function mount(stage) {
 
   function draw() {
     drawSky();
-    for (const b of balloons) balloonShape(b.x, b.y, b.r, b.c);
+    for (const b of balloons) {
+      // Springy pop-in for balloons that appear in the middle.
+      const g = b.grow, k = 1.7;
+      const e = g >= 1 ? 1 : 1 + (k + 1) * (g - 1) ** 3 + k * (g - 1) ** 2;
+      if (e > 0.02) balloonShape(b.x, b.y, b.r * e, b.c);
+    }
     for (const v of vehicles) drawVehicle(v);
     drawBits();
     drawStarBar();

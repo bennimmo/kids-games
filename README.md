@@ -86,4 +86,5 @@ For age 2+. Tap balloons to pop them. No losing, no timer.
 - Every 15–20 sec a digger 🚜 or train 🚂 floats up on balloons. Tap it: it drops, then beeps/toots and drives off (+3 stars)
 - Fill 10 stars → fireworks party, then start again
 - Big tap areas, palm slaps ignored
+- Nothing floats in the bottom middle (Android app-switch bar). Balloons there pop in higher up instead
 - Grown-ups: hold 🏠 for a second to exit (a quick tap does nothing)
