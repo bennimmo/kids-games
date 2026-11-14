@@ -60,6 +60,19 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - 📸 saves a PNG. Last 20 girls kept in the browser ("My girls"). Bump `LOOK_VERSION` in `look.js` on breaking changes; older saves just disappear.
 - Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `game.js` (screens).
 
+## Online play (Firebase)
+- Shared code: `js/engine/net.js` (any game can use it).
+- One Realtime Database for all games: `games/<game>/rooms/<code>/...`
+- Room codes are 4 pictures, so kids can join without reading.
+- Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules).
+- Test on one computer with 2 tabs, no internet: add `?net=local` to the URL,
+  e.g. `http://localhost:8000/?net=local#/race-track`
+
+### Raffy Race online
+- 🌍 → host (shares your track) or 🔑 join (tap the 4 pictures).
+- Host draws/edits and starts races; friends wait in the lobby.
+- Each device drives its own cars and sends positions ~15×/sec.
+
 ## Design rules
 - Icons, not words (players are 4–6).
 - Multiplayer-ready: game state is plain data, and the simulation is
