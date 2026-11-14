@@ -8,6 +8,7 @@ import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './ite
 import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD } from './draw.js';
 import { createStore, newLook, newKey, presetStrokes } from './look.js';
 import { loadGallery, saveToGallery, removeFromGallery } from './gallery.js';
+import { makeRoom, findRoom, connect, CODE_PICS } from './online.js';
 
 const HAIR_SPOTS = [[132, 128], [268, 128], [160, 104], [240, 104], [118, 172], [282, 172], [200, 96]];
 const isTool = it => it && (it.action === 'paint' || it.action === 'cut');
@@ -30,6 +31,12 @@ export function mount(stage) {
   let saveTimer = null;
   let tab = 'lips';
   let teardownSalon = null;
+  let screen = 'pick';
+  // Playing with friends
+  let net = null;          // connected room (see online.js)
+  let onNet = null;        // the current screen's "friends changed" handler
+  let focusId = null;      // which friend is shown big
+  const lastFriendLook = {};
   const timers = new Set();
   const later = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
 
@@ -38,7 +45,9 @@ export function mount(stage) {
     store = createStore(look);
     saveId = id || newKey();
     saving = !!id;
+    if (net) { net.setName(look.name); net.publish(look); }
     unsub = store.subscribe(() => {
+      if (net) net.publish(store.get());
       if (!saving) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => saveToGallery(saveId, store.get()), 300);
@@ -47,16 +56,123 @@ export function mount(stage) {
 
   function clearScreen() {
     if (teardownSalon) { teardownSalon(); teardownSalon = null; }
+    onNet = null;
     root.innerHTML = '';
+  }
+
+  // ---------- friends: connect, leave ----------
+  function joined(room) {
+    net = connect(room, {
+      onChange: () => onNet && onNet(),
+      onClosed: () => {
+        net = null;
+        if (screen === 'salon') salonScreen(); else pickScreen();
+        banner('The room has closed 👋');
+      },
+      onShowOff: name => celebrate(name),
+    });
+    if (store) { net.setName(store.get().name); net.publish(store.get()); }
+  }
+  async function leaveRoom() {
+    const n = net;
+    net = null;
+    if (n) await n.leave();
+  }
+  const codeHtml = () => net ? net.pics.map(p => `<span>${p}</span>`).join('') : '';
+  const friendDots = () => net ? net.friends().map(f => `<span title="${f.name}">${f.emoji}</span>`).join('') : '';
+
+  // ---------- Play with friends: make or join a room ----------
+  function friendsScreen() {
+    clearScreen();
+    screen = 'friends';
+    root.innerHTML = `
+      <div class="bb-mp">
+        <button class="bb-back" aria-label="Back">⬅️</button>
+        <h1 class="bb-title">Play with friends</h1>
+        <div class="bb-mp-choices">
+          <button class="bb-big" data-mp="make"><span class="i">🏠</span><span>Make a room</span></button>
+          <button class="bb-big" data-mp="join"><span class="i">🔑</span><span>Join a room</span></button>
+        </div>
+        <p class="bb-mp-msg"></p>
+      </div>`;
+    const msg = root.querySelector('.bb-mp-msg');
+    root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); pickScreen(); });
+    root.querySelector('[data-mp="join"]').addEventListener('click', () => { sound.pop(); joinScreen(); });
+    root.querySelector('[data-mp="make"]').addEventListener('click', async () => {
+      sound.pop();
+      msg.textContent = 'Making a room… ⏳';
+      try {
+        joined(await makeRoom());
+        sound.win();
+        pickScreen();
+      } catch (e) {
+        msg.textContent = "Couldn't connect 😢 Try again";
+      }
+    });
+  }
+
+  function joinScreen() {
+    clearScreen();
+    screen = 'join';
+    let code = '';
+    root.innerHTML = `
+      <div class="bb-mp">
+        <button class="bb-back" aria-label="Back">⬅️</button>
+        <h1 class="bb-title">Tap your friend's pictures</h1>
+        <div class="bb-slots">${'<span></span>'.repeat(4)}</div>
+        <div class="bb-keypad">
+          ${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}
+        </div>
+        <button class="bb-rub" aria-label="Rub out">⌫</button>
+        <p class="bb-mp-msg"></p>
+      </div>`;
+    const slots = [...root.querySelectorAll('.bb-slots span')];
+    const msg = root.querySelector('.bb-mp-msg');
+    const show = () => slots.forEach((el, i) => { el.textContent = code[i] ? CODE_PICS[parseInt(code[i], 16)] : ''; });
+    root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); friendsScreen(); });
+    root.querySelector('.bb-rub').addEventListener('click', () => { code = code.slice(0, -1); show(); sound.pop(); });
+    root.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
+      if (code.length >= 4) return;
+      code += b.dataset.k;
+      show();
+      sound.tone(500 + code.length * 120, .08, 'sine', .15);
+      if (code.length < 4) return;
+      msg.textContent = 'Looking… ⏳';
+      try {
+        const room = await findRoom(code);
+        if (!room) {
+          msg.textContent = 'No room with those pictures. Try again!';
+          sound.bump();
+          const box = root.querySelector('.bb-slots');
+          box.classList.remove('bb-shake'); void box.offsetWidth; box.classList.add('bb-shake');
+          code = ''; show();
+          return;
+        }
+        joined(room);
+        sound.win();
+        pickScreen();
+      } catch (e) {
+        msg.textContent = "Couldn't connect 😢 Try again";
+        code = ''; show();
+      }
+    }));
   }
 
   // ---------- 1. Pick a girl ----------
   function pickScreen() {
     clearScreen();
+    screen = 'pick';
     const saved = loadGallery();
     root.innerHTML = `
       <div class="bb-pick">
         <h1 class="bb-title">Beautiful Bells</h1>
+        ${net ? `
+          <div class="bb-roombar">
+            <span class="bb-roombar-l">Room</span><span class="bb-code">${codeHtml()}</span>
+            <span class="bb-roombar-f">${friendDots()}</span>
+            <button class="bb-leave">Leave 🚪</button>
+          </div>` : `
+          <button class="bb-friends-btn">👭 Play with friends</button>`}
         <p class="bb-sub">Pick your girl!</p>
         <div class="bb-girls">
           ${GIRLS.map(g => `
@@ -78,6 +194,11 @@ export function mount(stage) {
               </div>`).join('')}
           </div>` : ''}
       </div>`;
+    const fb = root.querySelector('.bb-friends-btn');
+    if (fb) fb.addEventListener('click', () => { sound.pop(); friendsScreen(); });
+    const lb = root.querySelector('.bb-leave');
+    if (lb) lb.addEventListener('click', async () => { sound.bump(); await leaveRoom(); pickScreen(); });
+    onNet = () => { const f = root.querySelector('.bb-roombar-f'); if (f) f.innerHTML = friendDots(); };
     root.querySelectorAll('[data-girl]').forEach(b => b.addEventListener('click', () => {
       sound.pop();
       startSession(newLook(GIRLS.find(g => g.id === b.dataset.girl)));
@@ -107,6 +228,7 @@ export function mount(stage) {
   // ---------- 2. Hair colour, length and eyes ----------
   function setupScreen() {
     clearScreen();
+    screen = 'setup';
     const draw = () => {
       const look = store.get();
       root.innerHTML = `
@@ -158,9 +280,10 @@ export function mount(stage) {
   // ---------- 3. The salon ----------
   function salonScreen() {
     clearScreen();
+    screen = 'salon';
     if (!saving) { saving = true; saveToGallery(saveId, store.get()); }
     root.innerHTML = `
-      <div class="bb-salon">
+      <div class="bb-salon ${net ? 'mp' : ''}">
         <div class="bb-stage">
           <h1 class="bb-title bb-title-small">Beautiful Bells</h1>
           <div class="bb-tools">
@@ -170,12 +293,16 @@ export function mount(stage) {
             <button data-tool="setup" aria-label="Hair and eyes">👧</button>
             <button data-tool="girls" aria-label="My girls">👭</button>
           </div>
-          <div class="bb-doll"></div>
+          <div class="bb-dolls">
+            <div class="bb-doll">${net ? `<div class="bb-me-name">${net.emoji} ${store.get().name} (you)</div>` : ''}</div>
+            ${net ? '<div class="bb-friend"></div>' : ''}
+          </div>
           <div class="bb-held" hidden>
             <div class="bb-held-pic"></div>
             <button class="bb-held-x" aria-label="Put down">✖</button>
           </div>
           <button class="bb-photo" aria-label="Save picture">📸<span>Save</span></button>
+          ${net ? '<button class="bb-showoff" aria-label="Show off">🎉<span>Show off</span></button>' : ''}
           <div class="bb-toast" hidden></div>
         </div>
         <div class="bb-panel">
@@ -191,7 +318,10 @@ export function mount(stage) {
     const toastEl = root.querySelector('.bb-toast');
     let active = null; // the brush or scissors in your hand
 
-    const drawDoll = (look = store.get()) => { doll.innerHTML = renderGirl(look); };
+    const drawDoll = (look = store.get()) => {
+      const tag = net ? `<div class="bb-me-name">${net.emoji} ${look.name} (you)</div>` : '';
+      doll.innerHTML = tag + renderGirl(look);
+    };
     const drawItems = () => {
       const look = store.get();
       const t = TABS.find(x => x.id === tab) || TABS[0];
@@ -250,6 +380,41 @@ export function mount(stage) {
       }
     });
     root.querySelector('.bb-photo').addEventListener('click', () => savePicture());
+
+    // ----- friends' girls (watch only) -----
+    const friendEl = root.querySelector('.bb-friend');
+    const showOffBtn = root.querySelector('.bb-showoff');
+    if (showOffBtn) showOffBtn.addEventListener('click', () => { net && net.showOff(); celebrate(store.get().name); });
+    const drawFriends = () => {
+      if (!friendEl || !net) return;
+      const friends = net.friends().filter(f => f.look);
+      if (!friends.length) {
+        friendEl.innerHTML = `<div class="bb-friend-wait"><p>Waiting for friends…</p><p>Show them these pictures:</p><div class="bb-code big">${codeHtml()}</div></div>`;
+        return;
+      }
+      if (!friends.some(f => f.id === focusId)) focusId = friends[0].id;
+      const f = friends.find(x => x.id === focusId);
+      const key = JSON.stringify(f.look);
+      const changed = lastFriendLook[f.id] !== undefined && lastFriendLook[f.id] !== key;
+      friends.forEach(x => { lastFriendLook[x.id] = JSON.stringify(x.look); });
+      friendEl.innerHTML = `
+        <div class="bb-friend-name">${f.emoji} ${f.name}</div>
+        <div class="bb-friend-girl">${renderGirl(f.look, { noPlaced: false, still: true })}</div>
+        ${friends.length > 1 ? `<div class="bb-friend-thumbs">${friends.map(x => `
+          <button class="${x.id === focusId ? 'on' : ''}" data-friend="${x.id}" aria-label="${x.name}">
+            ${renderGirl(x.look, { viewBox: '60 60 280 280', still: true })}<span>${x.emoji}</span>
+          </button>`).join('')}</div>` : ''}
+        <div class="bb-code small">${codeHtml()}</div>`;
+      if (changed) { friendEl.classList.remove('ping'); void friendEl.offsetWidth; friendEl.classList.add('ping'); }
+    };
+    if (friendEl) {
+      friendEl.addEventListener('click', e => {
+        const b = e.target.closest('[data-friend]');
+        if (b) { focusId = b.dataset.friend; sound.pop(); drawFriends(); }
+      });
+      onNet = drawFriends;
+      drawFriends();
+    }
 
     // ----- helpers -----
     const svgEl = () => doll.querySelector('svg');
@@ -336,8 +501,8 @@ export function mount(stage) {
       if (e.button > 0 || !e.isPrimary) return; // ignore extra fingers
       if (drag) cancelDrag(); // a lost finger-lift must never leave a picture stuck
       const itemEl = e.target.closest('.bb-item');
-      const placedEl = e.target.closest('.bb-placed');
-      const onDoll = e.target.closest('.bb-doll');
+      const placedEl = doll.contains(e.target) ? e.target.closest('.bb-placed') : null;
+      const onDoll = doll.contains(e.target);
       if (itemEl) {
         drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, item: ITEMS[itemEl.dataset.id], el: itemEl };
       } else if (placedEl && !active) {
@@ -531,6 +696,14 @@ export function mount(stage) {
     }
   }
 
+  function banner(text, ms = 3000) {
+    const b = document.createElement('div');
+    b.className = 'bb-banner';
+    b.textContent = text;
+    root.appendChild(b);
+    later(() => b.remove(), ms);
+  }
+
   function celebrate(name) {
     const flash = document.createElement('div');
     flash.className = 'bb-flash';
@@ -604,6 +777,7 @@ export function mount(stage) {
 
   return () => {
     clearScreen();
+    leaveRoom();
     if (unsub) unsub();
     clearTimeout(saveTimer);
     if (saving && store) saveToGallery(saveId, store.get());

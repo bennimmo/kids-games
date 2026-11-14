@@ -679,7 +679,8 @@ export function renderGirl(look, opts = {}) {
   const placed = opts.noPlaced ? '' : (look.placed || []).map(p => {
     const item = ITEMS[p.item];
     if (!item) return '';
-    return `<g class="bb-placed" data-placed="${p.key}" transform="translate(${r1(p.x)} ${r1(p.y)})">${drawThing(item)}</g>`;
+    const attrs = opts.still ? '' : `class="bb-placed" data-placed="${p.key}" `;
+    return `<g ${attrs}transform="translate(${r1(p.x)} ${r1(p.y)})">${drawThing(item)}</g>`;
   }).join('');
 
   const body = `<path d="${BODY}" fill="${skin.base}"/><path d="${BODY}" fill="url(#${id}bs)"/>
