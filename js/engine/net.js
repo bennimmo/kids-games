@@ -6,7 +6,7 @@
 // - live:    fast-changing data (car positions), written by the owner
 //            (setLiveItem writes one key inside it, e.g. one paint stroke)
 //
-// Room codes are 4 pictures so small children can join without reading.
+// Room codes are CODE_LEN pictures so small children can join without reading.
 // Add ?net=local to the URL to test with 2 tabs on one computer, no internet.
 
 export const FIREBASE_CONFIG = {
@@ -19,10 +19,13 @@ export const FIREBASE_CONFIG = {
   appId: '1:287891393505:web:a4e66170007e7fb4ae60a0',
 };
 
-// 16 pictures = one hex digit each. Code "3a0f" -> 🐸🍌🐶⚽
+// How many pictures in a room code (all games use this).
+export const CODE_LEN = 3;
+
+// 16 pictures = one hex digit each. Code "3a0" -> 🐸🍌🐶
 export const CODE_PICS = ['🐶', '🐱', '🦁', '🐸', '🐵', '🐷', '🐮', '🐰', '🍎', '🍌', '🍓', '🍕', '🚀', '⭐', '🌈', '⚽'];
 export const codeToPics = code => [...code].map(h => CODE_PICS[parseInt(h, 16)]);
-const randomCode = () => Array.from({ length: 4 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+const randomCode = () => Array.from({ length: CODE_LEN }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
 const useLocal = new URLSearchParams(location.search).get('net') === 'local';
 
@@ -94,7 +97,7 @@ function firebaseRoom(fb, game, code, isHost) {
 async function fbCreate(game, meta) {
   const fb = await firebase();
   const { D, db, uid } = fb;
-  for (let tries = 0; tries < 8; tries++) {
+  for (let tries = 0; tries < 20; tries++) {
     const code = randomCode();
     const base = D.ref(db, `games/${game}/rooms/${code}`);
     const taken = await D.get(D.child(base, 'host'));

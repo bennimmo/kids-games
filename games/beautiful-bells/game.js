@@ -3,6 +3,7 @@
 // Everything is drag and drop. Brushes (lipstick, eyeshadow, blusher, face paint)
 // paint as you rub, and stay in your hand until you put them down. Scissors cut hair.
 // Every girl you make is saved in this browser (last 20) so you can carry on later.
+import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
 import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD } from './draw.js';
@@ -119,7 +120,7 @@ export function mount(stage) {
       <div class="bb-mp">
         <button class="bb-back" aria-label="Back">⬅️</button>
         <h1 class="bb-title">Tap your friend's pictures</h1>
-        <div class="bb-slots">${'<span></span>'.repeat(4)}</div>
+        <div class="bb-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
         <div class="bb-keypad">
           ${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}
         </div>
@@ -132,11 +133,11 @@ export function mount(stage) {
     root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); friendsScreen(); });
     root.querySelector('.bb-rub').addEventListener('click', () => { code = code.slice(0, -1); show(); sound.pop(); });
     root.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
-      if (code.length >= 4) return;
+      if (code.length >= CODE_LEN) return;
       code += b.dataset.k;
       show();
       sound.tone(500 + code.length * 120, .08, 'sine', .15);
-      if (code.length < 4) return;
+      if (code.length < CODE_LEN) return;
       msg.textContent = 'Looking… ⏳';
       try {
         const room = await findRoom(code);
