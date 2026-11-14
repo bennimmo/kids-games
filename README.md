@@ -65,3 +65,11 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - Multiplayer-ready: game state is plain data, and the simulation is
   `step(state, inputs, dt)`. Inputs come from "controls" (keyboard now,
   a friend over Firebase later).
+
+### 🎈 Balloon Pop (`games/balloon-pop/`)
+For age 2+. Tap balloons to pop them. No losing, no timer.
+- Each pop says the colour out loud ("Red!")
+- Every 15–20 sec a digger 🚜 or train 🚂 floats up on balloons. Tap it: it drops, then beeps/toots and drives off (+3 stars)
+- Fill 10 stars → fireworks party, then start again
+- Big tap areas, palm slaps ignored
+- Grown-ups: hold 🏠 for a second to exit (a quick tap does nothing)

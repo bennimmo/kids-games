@@ -22,4 +22,11 @@ export const GAMES = [
     color: '#f8a5d0',
     load: () => import('../games/beautiful-bells/game.js'),
   },
+  {
+    id: 'balloon-pop',
+    name: 'Balloon Pop',
+    icon: '🎈',
+    color: '#ff8a80',
+    load: () => import('../games/balloon-pop/game.js'),
+  },
 ];
