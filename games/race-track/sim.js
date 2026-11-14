@@ -2,7 +2,7 @@
 //   stepRace(race, track, items, inputs, dt)
 // inputs = { [playerId]: { up, down, left, right } }
 // Inputs can come from the keyboard now, or from a friend online later.
-import { WORLD, TRACK_W, nearestLocal, nearestGlobal } from './track.js';
+import { WORLD, TRACK_W, JUMP_L, WATER_RX, WATER_RY, nearestLocal, nearestGlobal } from './track.js';
 
 export const LAPS = 5;
 
@@ -14,18 +14,18 @@ const MAX = 360;       // top speed on dirt track
 const OFF_MAX = 140;   // top speed on grass
 const WATER_MAX = 170;
 const TURN = 3.3;      // radians / sec at speed
-const CAR_R = 13;      // collision radius
+const CAR_R = 17;      // collision radius
 const GRAVITY = 900;
 
 export function createRace(track, players) {
   const n = track.n;
   const cars = players.map((pl, k) => {
-    const back = 5 + Math.floor(k / 2) * 4;
+    const back = 5 + Math.floor(k / 2) * 5;
     const i = (n - back) % n;
     const p = track.pts[i];
-    const side = (k % 2 === 0 ? -1 : 1) * 17;
+    const side = (k % 2 === 0 ? -1 : 1) * 21;
     return {
-      id: pl.id, color: pl.color,
+      id: pl.id, color: pl.color, style: pl.style || 'truck', decal: pl.decal || 'none',
       x: p.x - Math.sin(p.a) * side, y: p.y + Math.cos(p.a) * side, a: p.a,
       vx: 0, vy: 0, idx: i, prog: -back, lap: 1,
       z: 0, vz: 0, air: false, jumpCool: 0,
@@ -75,8 +75,8 @@ function updateCar(car, input, track, items, dt, ev) {
     for (const it of items) {
       if (!sameLayer(it, car)) continue;
       const [lx, ly] = local(it, car);
-      if (it.type === 'water' && (lx / 52) ** 2 + (ly / (TRACK_W * 0.62)) ** 2 < 1) water = true;
-      if (it.type === 'jump' && Math.abs(lx) < 22 && Math.abs(ly) < TRACK_W / 2 + 3) ramp = true;
+      if (it.type === 'water' && (lx / WATER_RX) ** 2 + (ly / WATER_RY) ** 2 < 1) water = true;
+      if (it.type === 'jump' && Math.abs(lx) < JUMP_L / 2 && Math.abs(ly) < TRACK_W / 2 + 3) ramp = true;
     }
     if (!car.onTrack) { maxF = OFF_MAX; drag = 1.2; grip = 5; }
     if (water) { maxF = Math.min(maxF, WATER_MAX); grip = 2; drag = 1.0; }

@@ -33,7 +33,9 @@ Then open http://localhost:8000
 ### 🏎️ Raffy Race (`games/race-track/`)
 - Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
 - Drag extras onto the track: jump, water, tunnel. Drag to 🗑️ to remove.
-- Up to 2 players: arrows and WASD. Tap a car to pick its colour.
+- Up to 2 players: arrows and WASD, or touch buttons on iPad/tablets.
+- Tap a car to customise: colour, type (monster truck, rally, buggy) and sticker. Choices are remembered.
+- If the end of your line overlaps the start, the extra bit is trimmed so the loop joins cleanly.
 - 5 laps. Then 🔁 race again or ✏️ redraw (edit, start fresh, or pick a saved track).
 - 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
 - Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).

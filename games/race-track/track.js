@@ -3,7 +3,10 @@
 // Everything here is plain data so it can be sent to friends online later.
 
 export const WORLD = { w: 1600, h: 1000 };
-export const TRACK_W = 76;
+export const TRACK_W = 88;
+export const JUMP_L = 50;
+export const WATER_RX = TRACK_W * 0.75;
+export const WATER_RY = TRACK_W * 0.62;
 export const SPACING = 12;
 export const TUNNEL_HALF = 7; // tunnel covers idx-7 .. idx+7
 
@@ -119,6 +122,49 @@ function finish(p) {
   return { pts, n, bridge, runs };
 }
 
+function segPoint(a, b, c, d) {
+  const r = { x: b.x - a.x, y: b.y - a.y }, q = { x: d.x - c.x, y: d.y - c.y };
+  const den = r.x * q.y - r.y * q.x || 1;
+  const t = ((c.x - a.x) * q.y - (c.y - a.y) * q.x) / den;
+  return { x: a.x + r.x * t, y: a.y + r.y * t };
+}
+
+// If the end of the line overlaps the start, cut off the extra bits
+// so the loop joins cleanly (no messy bridge at the join).
+function trimEnds(p) {
+  const n = p.length;
+  const head = Math.floor(n * 0.35), tail = Math.floor(n * 0.65);
+  let bi = 0, bj = n - 1, bd = Infinity;
+  for (let i = 0; i <= head; i++) {
+    for (let j = tail; j < n; j++) {
+      const d = (p[i].x - p[j].x) ** 2 + (p[i].y - p[j].y) ** 2;
+      if (d < bd) { bd = d; bi = i; bj = j; }
+    }
+  }
+  if (Math.sqrt(bd) < TRACK_W * 0.8) return p.slice(bi, bj + 1);
+  return p;
+}
+
+// Remove little knots (tiny loops) where the line crosses itself very close by.
+function removeSmallLoops(p, maxLen) {
+  for (let guard = 0; guard < 30; guard++) {
+    let found = false;
+    outer:
+    for (let i = 0; i < p.length - 3; i++) {
+      for (let j = i + 2; j < p.length - 1 && (j - i) * 8 < maxLen; j++) {
+        if (segInter(p[i], p[i + 1], p[j], p[j + 1])) {
+          const x = segPoint(p[i], p[i + 1], p[j], p[j + 1]);
+          p = [...p.slice(0, i + 1), x, ...p.slice(j + 1)];
+          found = true;
+          break outer;
+        }
+      }
+    }
+    if (!found) break;
+  }
+  return p;
+}
+
 // raw: array of {x,y} from the finger/mouse. Returns null if too small.
 export function buildTrack(raw) {
   const m = 50;
@@ -128,7 +174,11 @@ export function buildTrack(raw) {
   }));
   let p = resample(clamped, 8);
   if (p.length < 12) return null;
+  p = trimEnds(p);
+  p = removeSmallLoops(p, 600);
+  if (p.length < 12) return null;
   p = closedResample(p, 8);
+  p = removeSmallLoops([...p, p[0]], 600).slice(0, -1);
   for (let k = 0; k < 3; k++) p = chaikinClosed(p);
   p = closedResample(p, SPACING);
   if (p.length * SPACING < 700) return null;
