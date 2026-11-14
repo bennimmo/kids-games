@@ -14,7 +14,7 @@ const COLOURS = [
   { name: 'Purple', fill: '#ab47bc', dark: '#6a1b9a', note: 880 },
   { name: 'Pink', fill: '#f48fb1', dark: '#d81b60', note: 988 },
 ];
-const GOAL = 10;           // stars to fill before a party
+const GOAL = 20;           // stars to fill before a party
 const VEHICLE_STARS = 3;   // a digger/train is worth more
 const HOLD_TO_EXIT = 1.2;  // seconds a grown-up holds 🏠
 
@@ -43,6 +43,30 @@ function hiss(dur, freq, vol, type = 'bandpass') {
 }
 const later = (ms, fn) => setTimeout(fn, ms);
 
+// A held whistle note (chord) that swells in and out – a proper steam whistle.
+function blast(freqs, dur, vol = 0.12) {
+  try {
+    const a = audioCtx();
+    if (!a) return;
+    const t = a.currentTime;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.05);
+    g.gain.setValueAtTime(vol, t + dur - 0.08);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    g.connect(a.destination);
+    for (const f of freqs) {
+      const o = a.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(f * 0.92, t);
+      o.frequency.linearRampToValueAtTime(f, t + 0.08);
+      o.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    }
+  } catch (e) { /* sound is optional */ }
+}
+
 const sfx = {
   pop(note) {
     sound.tone(note, 0.15, 'sine', 0.25, note * 2);
@@ -52,22 +76,13 @@ const sfx = {
   beep() { // digger reversing beep
     [0, 350, 700].forEach(t => setTimeout(() => sound.tone(1050, 0.18, 'square', 0.07), t));
   },
-  toot() { // train whistle
-    sound.tone(620, 0.35, 'triangle', 0.18);
-    sound.tone(780, 0.35, 'triangle', 0.12);
-    setTimeout(() => { sound.tone(620, 0.6, 'triangle', 0.18); sound.tone(780, 0.6, 'triangle', 0.12); }, 420);
-  },
   // ---- Train ----
-  whistle() { // "toot toot!" when it appears
-    [0, 300].forEach(t => later(t, () => {
-      sound.tone(880, 0.22, 'triangle', 0.14, 940);
-      sound.tone(1110, 0.22, 'triangle', 0.08, 1180);
-    }));
-  },
   chuff: () => hiss(0.12, 1800, 0.18),
-  choochoo() { // big "choo-choo!" when it lands
-    [0, 260].forEach(t => later(t, () => hiss(0.22, 1400, 0.35)));
-    later(600, () => sfx.toot());
+  choochoo() { // "ch-ch-ch-ch CHOO-CHOOOO!"
+    [0, 140, 280, 420].forEach(t => later(t, () => hiss(0.1, 1600, 0.25)));
+    const chord = [523, 659, 784];
+    later(600, () => { blast(chord, 0.32); hiss(0.3, 2500, 0.06); });
+    later(1020, () => { blast(chord, 0.65); hiss(0.6, 2500, 0.06); });
   },
   bell() { // ding-ding
     [0, 220].forEach(t => later(t, () => { sound.tone(1568, 0.4, 'sine', 0.12); sound.tone(2350, 0.3, 'sine', 0.05); }));
@@ -84,7 +99,18 @@ const sfx = {
   clank() { // bucket clank-clank
     [0, 200].forEach(t => later(t, () => { sound.tone(1900, 0.12, 'square', 0.05); sound.tone(2700, 0.08, 'triangle', 0.06); hiss(0.08, 3000, 0.12); }));
   },
-  // ---- Both ----
+  // ---- Car ----
+  carBeep() { // "beep beep!" when it appears
+    [0, 220].forEach(t => later(t, () => { sound.tone(660, 0.14, 'square', 0.07); sound.tone(830, 0.14, 'square', 0.05); }));
+  },
+  honkHonk() {
+    [0, 300].forEach(t => later(t, () => { sound.tone(392, 0.22, 'sawtooth', 0.07); sound.tone(494, 0.22, 'sawtooth', 0.05); }));
+  },
+  vroomVroom() {
+    [0, 450].forEach(t => later(t, () => sound.tone(90, 0.45, 'sawtooth', 0.14, 260)));
+  },
+  hum: () => sound.tone(rand(100, 115), 0.07, 'sawtooth', 0.06),
+  // ---- All ----
   wheee: () => sound.tone(1300, 0.9, 'sine', 0.16, 350), // slide whistle down
   thud: () => sound.tone(120, 0.2, 'sine', 0.3, 60),
   giggle() { // quick bubbly trill
@@ -110,8 +136,9 @@ export function mount(stage) {
   let filled = 0;       // stars landed in the bar
   let earned = 0;       // stars on their way (incl. landed)
   let spawnT = 0.3;
-  let vehicleT = rand(10, 14);
-  let lastVehicle = Math.random() < 0.5 ? 'digger' : 'train';
+  let vehicleT = rand(5, 7);
+  const KINDS = ['digger', 'train', 'car'];
+  let kindIdx = Math.floor(Math.random() * KINDS.length);
   let party = null;     // { t } while celebrating
   let time = 0;
 
@@ -140,20 +167,21 @@ export function mount(stage) {
     }
     balloons.push({
       x, y: y ?? H() + r * 1.5, grow,
-      r, c, vy: -rand(0.7, 1.05) * r, // px/s
+      r, c, vy: -rand(0.74, 1.1) * r, // px/s
       sway: rand(0, Math.PI * 2), swaySpeed: rand(0.6, 1.1),
     });
   }
 
   function addVehicle() {
-    lastVehicle = lastVehicle === 'digger' ? 'train' : 'digger';
-    if (lastVehicle === 'train') sfx.whistle(); else sfx.honk();
+    kindIdx = (kindIdx + 1) % KINDS.length;
+    const kind = KINDS[kindIdx];
+    if (kind === 'train') sfx.choochoo(); else if (kind === 'digger') sfx.honk(); else sfx.carBeep();
     const s = size() * 1.25;
     const x = Math.random() < 0.5 ? s * 1.8 : W() - s * 1.8;
     // Narrow screens: if it would still touch the middle column, pop in above the no-go zone.
     const tooClose = inNoGoColumn(x, s * 1.7 + 20);
     vehicles.push({
-      kind: lastVehicle, s, grow: tooClose ? 0 : 1,
+      kind, s, carColour: pick(['#e53935', '#1e88e5', '#43a047', '#8e24aa', '#fb8c00']), grow: tooClose ? 0 : 1,
       x, y: tooClose ? H() * NO_GO.top - s * 1.0 : H() + s * 3,
       vy: -s * 0.45, vx: 0, state: 'float', sway: rand(0, 6), wheel: 0,
       dir: Math.random() < 0.5 ? -1 : 1, smokeT: 0,
@@ -235,7 +263,9 @@ export function mount(stage) {
     sfx.pop(784);
     sfx.boing();
     later(200, () => sfx.wheee());
-    if (v.kind === 'train') later(250, () => sfx.bell()); else later(250, () => sfx.clank());
+    if (v.kind === 'train') later(250, () => sfx.bell());
+    else if (v.kind === 'digger') later(250, () => sfx.clank());
+    else later(250, () => sfx.honkHonk());
     giveStars(v.x, v.y - v.s, VEHICLE_STARS);
   }
 
@@ -273,15 +303,15 @@ export function mount(stage) {
     // Spawning
     if (!party) {
       spawnT -= dt;
-      const want = W() < 600 ? 5 : 7;
+      const want = W() < 600 ? 6 : 9;
       if (spawnT <= 0 && balloons.length < want) {
         addBalloon();
-        spawnT = rand(0.7, 1.4);
+        spawnT = rand(0.6, 1.2);
       }
       vehicleT -= dt;
       if (vehicleT <= 0 && vehicles.length === 0) {
         addVehicle();
-        vehicleT = rand(15, 20);
+        vehicleT = rand(7, 10);
       }
     }
 
@@ -310,7 +340,8 @@ export function mount(stage) {
           v.vx = v.dir * v.s * 1.6;
           sfx.thud();
           if (v.kind === 'digger') { later(200, () => sfx.vroom()); later(800, () => sfx.beep()); }
-          else later(200, () => sfx.choochoo());
+          else if (v.kind === 'car') later(200, () => sfx.vroomVroom());
+          else { later(200, () => sfx.choochoo()); v.chooT = 2.6; }
         }
       } else if (v.state === 'drive') {
         v.x += v.vx * dt;
@@ -318,14 +349,18 @@ export function mount(stage) {
         v.smokeT -= dt;
         if (v.smokeT <= 0) {
           v.smokeT = v.kind === 'train' ? 0.28 : 0.35;
-          const cx = v.kind === 'train' ? v.x + v.dir * v.s * 0.55 : v.x - v.dir * v.s * 0.35;
-          const cy = v.kind === 'train' ? v.y - v.s * 1.35 : v.y - v.s * 1.25;
+          const cx = v.kind === 'train' ? v.x + v.dir * v.s * 0.55 : v.kind === 'car' ? v.x - v.dir * v.s * 1.05 : v.x - v.dir * v.s * 0.35;
+          const cy = v.kind === 'train' ? v.y - v.s * 1.35 : v.kind === 'car' ? v.y - v.s * 0.25 : v.y - v.s * 1.25;
           bits.push({ kind: 'smoke', x: cx, y: cy, vx: -v.dir * 20, vy: -50, life: 1.4, max: 1.4, w: v.s * 0.18 });
           if (v.kind === 'train') sfx.chuff();
         }
-        if (v.kind === 'digger') {
+        if (v.kind === 'digger' || v.kind === 'car') {
           v.engineT = (v.engineT ?? 0) - dt;
-          if (v.engineT <= 0) { v.engineT = 0.11; sfx.putter(); }
+          if (v.engineT <= 0) { v.engineT = v.kind === 'car' ? 0.08 : 0.11; v.kind === 'car' ? sfx.hum() : sfx.putter(); }
+        }
+        if (v.kind === 'train') {
+          v.chooT -= dt;
+          if (v.chooT <= 0) { v.chooT = 3; sfx.choochoo(); }
         }
         if (v.x < -v.s * 3 || v.x > W() + v.s * 3) v.gone = true;
       }
@@ -546,6 +581,40 @@ export function mount(stage) {
     wheel(s * 0.55, -s * 0.22, s * 0.22, rot, '#e53935');
   }
 
+  // Car: origin at bottom-centre of wheels, facing right.
+  function drawCar(s, rot, colour) {
+    // Body
+    ctx.fillStyle = colour;
+    rrect(-s * 1.0, -s * 0.75, s * 2.0, s * 0.45, s * 0.18); ctx.fill();
+    // Roof / cabin
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.6, -s * 0.72);
+    ctx.lineTo(-s * 0.4, -s * 1.2);
+    ctx.lineTo(s * 0.3, -s * 1.2);
+    ctx.lineTo(s * 0.6, -s * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    // Windows
+    ctx.fillStyle = '#b3e5fc';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.48, -s * 0.78); ctx.lineTo(-s * 0.33, -s * 1.1); ctx.lineTo(-s * 0.06, -s * 1.1); ctx.lineTo(-s * 0.06, -s * 0.78);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(s * 0.04, -s * 0.78); ctx.lineTo(s * 0.04, -s * 1.1); ctx.lineTo(s * 0.25, -s * 1.1); ctx.lineTo(s * 0.47, -s * 0.78);
+    ctx.closePath(); ctx.fill();
+    // Lights
+    ctx.fillStyle = '#fff59d';
+    ctx.beginPath(); ctx.arc(s * 0.92, -s * 0.58, s * 0.08, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff7043';
+    ctx.fillRect(-s * 1.0, -s * 0.66, s * 0.08, s * 0.14);
+    // Smiley grille
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = Math.max(2, s * 0.04);
+    ctx.beginPath(); ctx.arc(s * 0.72, -s * 0.5, s * 0.1, 0.2, Math.PI - 0.2); ctx.stroke();
+    // Wheels
+    wheel(-s * 0.55, -s * 0.24, s * 0.24, rot, '#bdbdbd');
+    wheel(s * 0.55, -s * 0.24, s * 0.24, rot, '#bdbdbd');
+  }
+
   function drawVehicle(v) {
     const g = v.grow, k = 1.7;
     const e = g >= 1 ? 1 : 1 + (k + 1) * (g - 1) ** 3 + k * (g - 1) ** 2;
@@ -588,6 +657,7 @@ export function mount(stage) {
     ctx.scale(v.dir, 1);
     if (v.state !== 'drive') ctx.rotate(Math.sin(v.sway * 2) * 0.06);
     if (v.kind === 'digger') drawDigger(s, v.wheel);
+    else if (v.kind === 'car') drawCar(s, v.wheel, v.carColour);
     else drawTrain(s, v.wheel);
     ctx.restore();
   }
