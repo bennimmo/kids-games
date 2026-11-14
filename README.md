@@ -7,6 +7,12 @@ Live at GitHub Pages: https://bennimmo.github.io/kids-games/
 
 Every push to `main` deploys automatically (see `.github/workflows/deploy.yml`).
 
+## Install as an app
+- iPad/iPhone: open in **Safari** → Share ⬆️ → **Add to Home Screen**. Opens full screen.
+- Android/Chrome/Edge: tap 📲 on the menu (or the install icon in the address bar).
+- ⛶ on the menu = full screen in a normal browser.
+- `manifest.webmanifest`, `icons/`, `sw.js` (network first, so pushes go live straight away; works offline for games already opened).
+
 ## Run locally
 No build step. Just serve the folder:
 
