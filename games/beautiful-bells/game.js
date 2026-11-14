@@ -6,7 +6,7 @@
 import { sound } from '../../js/engine/sound.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
 import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD } from './draw.js';
-import { createStore, newLook, newKey, migrate, presetStrokes } from './look.js';
+import { createStore, newLook, newKey, presetStrokes } from './look.js';
 import { loadGallery, saveToGallery, removeFromGallery } from './gallery.js';
 
 const HAIR_SPOTS = [[132, 128], [268, 128], [160, 104], [240, 104], [118, 172], [282, 172], [200, 96]];
@@ -53,7 +53,7 @@ export function mount(stage) {
   // ---------- 1. Pick a girl ----------
   function pickScreen() {
     clearScreen();
-    const saved = loadGallery().map(s => ({ ...s, look: migrate(s.look) }));
+    const saved = loadGallery();
     root.innerHTML = `
       <div class="bb-pick">
         <h1 class="bb-title">Beautiful Bells</h1>
