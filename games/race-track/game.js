@@ -9,7 +9,7 @@ import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { createRoom, joinRoom, codeToPics, CODE_PICS } from '../../js/engine/net.js';
+import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings } from './sim.js';
@@ -653,7 +653,7 @@ export function mount(stage) {
   }
 
   function joinUI() {
-    const slots = [0, 1, 2, 3].map(i => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
+    const slots = Array.from({ length: CODE_LEN }, (_, i) => i).map(i => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
     const box = el(`<div class="rt-overlay"><div class="rt-card">
       <div class="rt-code rt-slots">${slots}</div>
       <div class="rt-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
@@ -661,9 +661,9 @@ export function mount(stage) {
       <button class="rt-btn rt-back">↩️</button>
     </div></div>`);
     box.querySelectorAll('.rt-keypad button').forEach(b => click(b, () => {
-      if (S.joinCode.length >= 4) return;
+      if (S.joinCode.length >= CODE_LEN) return;
       S.joinCode += b.dataset.h;
-      if (S.joinCode.length === 4) tryJoin(S.joinCode);
+      if (S.joinCode.length === CODE_LEN) tryJoin(S.joinCode);
       else render();
     }));
     click(box.querySelector('.rt-del-pic'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });

@@ -1,7 +1,8 @@
 // Paint Party – a simple paint program (like the old Paint on Windows).
 // Tools down the left, colours and sizes along the bottom, actions on the right.
 // Every drawing saves itself in this browser (🖼️ to see them). 📥 downloads a PNG.
-// 👫 draw together: make a room or join one with 4 pictures; everyone draws on the same page.
+// 👫 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
+import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
 import { W, H, COLORS, STAMPS, BRUSH, STAMP, SHAPES, MAX_NUMS, byOrder, drawOp, createPainter } from './ops.js';
 import { loadGallery, loadPicture, saveToGallery, removeFromGallery, getCurrent, setCurrent } from './gallery.js';
@@ -428,7 +429,7 @@ export function mount(stage) {
     let code = '';
     const m = modal(`
       <h2>Tap your friend's pictures</h2>
-      <div class="pt-slots">${'<span></span>'.repeat(4)}</div>
+      <div class="pt-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
       <div class="pt-keypad">${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}</div>
       <button class="pt-rub" aria-label="Rub out">⌫</button>
       <p class="pt-msg"></p>`);
@@ -437,11 +438,11 @@ export function mount(stage) {
     const show = () => slots.forEach((el, i) => { el.textContent = code[i] ? CODE_PICS[parseInt(code[i], 16)] : ''; });
     m.querySelector('.pt-rub').addEventListener('click', () => { code = code.slice(0, -1); show(); sound.pop(); });
     m.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
-      if (code.length >= 4) return;
+      if (code.length >= CODE_LEN) return;
       code += b.dataset.k;
       show();
       sound.tone(500 + code.length * 120, 0.08, 'sine', 0.15);
-      if (code.length < 4) return;
+      if (code.length < CODE_LEN) return;
       msg.textContent = 'Looking… ⏳';
       try {
         const room = await findRoom(code);

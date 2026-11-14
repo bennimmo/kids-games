@@ -58,7 +58,7 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - ✂️ Scissors cut the hair, 🧪 grow potion brings it back.
 - Tops: 11 styles, 16 colours, 10 patterns. Plus hairstyles, glasses, earrings, necklaces, hair bits.
 - 📸 saves a PNG. Last 20 girls kept in the browser ("My girls"). Bump `LOOK_VERSION` in `look.js` on breaking changes; older saves just disappear.
-- 👭 Play with friends (uses `js/engine/net.js`): make a room or join with 4 pictures. Everyone makes their own girl; your girl and one friend's girl show big side by side, others as small faces to tap. 🎉 Show off sends confetti to everyone. Friends' girls are checked by `sanitizeLook()` before drawing.
+- 👭 Play with friends (uses `js/engine/net.js`): make a room or join with 3 pictures. Everyone makes their own girl; your girl and one friend's girl show big side by side, others as small faces to tap. 🎉 Show off sends confetti to everyone. Friends' girls are checked by `sanitizeLook()` before drawing.
 - Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `online.js` (friends), `game.js` (screens).
 
 ### 🎨 Paint Party (`games/paint/`)
@@ -67,7 +67,7 @@ A simple paint program, like old Windows Paint.
 - 18 colours + 🎨 any colour, 4 sizes. ↩️ undo / ↪️ redo (Ctrl+Z / Ctrl+Y), 🗑️ clear (can be undone)
 - Saves itself in the browser (last 12, oldest go first if storage is full). 🖼️ opens them, ➕ new page
 - 📥 downloads a PNG
-- 👫 Draw with friends: make a room or join with 4 pictures. Everyone draws on the same page and sees friends' lines as they draw.
+- 👫 Draw with friends: make a room or join with 3 pictures. Everyone draws on the same page and sees friends' lines as they draw.
   Each device writes its own strokes (`live/<pid>/<opId>`). If a friend leaves, the host keeps their strokes.
 - A drawing is a list of plain "ops" (`ops.js`), checked by `sanitizeOp()` before drawing friends' ones.
 - Files: `ops.js` (drawing + fill), `gallery.js` (saving), `online.js` (friends), `game.js` (screen)
@@ -75,13 +75,13 @@ A simple paint program, like old Windows Paint.
 ## Online play (Firebase)
 - Shared code: `js/engine/net.js` (any game can use it).
 - One Realtime Database for all games: `games/<game>/rooms/<code>/...`
-- Room codes are 4 pictures, so kids can join without reading.
+- Room codes are 3 pictures (`CODE_LEN` in net.js), so kids can join without reading.
 - Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules).
 - Test on one computer with 2 tabs, no internet: add `?net=local` to the URL,
   e.g. `http://localhost:8000/?net=local#/race-track`
 
 ### Raffy Race online
-- 🌍 → host (shares your track) or 🔑 join (tap the 4 pictures).
+- 🌍 → host (shares your track) or 🔑 join (tap the 3 pictures).
 - Host draws/edits and starts races; friends wait in the lobby.
 - Each device drives its own cars and sends positions ~15×/sec.
 
