@@ -4,6 +4,7 @@
 // - meta:    written by the host only (track, race state ...)
 // - players: one entry per player, written by that player's device
 // - live:    fast-changing data (car positions), written by the owner
+//            (setLiveItem writes one key inside it, e.g. one paint stroke)
 //
 // Room codes are 4 pictures so small children can join without reading.
 // Add ?net=local to the URL to test with 2 tabs on one computer, no internet.
@@ -71,6 +72,8 @@ function firebaseRoom(fb, game, code, isHost) {
       return data ? D.set(r(`players/${pid}`), data) : Promise.all([D.remove(r(`players/${pid}`)), D.remove(r(`live/${pid}`))]);
     },
     setLive: (pid, data) => D.set(r(`live/${pid}`), data),
+    // Write (or remove with null) one item inside live/<pid>, e.g. one paint stroke.
+    setLiveItem: (pid, key, data) => D.set(r(`live/${pid}/${key}`), data),
     onMeta: cb => watch('meta', cb),
     onPlayers: cb => watch('players', v => cb(v || {})),
     onLive: cb => watch('live', v => cb(v || {})),
@@ -162,6 +165,12 @@ function localRoom(game, code, isHost) {
     },
     async setLive(pid, data) {
       localStorage.setItem(P + 'live:' + pid, JSON.stringify(data));
+      fire('live');
+    },
+    async setLiveItem(pid, key, data) {
+      const cur = JSON.parse(localStorage.getItem(P + 'live:' + pid) || 'null') || {};
+      if (data === null) delete cur[key]; else cur[key] = data;
+      localStorage.setItem(P + 'live:' + pid, JSON.stringify(cur));
       fire('live');
     },
     onMeta: cb => sub('meta', cb),
