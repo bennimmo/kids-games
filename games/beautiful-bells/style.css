@@ -392,3 +392,7 @@
 }
 /* Friend on the left, your girl on the right (next to the menu) */
 .bb-friend { order: -1; }
+/* soft spotlight behind the girls */
+.bb-doll, .bb-friend-girl, .bb-setup-girl {
+  background: radial-gradient(ellipse 50% 48% at 50% 46%, rgba(255,255,255,.8), rgba(255,255,255,.35) 55%, rgba(255,255,255,0) 75%);
+}
