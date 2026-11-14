@@ -80,6 +80,16 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
     emit();
   }));
   unsubs.push(room.onLive(l => { looks = l || {}; emit(); }));
+  // After a Wi-Fi dropout my girl is removed from the room, so send her again.
+  let lastStatus = 'ok';
+  if (room.onStatus) unsubs.push(room.onStatus(st => {
+    if (st === 'ok' && lastStatus !== 'ok' && !closed) {
+      lastSent = '';
+      sendInfo();
+      if (pending && !timer) timer = setTimeout(flush, 50);
+    }
+    lastStatus = st;
+  }));
   unsubs.push(room.onMeta(m => {
     if (m) metaSeen = true;
     else if (metaSeen && !closed) { closed = true; onClosed(); }
@@ -88,7 +98,7 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
   const sendInfo = () => room.setPlayer(pid, { name, emoji, showoff }).catch(() => {});
   const flush = () => {
     timer = null;
-    if (!pending || closed) return;
+    if (!pending || closed || lastStatus !== 'ok') return; // resent when back online
     const s = JSON.stringify(pending);
     if (s === lastSent) return;
     lastSent = s;
