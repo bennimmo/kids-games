@@ -21,20 +21,6 @@ const HOLD_TO_EXIT = 1.2;  // seconds a grown-up holds 🏠
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
-// ---------- Speech ----------
-function say(text) {
-  try {
-    const s = window.speechSynthesis;
-    if (!s) return;
-    s.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.85;
-    u.pitch = 1.3;
-    u.lang = 'en-GB';
-    s.speak(u);
-  } catch (e) { /* speech is optional */ }
-}
-
 // ---------- Sounds ----------
 const sfx = {
   pop(note) {
@@ -51,6 +37,14 @@ const sfx = {
     setTimeout(() => { sound.tone(620, 0.6, 'triangle', 0.18); sound.tone(780, 0.6, 'triangle', 0.12); }, 420);
   },
   thud: () => sound.tone(120, 0.2, 'sine', 0.3, 60),
+  giggle() { // quick bubbly trill
+    const base = rand(700, 1000);
+    [0, 50, 100].forEach((t, i) => setTimeout(() => sound.tone(base * (1 + i * 0.25), 0.07, 'sine', 0.1), 90 + t));
+  },
+  boing: () => sound.tone(180, 0.5, 'sine', 0.3, 700),
+  fanfare() {
+    [392, 523, 659, 784, 659, 784, 1047].forEach((f, i) => setTimeout(() => sound.tone(f, 0.22, 'square', 0.06), 400 + i * 140));
+  },
   firework: () => sound.tone(rand(300, 500), 0.4, 'sine', 0.12, rand(900, 1400)),
 };
 
@@ -163,7 +157,7 @@ export function mount(stage) {
     burst(b.x, b.y, b.c.fill);
     sfx.pop(b.c.note);
     if (byTap) {
-      say(b.c.name + '!');
+      sfx.giggle();
       giveStars(b.x, b.y, 1);
     }
   }
@@ -173,7 +167,7 @@ export function mount(stage) {
     v.vy = 0;
     v.balloonColours.forEach((c, i) => burst(v.x + (i - 1) * v.s * 0.7, v.y - v.s * 2.4, c.fill, 12));
     sfx.pop(784);
-    say(v.kind === 'digger' ? 'Digger!' : 'Choo choo! Train!');
+    sfx.boing();
     giveStars(v.x, v.y - v.s, VEHICLE_STARS);
   }
 
@@ -286,7 +280,7 @@ export function mount(stage) {
     if (!party && filled >= GOAL) {
       party = { t: 0, fw: 0 };
       sound.win();
-      say('Hooray! Well done!');
+      sfx.fanfare();
       balloons.forEach((b, i) => setTimeout(() => balloons.includes(b) && popBalloon(b, false), i * 120));
     }
     if (party) {
@@ -602,7 +596,6 @@ export function mount(stage) {
       homeBtn.removeEventListener('pointerleave', holdUp);
       homeBtn.removeEventListener('pointercancel', holdUp);
     }
-    try { window.speechSynthesis?.cancel(); } catch (e) { /* ok */ }
     view.destroy();
   };
 }
