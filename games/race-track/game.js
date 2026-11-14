@@ -12,7 +12,7 @@ import { sound, audioCtx } from '../../js/engine/sound.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings } from './sim.js';
-import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb } from './render.js';
+import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb, STYLES, DECALS } from './render.js';
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#fb8c00', '#8e24aa', '#ec407a', '#212121'];
 const EXTRAS = ['jump', 'water', 'tunnel'];
@@ -24,6 +24,21 @@ const CONTROLS = {
   wasd: k => ({ up: k.isDown('KeyW'), down: k.isDown('KeyS'), left: k.isDown('KeyA'), right: k.isDown('KeyD') }),
 };
 const KEY_LABELS = { arrows: ['▲', '◀', '▼', '▶'], wasd: ['W', 'A', 'S', 'D'] };
+const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼' };
+const PLAYERS_KEY = 'raffy-race-players-v1';
+
+function loadPlayers() {
+  const def = [{ id: 'p1', color: COLORS[0], style: 'truck', decal: 'none', controls: 'arrows' }];
+  try {
+    const p = JSON.parse(localStorage.getItem(PLAYERS_KEY));
+    if (Array.isArray(p) && p.length && p.length <= 2) return p;
+  } catch (e) { /* ignore */ }
+  return def;
+}
+function savePlayers(players) {
+  try { localStorage.setItem(PLAYERS_KEY, JSON.stringify(players)); } catch (e) { /* ignore */ }
+}
 
 export function mount(stage) {
   const css = document.createElement('link');
@@ -43,7 +58,8 @@ export function mount(stage) {
     back: 'build',        // where ↩️ goes from the saved screen
     track: null,
     items: [],
-    players: [{ id: 'p1', color: COLORS[0], controls: 'arrows' }],
+    players: loadPlayers(),
+    customFor: null,      // player id whose customise box is open
     race: null,
     stroke: null,
     drag: null,
@@ -67,6 +83,7 @@ export function mount(stage) {
   // ---------- screens ----------
   function render() {
     ui.innerHTML = '';
+    touches.clear();
     if (S.phase === 'build') buildUI();
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
@@ -92,18 +109,20 @@ export function mount(stage) {
           <div class="rt-keys">${keyHTML(p.controls)}</div>
           ${i > 0 ? '<button class="rt-x">✖</button>' : ''}
         </div>`);
-      drawCarIcon(card.querySelector('canvas'), p.color);
-      click(card, () => colorPicker(card, p));
+      drawCarIcon(card.querySelector('canvas'), p);
+      click(card, () => { S.customFor = S.customFor === p.id ? null : p.id; render(); });
       const x = card.querySelector('.rt-x');
-      if (x) click(x, () => { S.players.splice(i, 1); render(); });
+      if (x) click(x, () => { S.players.splice(i, 1); S.customFor = null; savePlayers(S.players); render(); });
       pl.appendChild(card);
     });
     if (S.players.length < 2) {
       const add = el(`<button class="rt-player rt-add"><canvas width="120" height="72"></canvas><div class="rt-plus">➕</div></button>`);
-      drawCarIcon(add.querySelector('canvas'), '#bdbdbd');
+      drawCarIcon(add.querySelector('canvas'), { color: '#bdbdbd', style: 'truck' });
       click(add, () => {
         const used = S.players.map(p => p.color);
-        S.players.push({ id: 'p2', color: COLORS.find(c => !used.includes(c)), controls: 'wasd' });
+        S.players.push({ id: 'p2', color: COLORS.find(c => !used.includes(c)), style: 'truck', decal: 'none', controls: 'wasd' });
+        S.customFor = 'p2';
+        savePlayers(S.players);
         render();
       });
       pl.appendChild(add);
@@ -133,6 +152,8 @@ export function mount(stage) {
     ui.appendChild(bar);
 
     ui.appendChild(el(`<div class="rt-bin">🗑️</div>`));
+    const who = S.players.find(p => p.id === S.customFor);
+    if (who) customise(who);
   }
 
   function keyHTML(controls) {
@@ -140,24 +161,34 @@ export function mount(stage) {
     return `<span></span><b>${u}</b><span></span><b>${l}</b><b>${d}</b><b>${r}</b>`;
   }
 
-  function colorPicker(card, player) {
-    const old = $('.rt-colors');
-    if (old) { old.remove(); return; }
+  // Pick colour, car type and sticker. Icons only.
+  function customise(player) {
     const used = S.players.filter(p => p !== player).map(p => p.color);
-    const pop = el(`<div class="rt-colors"></div>`);
+    const pop = el(`<div class="rt-custom" style="--c:${player.color}">
+      <div class="rt-opts rt-opt-colors"></div>
+      <div class="rt-opts rt-opt-styles"></div>
+      <div class="rt-opts rt-opt-decals"></div>
+      <button class="rt-ok">✔️</button>
+    </div>`);
+    const set = (k, v) => { player[k] = v; savePlayers(S.players); render(); };
     COLORS.forEach(c => {
       const sw = el(`<button class="rt-swatch ${used.includes(c) ? 'taken' : ''} ${c === player.color ? 'on' : ''}" style="background:${c}"></button>`);
-      click(sw, () => {
-        if (used.includes(c)) return;
-        player.color = c;
-        render();
-      });
-      pop.appendChild(sw);
+      click(sw, () => { if (!used.includes(c)) set('color', c); });
+      pop.querySelector('.rt-opt-colors').appendChild(sw);
     });
-    const r = card.getBoundingClientRect();
-    const sr = stage.getBoundingClientRect();
-    pop.style.left = (r.left - sr.left) + 'px';
-    pop.style.bottom = (sr.bottom - r.top + 10) + 'px';
+    STYLES.forEach(st => {
+      const b = el(`<button class="rt-opt ${player.style === st ? 'on' : ''}"><canvas width="104" height="84"></canvas></button>`);
+      drawCarIcon(b.querySelector('canvas'), { ...player, style: st });
+      click(b, () => set('style', st));
+      pop.querySelector('.rt-opt-styles').appendChild(b);
+    });
+    DECALS.forEach(d => {
+      const b = el(`<button class="rt-opt ${player.decal === d ? 'on' : ''}"><canvas width="104" height="84"></canvas></button>`);
+      drawCarIcon(b.querySelector('canvas'), { ...player, decal: d });
+      click(b, () => set('decal', d));
+      pop.querySelector('.rt-opt-decals').appendChild(b);
+    });
+    click(pop.querySelector('.rt-ok'), () => { S.customFor = null; render(); });
     ui.appendChild(pop);
   }
 
@@ -185,12 +216,63 @@ export function mount(stage) {
     S.race.cars.forEach(c => {
       const row = el(`<div class="rt-row" data-id="${c.id}"><canvas width="60" height="36"></canvas>
         <div class="rt-dots">${Array.from({ length: LAPS }, () => '<i></i>').join('')}</div><span class="rt-medal"></span></div>`);
-      drawCarIcon(row.querySelector('canvas'), c.color);
+      drawCarIcon(row.querySelector('canvas'), c);
       hud.appendChild(row);
     });
     ui.appendChild(hud);
     ui.appendChild(el(`<div class="rt-lights"><i></i><i></i><i></i></div>`));
+    if (TOUCH && S.phase === 'race') touchUI();
   }
+
+  // ---------- touch buttons (iPad) ----------
+  const touches = new Map(); // pointerId -> { p: playerId, k: key }
+
+  function touchUI() {
+    const pad = (p, keys, cls) => {
+      const d = el(`<div class="rt-pad ${cls}" style="--c:${p.color}">
+        ${keys.map(k => `<button class="rt-tb rt-tb-${k}" data-k="${k}" data-p="${p.id}">${TOUCH_ICON[k]}</button>`).join('')}
+      </div>`);
+      return d;
+    };
+    const wrap = el(`<div class="rt-touch"></div>`);
+    if (S.players.length === 1) {
+      wrap.appendChild(pad(S.players[0], ['left', 'right'], 'rt-pad-l'));
+      wrap.appendChild(pad(S.players[0], ['down', 'up'], 'rt-pad-r'));
+    } else {
+      wrap.appendChild(pad(S.players[0], ['left', 'right', 'down', 'up'], 'rt-pad-l rt-pad-4'));
+      wrap.appendChild(pad(S.players[1], ['left', 'right', 'down', 'up'], 'rt-pad-r rt-pad-4'));
+    }
+    ui.appendChild(wrap);
+  }
+
+  function markTouches() {
+    const on = [...touches.values()];
+    ui.querySelectorAll('.rt-tb').forEach(b => {
+      b.classList.toggle('on', on.some(t => t.p === b.dataset.p && t.k === b.dataset.k));
+    });
+  }
+
+  ui.addEventListener('pointerdown', e => {
+    const b = e.target.closest && e.target.closest('.rt-tb');
+    if (!b) return;
+    e.preventDefault();
+    touches.set(e.pointerId, { p: b.dataset.p, k: b.dataset.k });
+    markTouches();
+  });
+  const onTouchMove = e => {
+    const t = touches.get(e.pointerId);
+    if (!t) return;
+    const hit = document.elementFromPoint(e.clientX, e.clientY);
+    const b = hit && hit.closest && hit.closest('.rt-tb');
+    if (b && b.dataset.p === t.p && b.dataset.k !== t.k) { t.k = b.dataset.k; markTouches(); }
+  };
+  const onTouchEnd = e => {
+    if (touches.delete(e.pointerId)) markTouches();
+  };
+  window.addEventListener('pointermove', onTouchMove);
+  window.addEventListener('pointerup', onTouchEnd);
+  window.addEventListener('pointercancel', onTouchEnd);
+  ui.addEventListener('contextmenu', e => e.preventDefault());
 
   function updateHUD() {
     if (!S.race) return;
@@ -226,7 +308,7 @@ export function mount(stage) {
       </div></div></div>`);
     list.forEach((c, i) => {
       const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas></div>`);
-      drawCarIcon(row.querySelector('canvas'), c.color);
+      drawCarIcon(row.querySelector('canvas'), c);
       box.querySelector('.rt-podium').appendChild(row);
     });
     click(box.querySelector('.rt-again2'), startRace);
@@ -356,9 +438,9 @@ export function mount(stage) {
       if (e.type === 'lap') { sound.tone(660, 0.12, 'triangle'); setTimeout(() => sound.tone(990, 0.18, 'triangle'), 110); }
       if (e.type === 'finish') { sound.win(); R.burst(car.x, car.y, '255,215,0', 30); }
       if (e.type === 'jump') sound.tone(300, 0.3, 'sine', 0.2, 800);
-      if (e.type === 'land') { sound.bump(); R.burst(car.x, car.y, '150,110,70', 10); }
+      if (e.type === 'land') { sound.bump(); R.dust(car.x, car.y); }
       if (e.type === 'bump') sound.bump();
-      if (e.type === 'splash') sound.tone(900, 0.25, 'sine', 0.15, 200);
+      if (e.type === 'splash') { sound.splash(); R.splash(car.x, car.y); }
       if (e.type === 'done') S.doneAt = S.time;
     }
   }
@@ -374,6 +456,7 @@ export function mount(stage) {
         for (const k in o) inputs[p.id][k] = inputs[p.id][k] || o[k];
       }
     }
+    for (const t of touches.values()) if (inputs[t.p]) inputs[t.p][t.k] = true;
     return inputs;
   }
 
@@ -389,8 +472,7 @@ export function mount(stage) {
 
   view.canvas.addEventListener('pointerdown', e => {
     if (S.phase !== 'build') return;
-    const old = $('.rt-colors');
-    if (old) old.remove();
+    if (S.customFor) { S.customFor = null; render(); return; }
     const w = R.toWorld(e.clientX, e.clientY);
     const it = hitItem(w);
     if (it) {
@@ -474,7 +556,7 @@ export function mount(stage) {
   }, () => {
     const building = S.phase === 'build';
     R.frame({
-      insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: 8 },
+      insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: TOUCH ? 40 : 8 },
       cars: S.race ? S.race.cars : previewCars(),
       live: !!S.race && !S.paused,
       dt: S.paused ? 0 : (S._dt || 0),
@@ -495,6 +577,9 @@ export function mount(stage) {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
+    window.removeEventListener('pointermove', onTouchMove);
+    window.removeEventListener('pointerup', onTouchEnd);
+    window.removeEventListener('pointercancel', onTouchEnd);
     view.destroy();
     ui.remove();
     css.remove();
