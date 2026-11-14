@@ -5,6 +5,10 @@
 // Everyone draws on the same page. Each device writes only its own strokes.
 // When a friend leaves, their strokes would vanish with them, so the host
 // copies them into its own area (everyone else keeps them in the meantime).
+// Dropouts (iPad sleeps, wifi blips): when we're back online we write our whole
+// area again in one go, with sync: 1. Only an area with sync counts as "here",
+// so half-written areas never make anyone's strokes disappear. If a friend
+// comes back, the host drops its copies so their undo works again.
 import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
 import { sanitizeOp } from './ops.js';
 
@@ -21,8 +25,10 @@ export const findRoom = code => joinRoom(GAME_ID, code);
 export function connect(room, { onChange, onBase, onClosed }) {
   const pid = room.uid + '_0'; // database rules: player ids start with "<uid>_"
   const emoji = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-  const mine = new Set();      // ids of strokes I made (the game keeps those)
+  const myIds = new Set();     // ids of strokes I ever made (never shown as a friend's)
+  const myOps = new Map();     // id -> op, the ones still on the page (sent again after a dropout)
   const others = new Map();    // id -> { op, owner }
+  const adoptedFrom = new Map(); // host only: id -> friend who left (I keep a copy)
   let cursors = {};            // pid -> op being drawn right now
   let players = {};
   let metaSeen = false, closed = false;
@@ -31,7 +37,22 @@ export function connect(room, { onChange, onBase, onClosed }) {
   const emit = () => { if (!closed) onChange(); };
 
   room.setPlayer(pid, { emoji }).catch(() => {});
-  room.setLiveItem(pid, 'here', 1).catch(() => {});
+
+  // My whole area in one write: on joining and every time we're back online.
+  const writeAll = () => {
+    if (closed) return;
+    const all = { here: 1, sync: 1 };
+    for (const [id, op] of myOps) all[id] = op;
+    for (const id of adoptedFrom.keys()) { const o = others.get(id); if (o) all[id] = o.op; }
+    room.setLive(pid, all).catch(() => {});
+  };
+  let lastStatus = null;
+  const onStatus = st => {
+    if (st === 'ok' && lastStatus !== 'ok') writeAll();
+    lastStatus = st;
+  };
+  if (room.onStatus) unsubs.push(room.onStatus(onStatus));
+  else onStatus('ok');
 
   unsubs.push(room.onPlayers(p => { players = p || {}; emit(); }));
   unsubs.push(room.onMeta(m => {
@@ -45,30 +66,45 @@ export function connect(room, { onChange, onBase, onClosed }) {
   }));
   unsubs.push(room.onLive(live => {
     live = live || {};
+    const here = o => !!(live[o] && live[o].sync);
     const seen = new Set();
     const next = {};
     for (const [owner, node] of Object.entries(live)) {
       if (!node || typeof node !== 'object') continue;
       for (const [key, raw] of Object.entries(node)) {
-        if (key === 'here') continue;
+        if (key === 'here' || key === 'sync') continue;
         if (key === 'cur') {
           if (owner !== pid) { const op = sanitizeOp(raw); if (op) next[owner] = op; }
           continue;
         }
-        if (mine.has(key)) continue;
+        if (myIds.has(key)) continue;
         seen.add(key);
+        if (owner !== pid && adoptedFrom.has(key)) {   // they're back: drop my copy
+          adoptedFrom.delete(key);
+          room.setLiveItem(pid, key, null).catch(() => {});
+        }
         const known = others.get(key);
-        if (known) { known.owner = owner; continue; }
+        if (known) { if (owner !== pid || !known.owner) known.owner = owner; continue; }
         const op = sanitizeOp(raw);
         if (op && op.id === key) others.set(key, { op, owner });
       }
     }
     cursors = next;
     for (const [id, o] of others) {
+      const from = adoptedFrom.get(id);
+      if (from && here(from) && !(id in live[from])) {  // back, and pressed undo meanwhile
+        adoptedFrom.delete(id);
+        others.delete(id);
+        room.setLiveItem(pid, id, null).catch(() => {});
+        continue;
+      }
       if (seen.has(id)) continue;
-      if (live[o.owner]) others.delete(id);         // they pressed undo
-      else if (room.isHost) {                        // they left: keep their picture
+      if (o.owner !== pid && here(o.owner)) others.delete(id); // they pressed undo
+      else if (room.isHost && o.owner !== pid) {        // they left: keep their picture
+        adoptedFrom.set(id, o.owner);
         o.owner = pid;
+        room.setLiveItem(pid, id, o.op).catch(() => {});
+      } else if (room.isHost && adoptedFrom.has(id)) {  // my copy got lost in a dropout
         room.setLiveItem(pid, id, o.op).catch(() => {});
       }
     }
@@ -90,10 +126,14 @@ export function connect(room, { onChange, onBase, onClosed }) {
     cursors: () => Object.entries(cursors).map(([id, op]) => ({ op, emoji: emojiOf(id) })),
     players: () => Object.keys(players).map(id => ({ me: id === pid, emoji: emojiOf(id) })),
     add(op) {
-      mine.add(op.id);
+      myIds.add(op.id);
+      myOps.set(op.id, op);
       room.setLiveItem(pid, op.id, op).catch(() => {});
     },
-    remove(id) { room.setLiveItem(pid, id, null).catch(() => {}); },
+    remove(id) {
+      myOps.delete(id);
+      room.setLiveItem(pid, id, null).catch(() => {});
+    },
     // The stroke being drawn (or null), so friends see it as it happens.
     setCur(op) {
       curPending = op ? { ...op, p: op.p.slice(-800) } : null;
