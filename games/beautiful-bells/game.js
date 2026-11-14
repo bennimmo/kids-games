@@ -182,7 +182,7 @@ export function mount(stage) {
         <div class="bb-girls">
           ${GIRLS.map(g => `
             <button class="bb-card" data-girl="${g.id}">
-              <div class="bb-card-pic">${renderGirl(newLook(g), { viewBox: '20 10 360 460' })}</div>
+              <div class="bb-card-pic">${renderGirl(newLook(g), { viewBox: '20 10 360 460', lite: true })}</div>
               <span>${g.name}</span>
             </button>`).join('')}
         </div>
@@ -192,7 +192,7 @@ export function mount(stage) {
             ${saved.map(s => `
               <div class="bb-card-wrap">
                 <button class="bb-card" data-saved="${s.id}">
-                  <div class="bb-card-pic">${renderGirl(s.look, { viewBox: '20 10 360 460' })}</div>
+                  <div class="bb-card-pic">${renderGirl(s.look, { viewBox: '20 10 360 460', lite: true })}</div>
                   <span>${s.look.name}</span>
                 </button>
                 <button class="bb-del" data-del="${s.id}" aria-label="Delete">🗑️</button>
@@ -254,7 +254,7 @@ export function mount(stage) {
             <div class="bb-row">
               ${Object.entries(HAIR_LENGTHS).map(([k, l]) => `
                 <button class="bb-len ${look.hairLength === k ? 'on' : ''}" data-set="hairLength" data-v="${k}">
-                  ${renderGirl({ ...look, hairLength: k, hairStyle: 'down', cut: null }, { viewBox: '30 40 340 490', noPlaced: true })}
+                  ${renderGirl({ ...look, hairLength: k, hairStyle: 'down', cut: null }, { viewBox: '30 40 340 490', noPlaced: true, lite: true })}
                   <span>${l.name}</span>
                 </button>`).join('')}
             </div>
@@ -432,7 +432,7 @@ export function mount(stage) {
         <div class="bb-friend-girl">${renderGirl(f.look, { still: true, viewBox: viewBox() })}</div>
         ${friends.length > 1 ? `<div class="bb-friend-thumbs">${friends.map(x => `
           <button class="${x.id === focusId ? 'on' : ''}" data-friend="${x.id}" aria-label="${x.name}">
-            ${renderGirl(x.look, { viewBox: '60 60 280 280', still: true })}<span>${x.emoji}</span>
+            ${renderGirl(x.look, { viewBox: '60 60 280 280', still: true, lite: true })}<span>${x.emoji}</span>
           </button>`).join('')}</div>` : ''}
         <div class="bb-code small">${codeHtml()}</div>`;
       if (changed) { friendEl.classList.remove('ping'); void friendEl.offsetWidth; friendEl.classList.add('ping'); }
