@@ -34,7 +34,8 @@ Then open http://localhost:8000
 - Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
 - Drag extras onto the track: jump, water, tunnel. Drag to 🗑️ to remove.
 - Up to 2 players: arrows and WASD. Tap a car to pick its colour.
-- 5 laps. Then 🔁 race again or ✏️ redraw (edit or start fresh).
+- 5 laps. Then 🔁 race again or ✏️ redraw (edit, start fresh, or pick a saved track).
+- 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
 - Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
 
 ### ✏️ Draw a Road – coming soon

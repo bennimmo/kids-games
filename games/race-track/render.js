@@ -443,3 +443,18 @@ export function drawItemIcon(canvas, type) {
   }
   g.restore();
 }
+
+// Small picture of any track (for the saved tracks screen)
+export function drawTrackThumb(canvas, track, items) {
+  const g = canvas.getContext('2d');
+  g.save();
+  g.fillStyle = '#7cc55f';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.scale(canvas.width / WORLD.w, canvas.height / WORLD.h);
+  drawTrack(g, track);
+  items.filter(i => !i.up && i.type !== 'tunnel').forEach(i => drawItem(g, i));
+  drawBridges(g, track);
+  items.filter(i => i.up && i.type !== 'tunnel').forEach(i => drawItem(g, i));
+  items.filter(i => i.type === 'tunnel').forEach(i => drawTunnel(g, track, i));
+  g.restore();
+}
