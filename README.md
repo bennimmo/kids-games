@@ -38,7 +38,16 @@ Then open http://localhost:8000
 - 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
 - Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
 
-### ✏️ Draw a Road – coming soon
+### ✏️ Draw a Road (`games/draw-a-road/`)
+Draw lines with your finger/mouse so the car gets to the flag 🏁.
+- 12 levels: gaps, hills, walls, trampolines, speed arrows, magic doors, no-engine and floaty zones
+- Up to 3 stars – use less crayon for more stars (saved on the device)
+- Space = go/stop, Z = undo
+- Files: `levels.js` (level data), `sim.js` (physics, no DOM), `game.js` (drawing + screens)
+- Physics: [Planck.js](https://github.com/piqnt/planck.js) (MIT), saved in `js/vendor/`
+- Ready for multiplayer later: the sim uses a fixed time step, so the same lines give the same run.
+  Players could just swap their lines (plain `[x, y]` lists) and race side by side.
+
 
 ### 💄 Beautiful Bells (`games/beautiful-bells/`)
 - Pick a girl, then hair colour, length and eye colour.
