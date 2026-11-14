@@ -15,4 +15,11 @@ export const GAMES = [
     color: '#81c784',
     load: () => import('../games/draw-a-road/game.js'),
   },
+  {
+    id: 'beautiful-bells',
+    name: 'Beautiful Bells',
+    icon: '💄',
+    color: '#f8a5d0',
+    load: () => import('../games/beautiful-bells/game.js'),
+  },
 ];

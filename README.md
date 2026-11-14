@@ -32,4 +32,5 @@ Then open http://localhost:8000
 ## Plans
 - 🏎️ Race Track – draw a track with jumps and tunnels, race a friend on one keyboard
 - ✏️ Draw a Road – draw a line for the car to get from start to flag
+- 💄 Beautiful Bells – makeover game for Bella: pick a girl, hair, eyes, then drag on makeup, hairstyles, earrings, necklaces and hair bits. Saves a PNG and keeps the last 20 girls in the browser.
 - Later: physics (e.g. Matter.js / Planck.js) and online multiplayer (Firebase)
