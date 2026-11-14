@@ -40,6 +40,12 @@ Then open http://localhost:8000
 
 ### ✏️ Draw a Road – coming soon
 
+### 💄 Beautiful Bells (`games/beautiful-bells/`)
+- Pick a girl, then hair colour, length and eye colour.
+- Drag (or tap) makeup, hairstyles, hair bits, earrings, necklaces and tops onto her.
+- 📸 saves a PNG. Last 20 girls kept in the browser ("My girls").
+- Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `game.js` (screens).
+
 ## Design rules
 - Icons, not words (players are 4–6).
 - Multiplayer-ready: game state is plain data, and the simulation is
