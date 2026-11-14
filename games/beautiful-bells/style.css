@@ -375,3 +375,18 @@
   .bb-salon.mp .bb-photo span { font-size: 13px; }
   .bb-salon.mp .bb-showoff { bottom: 86px; }
 }
+
+/* ---------- face / clothes zoom ---------- */
+.bb-views { display: flex; gap: 8px; padding: 10px 10px 0; }
+.bb-views button {
+  flex: 1; padding: 10px 6px; border-radius: 18px; background: #fff3fa;
+  font-size: 22px; font-weight: 700; color: #8a3fb0;
+  box-shadow: 0 4px 0 rgba(150, 60, 150, .15);
+}
+.bb-views button.on { background: linear-gradient(135deg, #ff6fb5, #b56cff); color: #fff; box-shadow: 0 4px 0 #a03d9a; }
+.bb-zooming svg { animation: bb-zoom .35s ease-out; }
+@keyframes bb-zoom { from { transform: scale(.94); opacity: .6; } }
+@media (max-aspect-ratio: 1/1) {
+  .bb-views { padding: 8px 8px 0; }
+  .bb-views button { font-size: 18px; padding: 8px 4px; }
+}

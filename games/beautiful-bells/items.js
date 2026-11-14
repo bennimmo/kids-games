@@ -47,14 +47,14 @@ export const SKINS = {
 };
 
 export const GIRLS = [
-  { id: 'bella',  name: 'Bella',  skin: 's2', hairColor: 'blonde',    hairLength: 'long',      eyeColor: 'blue',  hairStyle: 'down',      topStyle: 'tee',        topColor: 'pink' },
-  { id: 'lily',   name: 'Lily',   skin: 's1', hairColor: 'ginger',    hairLength: 'medium',    eyeColor: 'green', hairStyle: 'pigtails',  topStyle: 'collar',     topColor: 'mint' },
-  { id: 'mia',    name: 'Mia',    skin: 's3', hairColor: 'brown',     hairLength: 'superlong', eyeColor: 'hazel', hairStyle: 'wavy',      topStyle: 'vneck',      topColor: 'purple' },
-  { id: 'zara',   name: 'Zara',   skin: 's5', hairColor: 'black',     hairLength: 'long',      eyeColor: 'brown', hairStyle: 'curly',     topStyle: 'offshoulder', topColor: 'yellow' },
-  { id: 'ava',    name: 'Ava',    skin: 's6', hairColor: 'black',     hairLength: 'medium',    eyeColor: 'brown', hairStyle: 'afro',      topStyle: 'hoodie',     topColor: 'sky' },
-  { id: 'rosie',  name: 'Rosie',  skin: 's4', hairColor: 'auburn',    hairLength: 'long',      eyeColor: 'amber', hairStyle: 'braids',    topStyle: 'dungarees',  topColor: 'denim' },
-  { id: 'sophie', name: 'Sophie', skin: 's1', hairColor: 'platinum',  hairLength: 'superlong', eyeColor: 'teal',  hairStyle: 'sidesweep', topStyle: 'frill',      topColor: 'lilac' },
-  { id: 'priya',  name: 'Priya',  skin: 's4', hairColor: 'darkbrown', hairLength: 'superlong', eyeColor: 'brown', hairStyle: 'sidebraid', topStyle: 'party',      topColor: 'hotpink' },
+  { id: 'bella',  name: 'Bella',  skin: 's2', hairColor: 'blonde',    hairLength: 'long',      eyeColor: 'blue',  hairStyle: 'down',      topStyle: 'tee',        topColor: 'pink', bottom: 'bot-skirtpink', shoes: 'shoe-pinktrainer' },
+  { id: 'lily',   name: 'Lily',   skin: 's1', hairColor: 'ginger',    hairLength: 'medium',    eyeColor: 'green', hairStyle: 'pigtails',  topStyle: 'collar',     topColor: 'mint', bottom: 'bot-jeans', shoes: 'shoe-wellies', socks: 'sock-frilly' },
+  { id: 'mia',    name: 'Mia',    skin: 's3', hairColor: 'brown',     hairLength: 'superlong', eyeColor: 'hazel', hairStyle: 'wavy',      topStyle: 'vneck',      topColor: 'purple', bottom: 'bot-leggingsblack', shoes: 'shoe-ballet' },
+  { id: 'zara',   name: 'Zara',   skin: 's5', hairColor: 'black',     hairLength: 'long',      eyeColor: 'brown', hairStyle: 'curly',     topStyle: 'offshoulder', topColor: 'yellow', bottom: 'bot-shortsdenim', shoes: 'shoe-sandals' },
+  { id: 'ava',    name: 'Ava',    skin: 's6', hairColor: 'black',     hairLength: 'medium',    eyeColor: 'brown', hairStyle: 'afro',      topStyle: 'hoodie',     topColor: 'sky', bottom: 'bot-joggers', shoes: 'shoe-whitetrainer' },
+  { id: 'rosie',  name: 'Rosie',  skin: 's4', hairColor: 'auburn',    hairLength: 'long',      eyeColor: 'amber', hairStyle: 'braids',    topStyle: 'tee',        topColor: 'white', dress: 'dress-dungarees', shoes: 'shoe-boots' },
+  { id: 'sophie', name: 'Sophie', skin: 's1', hairColor: 'platinum',  hairLength: 'superlong', eyeColor: 'teal',  hairStyle: 'sidesweep', topStyle: 'frill',      topColor: 'lilac', bottom: 'bot-tutulilac', shoes: 'shoe-silver', socks: 'sock-whitetights' },
+  { id: 'priya',  name: 'Priya',  skin: 's4', hairColor: 'darkbrown', hairLength: 'superlong', eyeColor: 'brown', hairStyle: 'sidebraid', topStyle: 'party',      topColor: 'hotpink', bottom: 'bot-midi', shoes: 'shoe-gold' },
 ];
 
 export const RAINBOW = ['#ff4d4d', '#ffa63d', '#ffe14d', '#4dd97a', '#4da6ff', '#a46bff'];
@@ -75,6 +75,12 @@ const ear = slot('earrings', 'ear');
 const neck = slot('necklace', 'neck');
 const head = slot('headwear', 'head');
 const specs = slot('glasses', 'specs');
+const bottom = slot('bottom', 'bot');
+const dress = slot('dress', 'dress');
+const sock = slot('socks', 'sock');
+const shoe = slot('shoes', 'shoe');
+const bag = slot('bag', 'bag');
+const bracelet = slot('bracelet', 'brace');
 
 const paint = (layer, prefix) => (id, label, color, extra = {}) =>
   ({ id: `${prefix}-${id}`, label, kind: 'paint', layer, action: 'paint', color, ...extra });
@@ -315,7 +321,7 @@ export const TABS = [
     ear('rainbow', 'Rainbows', '#ff4d4d', { style: 'drop', shape: 'rainbow' }),
     ear('cherry', 'Cherries', '#e8213f', { style: 'drop', shape: 'cherry' }),
   ] }] },
-  { id: 'necklace', icon: '📿', label: 'Necklaces', groups: [{ items: [
+  { id: 'necklace', icon: '📿', label: 'Necklaces', view: 'both', groups: [{ items: [
     neck('pearls', 'Pearls', '#ffffff', { style: 'pearls' }),
     neck('heart', 'Gold heart', '#e8b923', { style: 'chain', chain: '#e8b923', shape: 'heart', pendant: '#ff3d7f' }),
     neck('locket', 'Locket', '#e8b923', { style: 'chain', chain: '#e8b923', shape: 'heart', pendant: '#e8b923', big: true }),
@@ -340,7 +346,7 @@ export const TABS = [
     specs('sun', 'Sunglasses', '#2c2a30', { shape: 'sun' }),
     specs('pinksun', 'Pink shades', '#ff5fa2', { shape: 'sun', tint: '#ff9ccf' }),
   ] }] },
-  { id: 'top', icon: '👚', label: 'Tops', groups: [
+  { id: 'top', icon: '👚', label: 'Tops', view: 'body', groups: [
     { label: 'Styles', items: [
       topStyle('tee', 'T-shirt'),
       topStyle('vneck', 'V-neck'),
@@ -348,10 +354,9 @@ export const TABS = [
       topStyle('offshoulder', 'Off shoulder'),
       topStyle('polo', 'Polo neck'),
       topStyle('hoodie', 'Hoodie'),
-      topStyle('collar', 'Collar dress'),
+      topStyle('collar', 'Collar top'),
       topStyle('frill', 'Frilly top'),
       topStyle('party', 'Party top'),
-      topStyle('dungarees', 'Dungarees'),
       topStyle('cardigan', 'Cardigan'),
     ] },
     { label: 'Colours', items: [
@@ -371,6 +376,93 @@ export const TABS = [
       topPattern('leopard', 'Leopard'),
       topPattern('sparkles', 'Sparkles'),
       topPattern('rainbow', 'Rainbow'),
+    ] },
+  ] },
+  { id: 'bottoms', icon: '👖', label: 'Bottoms', view: 'body', groups: [
+    { label: 'Trousers', items: [
+      bottom('jeans', 'Jeans', '#5a7fb5', { style: 'trousers', denim: true }),
+      bottom('pinkjeans', 'Pink jeans', '#ff8fc4', { style: 'trousers', denim: true }),
+      bottom('joggers', 'Joggers', '#9aa3b5', { style: 'trousers', cuff: true }),
+      bottom('leggingsblack', 'Black leggings', '#2c2a30', { style: 'trousers', tight: true }),
+      bottom('leggingspink', 'Pink leggings', '#ff5fae', { style: 'trousers', tight: true }),
+      bottom('leggingsstars', 'Star leggings', '#5b4bd6', { style: 'trousers', tight: true, pattern: 'stars' }),
+      bottom('leggingsrainbow', 'Rainbow leggings', '#ff4d4d', { style: 'trousers', tight: true, pattern: 'rainbow' }),
+    ] },
+    { label: 'Shorts', items: [
+      bottom('shortsdenim', 'Denim shorts', '#6a8fc5', { style: 'trousers', end: 805, denim: true }),
+      bottom('shortspink', 'Pink shorts', '#ff9cc9', { style: 'trousers', end: 800 }),
+      bottom('shortsyellow', 'Spotty shorts', '#ffd84d', { style: 'trousers', end: 800, pattern: 'dots' }),
+    ] },
+    { label: 'Skirts', items: [
+      bottom('skirtpink', 'Pink skirt', '#ff7ec0', { style: 'skirt', hem: 795, flare: 40 }),
+      bottom('skirtdenim', 'Denim skirt', '#5a7fb5', { style: 'skirt', hem: 790, flare: 22, denim: true }),
+      bottom('skirtplaid', 'Tartan skirt', '#d6334a', { style: 'skirt', hem: 805, flare: 36, pattern: 'checks', pleats: true }),
+      bottom('skirtnavy', 'School skirt', '#2f4a8a', { style: 'skirt', hem: 815, flare: 34, pleats: true }),
+      bottom('midi', 'Flowery skirt', '#ffb3d1', { style: 'skirt', hem: 900, flare: 70, pattern: 'flowers' }),
+      bottom('long', 'Long skirt', '#9b5de5', { style: 'skirt', hem: 990, flare: 90 }),
+      bottom('tutupink', 'Pink tutu', '#ff9cc9', { style: 'tutu' }),
+      bottom('tutulilac', 'Lilac tutu', '#c9a8f7', { style: 'tutu' }),
+      bottom('tuturainbow', 'Rainbow tutu', '#ff4d4d', { style: 'tutu', rainbow: true }),
+    ] },
+  ] },
+  { id: 'dresses', icon: '👗', label: 'Dresses', view: 'body', groups: [{ items: [
+    dress('ballpink', 'Pink ball gown', '#ff8fc4', { neck: 'sweetheart', skirt: 'ball', sleeve: 'puff', sash: '#fff' }),
+    dress('ballblue', 'Ice ball gown', '#8fd3ff', { neck: 'offshoulder', skirt: 'ball', sash: '#e0f6ff', glitter: true }),
+    dress('ballgold', 'Gold ball gown', '#f5c542', { neck: 'sweetheart', skirt: 'ball', sash: '#fff3c4', glitter: true }),
+    dress('party', 'Party dress', '#e63973', { neck: 'tank', skirt: 'party', sash: '#ffd23f' }),
+    dress('partypurple', 'Purple party', '#9b5de5', { neck: 'sweetheart', skirt: 'party', glitter: true }),
+    dress('summer', 'Summer dress', '#ffe066', { neck: 'tank', skirt: 'summer', pattern: 'flowers' }),
+    dress('spotty', 'Spotty dress', '#ff6b6b', { neck: 'crew', skirt: 'party', pattern: 'dots', sleeve: 'short' }),
+    dress('collar', 'Collar dress', '#2f4a8a', { neck: 'collar', skirt: 'collar', sleeve: 'short', pattern: 'dots' }),
+    dress('mermaid', 'Mermaid', '#2ec4b6', { neck: 'sweetheart', skirt: 'mermaid', pattern: 'scales' }),
+    dress('unicorn', 'Unicorn', '#f3d9ff', { neck: 'crew', skirt: 'unicorn', sleeve: 'puff' }),
+    dress('dungarees', 'Dungarees', '#5a7fb5', { special: 'dungarees' }),
+    dress('pinkdungarees', 'Pink dungarees', '#ff8fc4', { special: 'dungarees' }),
+  ] }] },
+  { id: 'shoes', icon: '👟', label: 'Shoes', view: 'body', groups: [
+    { label: 'Shoes', items: [
+      shoe('pinktrainer', 'Pink trainers', '#ff6fb0', { style: 'trainer' }),
+      shoe('whitetrainer', 'White trainers', '#f4f4f8', { style: 'trainer' }),
+      shoe('bluetrainer', 'Blue trainers', '#4f9dff', { style: 'trainer' }),
+      shoe('ballet', 'Ballet shoes', '#ffb8d9', { style: 'flat', bow: true }),
+      shoe('silver', 'Silver sparkles', '#cfd6e6', { style: 'flat', glitter: true }),
+      shoe('gold', 'Gold sparkles', '#f5c542', { style: 'flat', glitter: true }),
+      shoe('red', 'Red shoes', '#e0243c', { style: 'flat', strap: true }),
+      shoe('sandals', 'Sandals', '#c98a4a', { style: 'sandal' }),
+      shoe('wellies', 'Yellow wellies', '#ffd23f', { style: 'boot', top: 920 }),
+      shoe('pinkwellies', 'Spotty wellies', '#ff6fb0', { style: 'boot', top: 920, dots: true }),
+      shoe('boots', 'Brown boots', '#8a5a3c', { style: 'boot', top: 965 }),
+      shoe('whiteboots', 'White boots', '#f4f4f8', { style: 'boot', top: 900 }),
+      shoe('unicorn', 'Unicorn slippers', '#ffffff', { style: 'slipper' }),
+    ] },
+    { label: 'Socks & tights', items: [
+      sock('white', 'White socks', '#ffffff', { top: 985 }),
+      sock('frilly', 'Frilly socks', '#ffffff', { top: 980, frill: true }),
+      sock('pinkknee', 'Pink knee socks', '#ff9cc9', { top: 885 }),
+      sock('stripy', 'Stripy socks', '#ff5fae', { top: 885, pattern: 'stripes' }),
+      sock('rainbowknee', 'Rainbow socks', '#ff4d4d', { top: 885, pattern: 'rainbow' }),
+      sock('whitetights', 'White tights', '#f6f4fa', { top: 700, tights: true }),
+      sock('pinktights', 'Pink tights', '#ffb3d9', { top: 700, tights: true }),
+      sock('blacktights', 'Black tights', '#3a3540', { top: 700, tights: true }),
+      sock('spottytights', 'Spotty tights', '#c9a8f7', { top: 700, tights: true, pattern: 'dots' }),
+    ] },
+  ] },
+  { id: 'extras', icon: '👜', label: 'Extras', view: 'body', groups: [
+    { label: 'Bags', items: [
+      bag('pink', 'Pink handbag', '#ff6fb0', { style: 'handbag' }),
+      bag('purple', 'Purple handbag', '#9b5de5', { style: 'handbag' }),
+      bag('heart', 'Heart bag', '#e63973', { style: 'heart' }),
+      bag('star', 'Star bag', '#ffc933', { style: 'star' }),
+      bag('unicorn', 'Unicorn bag', '#ffffff', { style: 'unicorn' }),
+      bag('rainbow', 'Rainbow purse', '#ff4d4d', { style: 'rainbow' }),
+    ] },
+    { label: 'Bracelets', items: [
+      bracelet('beads', 'Friendship', '#ff4d4d', { style: 'beads' }),
+      bracelet('gold', 'Gold bangle', '#e8b923', { style: 'bangle' }),
+      bracelet('silver', 'Silver bangle', '#c4cbd8', { style: 'bangle' }),
+      bracelet('pearls', 'Pearls', '#ffffff', { style: 'pearls' }),
+      bracelet('charm', 'Charm bracelet', '#e8b923', { style: 'charm' }),
+      bracelet('watch', 'Pink watch', '#ff6fb0', { style: 'watch' }),
     ] },
   ] },
 ];

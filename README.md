@@ -64,6 +64,7 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - ✂️ Scissors cut the hair, 🧪 grow potion brings it back.
 - Tops: 11 styles, 16 colours, 10 patterns. Plus hairstyles, glasses, earrings, necklaces, hair bits.
 - 📸 saves a PNG. Last 20 girls kept in the browser ("My girls"). Bump `LOOK_VERSION` in `look.js` on breaking changes; older saves just disappear.
+- 😊 Face / 👗 Clothes switch: zoom out to the whole girl and dress her (tops, bottoms, dresses, shoes and socks, bags, bracelets). A dress hides the top and bottoms; putting either back on takes the dress off.
 - 👭 Play with friends (uses `js/engine/net.js`): make a room or join with 3 pictures. Everyone makes their own girl; your girl and one friend's girl show big side by side, others as small faces to tap. 🎉 Show off sends confetti to everyone. Friends' girls are checked by `sanitizeLook()` before drawing.
 - Files: `items.js` (data), `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `online.js` (friends), `game.js` (screens).
 

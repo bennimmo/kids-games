@@ -6,7 +6,7 @@
 import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
-import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD } from './draw.js';
+import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD, FACE_VIEW, BODY_VIEW } from './draw.js';
 import { createStore, newLook, newKey, presetStrokes } from './look.js';
 import { loadGallery, saveToGallery, removeFromGallery } from './gallery.js';
 import { makeRoom, findRoom, connect, CODE_PICS } from './online.js';
@@ -31,6 +31,9 @@ export function mount(stage) {
   let unsub = null;
   let saveTimer = null;
   let tab = 'lips';
+  let view = 'face';       // 'face' (zoomed in) or 'body' (whole girl, clothes)
+  const inView = t => (t.view || 'face') === view || t.view === 'both';
+  const viewBox = () => view === 'body' ? BODY_VIEW : FACE_VIEW;
   let teardownSalon = null;
   let screen = 'pick';
   // Playing with friends
@@ -308,9 +311,11 @@ export function mount(stage) {
           <div class="bb-toast" hidden></div>
         </div>
         <div class="bb-panel">
-          <div class="bb-tabs">
-            ${TABS.map(t => `<button class="bb-tab" data-tab="${t.id}"><span class="i">${t.icon}</span><span class="l">${t.label}</span></button>`).join('')}
+          <div class="bb-views">
+            <button data-view="face">😊 Face</button>
+            <button data-view="body">👗 Clothes</button>
           </div>
+          <div class="bb-tabs"></div>
           <div class="bb-items"></div>
         </div>
       </div>`;
@@ -322,8 +327,15 @@ export function mount(stage) {
 
     const drawDoll = (look = store.get()) => {
       const tag = net ? `<div class="bb-me-name">${net.emoji} ${look.name} (you)</div>` : '';
-      doll.innerHTML = tag + renderGirl(look);
+      doll.innerHTML = tag + renderGirl(look, { viewBox: viewBox() });
     };
+    const tabsEl = root.querySelector('.bb-tabs');
+    const drawTabs = () => {
+      if (!inView(TABS.find(t => t.id === tab) || {})) tab = TABS.find(inView).id;
+      tabsEl.innerHTML = TABS.filter(inView).map(t => `<button class="bb-tab" data-tab="${t.id}"><span class="i">${t.icon}</span><span class="l">${t.label}</span></button>`).join('');
+      root.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+    };
+    drawTabs();
     const drawItems = () => {
       const look = store.get();
       const t = TABS.find(x => x.id === tab) || TABS[0];
@@ -362,13 +374,29 @@ export function mount(stage) {
       toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2200);
     };
 
-    root.querySelectorAll('.bb-tab').forEach(b => b.addEventListener('click', () => {
+    tabsEl.addEventListener('click', e => {
+      const b = e.target.closest('[data-tab]');
+      if (!b) return;
       sound.pop();
       tab = b.dataset.tab;
       if (active) setActive(null);
       itemsEl.scrollTop = 0; itemsEl.scrollLeft = 0;
       drawItems();
-    }));
+    });
+    // Zoom between her face and her whole body (clothes).
+    root.querySelector('.bb-views').addEventListener('click', e => {
+      const b = e.target.closest('[data-view]');
+      if (!b || b.dataset.view === view) return;
+      sound.tone(view === 'face' ? 700 : 900, .15, 'sine', .15, view === 'face' ? 400 : 1300);
+      view = b.dataset.view;
+      if (active) setActive(null);
+      doll.classList.add('bb-zooming');
+      later(() => doll.classList.remove('bb-zooming'), 400);
+      drawTabs();
+      itemsEl.scrollTop = 0; itemsEl.scrollLeft = 0;
+      drawAll();
+      if (onNet) onNet();
+    });
 
     root.querySelector('.bb-tools').addEventListener('click', e => {
       const b = e.target.closest('[data-tool]');
@@ -401,7 +429,7 @@ export function mount(stage) {
       friends.forEach(x => { lastFriendLook[x.id] = JSON.stringify(x.look); });
       friendEl.innerHTML = `
         <div class="bb-friend-name">${f.emoji} ${f.name}</div>
-        <div class="bb-friend-girl">${renderGirl(f.look, { noPlaced: false, still: true })}</div>
+        <div class="bb-friend-girl">${renderGirl(f.look, { still: true, viewBox: viewBox() })}</div>
         ${friends.length > 1 ? `<div class="bb-friend-thumbs">${friends.map(x => `
           <button class="${x.id === focusId ? 'on' : ''}" data-friend="${x.id}" aria-label="${x.name}">
             ${renderGirl(x.look, { viewBox: '60 60 280 280', still: true })}<span>${x.emoji}</span>
@@ -617,7 +645,9 @@ export function mount(stage) {
       setActive(null);
       if (item.action === 'slot') {
         if (look[item.key] === item.value) { sparkle(sx, sy); return; }
-        store.dispatch({ type: 'set', key: item.key, value: item.value });
+        // Putting on a top or bottoms takes the dress off.
+        const also = look.dress && ['topStyle', 'topColor', 'topPattern', 'bottom'].includes(item.key) ? { dress: null } : undefined;
+        store.dispatch({ type: 'set', key: item.key, value: item.value, also });
       } else if (item.action === 'toggle') {
         if (!isOn(item, look)) store.dispatch({ type: 'toggle', key: item.key, value: item.value });
       } else if (item.action === 'place') {
@@ -735,8 +765,8 @@ export function mount(stage) {
     const look = store.get();
     saveToGallery(saveId, look);
     celebrate(look.name);
-    const W = 800, H = 1100;
-    const svg = renderGirl(look).replace('<svg ', `<svg width="${W}" height="${W * 520 / 400}" `);
+    const W = 800, GH = W * 1050 / 400, H = GH + 200;
+    const svg = renderGirl(look, { viewBox: BODY_VIEW }).replace('<svg ', `<svg width="${W}" height="${GH}" `);
     const img = new Image();
     img.onload = () => {
       const cv = document.createElement('canvas');
@@ -753,7 +783,7 @@ export function mount(stage) {
         g.fillText(['💖', '✨', '⭐', '🌸'][i % 4], (i * 137) % W, 60 + ((i * 251) % (H - 120)));
       }
       g.globalAlpha = 1;
-      g.drawImage(img, 0, 120, W, W * 520 / 400);
+      g.drawImage(img, 0, 120, W, GH);
       g.font = '700 64px Fredoka, system-ui, sans-serif';
       g.lineWidth = 10; g.strokeStyle = '#fff'; g.fillStyle = '#d63384';
       g.strokeText(`${look.name} ✨`, W / 2, 90);
@@ -817,6 +847,12 @@ function randomLook(look) {
     topStyle: pick(group('top', 'Styles')).value,
     topColor: pick(group('top', 'Colours')).value,
     topPattern: Math.random() < .4 ? pick(group('top', 'Patterns')).value : 'plain',
+    dress: maybe(group('dresses'), .3),
+    bottom: pick([...group('bottoms', 'Trousers'), ...group('bottoms', 'Shorts'), ...group('bottoms', 'Skirts')]).value,
+    shoes: pick(group('shoes', 'Shoes')).value,
+    socks: maybe(group('shoes', 'Socks & tights'), .4),
+    bag: maybe(group('extras', 'Bags'), .3),
+    bracelet: maybe(group('extras', 'Bracelets'), .4),
     mascara: maybe(group('lashes', 'Mascara'), .8),
     eyeliner: maybe(group('lashes', 'Eyeliner'), .3),
     earrings: maybe(group('earrings'), .85),
