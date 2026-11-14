@@ -46,6 +46,18 @@ Then open http://localhost:8000
 - 🖼️ Saved tracks: every raced track is saved in the browser (last 12). ⭐ keeps one forever. ✖ then 🗑️ deletes.
 - Files: `track.js` (geometry), `sim.js` (physics + laps), `render.js` (drawing), `game.js` (screens).
 
+### 🚀 Star Dash (`games/space-race/`)
+3D space race for age 8+. Built with [three.js](https://threejs.org) r160 (MIT), saved in `js/vendor/`.
+- Two styles:
+  - 🌀 **Tube Race**: fly inside a glowing tube. ◀ ▶ slide round the wall, ▲ faster, ▼ brake. Red rocks = bonk, green arrows = boost. 3 laps.
+  - 🪐 **Open Space**: fly anywhere. Go through every ring in order (follow your arrow). Each ring = boost. 2 laps.
+- Three ways to play:
+  - 🙂 vs 🤖 full screen. Computer level 🐢 / 🐇 / 🚀 (remembered).
+  - 🙂 vs 🙂 split screen. Arrows vs WASD, or touch buttons. Wide screens split left/right (WASD player on the left), tall screens top/bottom.
+  - 🌍 online (up to 4). Host picks the style and taps ▶. Each device flies its own ship and sends where it is ~15×/sec.
+- Every track comes from a seed, so all devices build the same tube, rocks and rings. New seed each race.
+- Files: `art.js` (sky, ships, rocks, trails), `tube.js` (style A), `open.js` (style B), `game.js` (screens, HUD, online).
+
 ### 🛻 Monster Doodle (`games/draw-a-road/`)
 Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - 48 levels: gaps, hills, walls, trampolines, speed arrows, magic doors, no-engine and floaty zones, ski jumps, low bridges, zig zags and a grand finale

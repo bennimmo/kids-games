@@ -9,6 +9,13 @@ export const GAMES = [
     load: () => import('../games/race-track/game.js'),
   },
   {
+    id: 'space-race',
+    name: 'Star Dash',
+    icon: '🚀',
+    color: '#b39ddb',
+    load: () => import('../games/space-race/game.js'),
+  },
+  {
     id: 'draw-a-road',
     name: 'Monster Doodle',
     icon: '🛻',
