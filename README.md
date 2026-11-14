@@ -40,7 +40,7 @@ Then open http://localhost:8000
 
 ### ✏️ Draw a Road (`games/draw-a-road/`)
 Draw lines with your finger/mouse so the car gets to the flag 🏁.
-- 12 levels: gaps, hills, walls, trampolines, speed arrows, magic doors, no-engine and floaty zones
+- 24 levels: gaps, hills, walls, trampolines, speed arrows, magic doors, no-engine and floaty zones, ski jumps, low bridges, zig zags and a grand finale
 - Up to 3 stars – use less crayon for more stars (saved on the device)
 - Space = go/stop, Z = undo
 - Files: `levels.js` (level data), `sim.js` (physics, no DOM), `game.js` (drawing + screens)
