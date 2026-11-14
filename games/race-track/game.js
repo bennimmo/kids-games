@@ -9,9 +9,10 @@ import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { WORLD, buildTrack, snapItem, resnapItems } from './track.js';
+import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON } from './track.js';
+import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings } from './sim.js';
-import { createRenderer, drawCarIcon, drawItemIcon } from './render.js';
+import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb } from './render.js';
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#fb8c00', '#8e24aa', '#ec407a', '#212121'];
 const EXTRAS = ['jump', 'water', 'tunnel'];
@@ -38,7 +39,8 @@ export function mount(stage) {
   const R = createRenderer(view);
 
   const S = {
-    phase: 'build',       // build | race | results | choose
+    phase: 'build',       // build | race | results | choose | saved
+    back: 'build',        // where ↩️ goes from the saved screen
     track: null,
     items: [],
     players: [{ id: 'p1', color: COLORS[0], controls: 'arrows' }],
@@ -69,11 +71,15 @@ export function mount(stage) {
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
     if (S.phase === 'choose') chooseUI();
+    if (S.phase === 'saved') savedUI();
   }
 
   function buildUI() {
-    const top = el(`<div class="rt-top"><button class="rt-btn rt-clear" title="Clear">🗑️</button></div>`);
+    const top = el(`<div class="rt-top">
+      <button class="rt-btn rt-saved" title="Saved tracks">🖼️</button>
+      <button class="rt-btn rt-clear" title="Clear">🗑️</button></div>`);
     click(top.querySelector('.rt-clear'), () => { S.track = null; S.items = []; R.setScene(null, []); render(); });
+    click(top.querySelector('.rt-saved'), () => openSaved('build'));
     ui.appendChild(top);
 
     const bar = el(`<div class="rt-bar"></div>`);
@@ -233,17 +239,64 @@ export function mount(stage) {
       <div class="rt-actions">
         <button class="rt-choice rt-edit"><canvas width="240" height="150"></canvas><span>✏️</span></button>
         <button class="rt-choice rt-fresh"><div class="rt-blank"></div><span>✨</span></button>
+        <button class="rt-choice rt-open"><div class="rt-blank rt-gallery">🖼️</div><span>⭐</span></button>
       </div>
       <button class="rt-btn rt-back">↩️</button>
     </div></div>`);
     R.thumb(box.querySelector('canvas'));
     click(box.querySelector('.rt-edit'), () => toBuild(false));
     click(box.querySelector('.rt-fresh'), () => toBuild(true));
+    click(box.querySelector('.rt-open'), () => openSaved('choose'));
     click(box.querySelector('.rt-back'), () => {
       S.paused = false;
       S.phase = S.race && S.race.phase === 'done' ? 'results' : 'race';
       render();
     });
+    ui.appendChild(box);
+  }
+
+  // ---------- saved tracks ----------
+  function openSaved(from) {
+    S.back = from;
+    S.phase = 'saved';
+    render();
+  }
+
+  function savedUI() {
+    const list = loadSaved();
+    const box = el(`<div class="rt-overlay"><div class="rt-card rt-saved-card">
+      <button class="rt-btn rt-back">↩️</button>
+      <div class="rt-gallery-grid"></div>
+    </div></div>`);
+    const grid = box.querySelector('.rt-gallery-grid');
+    if (!list.length) grid.appendChild(el(`<div class="rt-empty">🏁 ➜ 🖼️</div>`));
+    list.forEach(s => {
+      const card = el(`<div class="rt-saved-item ${s.fav ? 'fav' : ''}">
+        <canvas width="240" height="150"></canvas>
+        <button class="rt-star">⭐</button>
+        <button class="rt-del">✖</button>
+        <button class="rt-del-yes">🗑️</button>
+      </div>`);
+      const track = trackFromJSON(s.pts);
+      const items = resnapItems(s.items, track);
+      drawTrackThumb(card.querySelector('canvas'), track, items);
+      click(card, () => {
+        stopEngines();
+        S.race = null;
+        S.paused = false;
+        S.track = track;
+        S.items = items;
+        R.setScene(S.track, S.items);
+        R.resetRace();
+        S.phase = 'build';
+        render();
+      });
+      click(card.querySelector('.rt-star'), () => { toggleFav(s.id); render(); });
+      click(card.querySelector('.rt-del'), () => card.classList.toggle('asking'));
+      click(card.querySelector('.rt-del-yes'), () => { deleteSaved(s.id); sound.bump(); render(); });
+      grid.appendChild(card);
+    });
+    click(box.querySelector('.rt-back'), () => { S.phase = S.back; render(); });
     ui.appendChild(box);
   }
 
@@ -261,6 +314,7 @@ export function mount(stage) {
 
   function startRace() {
     stopEngines();
+    saveTrack(S.track, S.items);
     S.race = createRace(S.track, S.players);
     S.paused = false;
     S.doneAt = 0;
