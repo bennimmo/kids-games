@@ -153,13 +153,10 @@ export function friendBarHTML() { return '<div class="friend-bar"></div>'; }
 function renderBar(s) {
   const bar = document.querySelector('.friend-bar');
   if (!bar) return;
-  let inner;
-  if (s.codeStatus === 'noname') inner = `<span class="fbar-ico">${icon('phone')}</span><b class="fbar-name">${icon('user')}${icon('edit')}</b>`;
-  else if (s.codeStatus === 'offline') inner = '<span class="fbar-ico">📵</span>';
-  else if (s.codeStatus === 'ok') inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode">${picsHTML(s.code)}</span>`;
-  else inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode fcode-wait">⏳</span>`;
-  if (s.friends.length) inner += `<span class="fbar-count">${icon('people')} ${s.friends.length}</span>`;
-  bar.innerHTML = `<button class="fbar-btn" aria-label="Friends">${inner}</button>`;
+  // Just a phone button (the code is in the panel). Little number = friends connected.
+  let inner = s.codeStatus === 'offline' ? '📵' : icon('phone');
+  if (s.friends.length) inner += `<span class="fbar-count">${s.friends.length}</span>`;
+  bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
     if (s.codeStatus === 'noname') onEditName();

@@ -110,10 +110,11 @@ function editName() {
   showFace();
   o.querySelectorAll('.face-grid button').forEach(b => b.addEventListener('click', () => {
     sound.pop(); face = b.dataset.f; showFace();
+    if (setMyFace(face) !== faceBefore) nameChanged(); // saved straight away
   }));
   // Saved however the box is closed (tick, Enter or tapping outside).
   const close = () => {
-    const changed = (setMyName(input.value) !== before) | (setMyFace(face) !== faceBefore);
+    const changed = (setMyName(input.value) !== before) | (setMyFace(face) !== faceBefore) | (face !== faceBefore);
     o.remove();
     if (changed) nameChanged();
     showMenu();
@@ -128,10 +129,9 @@ function editName() {
 function showMenu() {
   app.innerHTML = `
     <div class="menu">
-      ${nameButton()}
+      <div class="top-left">${nameButton()}${friendBarHTML()}</div>
       ${appButtons()}
       <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
-      ${friendBarHTML()}
       ${AGES.map(a => {
         const list = GAMES.filter(g => (g.age || AGES[0].id) === a.id);
         return list.length ? `<section class="age" style="--a:${a.color}">
