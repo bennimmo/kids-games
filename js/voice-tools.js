@@ -73,7 +73,8 @@ async function info() {
           if (prev) rate = Math.round((r.totalSamplesReceived - prev.samples) / ((now - prev.t) / 1000)) + '/s';
           last.set(p.uid, { t: now, samples: r.totalSamplesReceived });
         }
-        if (r.concealedSamples != null && r.totalSamplesReceived) lost = Math.round(100 * r.concealedSamples / r.totalSamplesReceived) + '%';
+        // real gaps only (not quiet moments where the sender sends nothing on purpose)
+        if (r.concealedSamples != null && r.totalSamplesReceived) lost = Math.round(100 * (r.concealedSamples - (r.silentConcealedSamples || 0)) / r.totalSamplesReceived) + '%';
         if (r.packetsReceived != null) pkt = (100 * (r.packetsLost || 0) / Math.max(1, r.packetsReceived + (r.packetsLost || 0))).toFixed(1) + '%';
         if (r.jitter != null) jit = Math.round(r.jitter * 1000) + 'ms';
         if (r.jitterBufferEmittedCount) buf = Math.round(1000 * r.jitterBufferDelay / r.jitterBufferEmittedCount) + 'ms';
