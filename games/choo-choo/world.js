@@ -2,8 +2,8 @@
 // (station to station), each leg with its own land, a bridge/tunnel/hill
 // and a few things that happen. Builds 3D pieces in chunks just ahead of
 // the train and throws them away behind it.
-import { THREE, Builder, MAT, rng, smooth, signTexture } from './models.js';
-import { SCENERY, pickItem } from './scenery.js';
+import { THREE, Builder, MAT, rng, smooth, signTexture, makeAnimal, makeDuck, makeCloud } from './models.js';
+import { SCENERY, pickItem, TOP, TAPPABLE } from './scenery.js';
 
 export const DS = 0.5;      // track sample spacing
 const CH = 60;              // chunk length
@@ -13,19 +13,19 @@ const UP = [0, 1, 0];
 export const BIOMES = [
   { id: 'country', ground: '#86c75a', bank: '#71b04c', water: '#4fb6ea', name: 'Daisy Meadow', patch: '#7bbd4f', fence: true, density: 1,
     items: { tree: 3, bush: 3, flowers: 2.2, house: 0.9, rock: 0.6, hay: 0.9, pond: 0.35 },
-    events: ['ducks', 'animals', 'crossing', 'barrier', 'digger'], animal: 'cow' },
+    events: ['water', 'rock', 'signal', 'ducks', 'animals', 'crossing', 'barrier', 'digger'], animal: 'cow', critters: ['cow', 'sheep', 'duck'] },
   { id: 'forest', ground: '#5f9f48', bank: '#4f8b3c', water: '#3fa6d8', name: 'Pinecone Wood', patch: '#558f40', fence: false, density: 1.7,
     items: { pine: 5, tree: 3, bush: 2.5, rock: 1, mushroom: 0.8 },
-    events: ['animals', 'ducks', 'barrier', 'digger', 'crossing'], animal: 'sheep' },
+    events: ['water', 'rock', 'signal', 'animals', 'ducks', 'barrier', 'digger', 'crossing'], animal: 'sheep', critters: ['sheep', 'duck'] },
   { id: 'snow', ground: '#f2f7fc', bank: '#e2ebf4', water: '#bfe7f7', name: 'Snowy Peak', patch: '#e6eef7', fence: false, density: 1.2, snow: true,
     items: { snowpine: 5, snowman: 0.9, igloo: 0.45, rock: 0.7, house: 0.5 },
-    events: ['animals', 'crossing', 'barrier', 'digger'], animal: 'penguin' },
+    events: ['water', 'rock', 'signal', 'animals', 'crossing', 'barrier', 'digger'], animal: 'penguin', critters: ['penguin'] },
   { id: 'town', ground: '#a9b39c', bank: '#93a083', water: '#4fb6ea', name: 'Wilfton', patch: '#9aa68d', fence: true, density: 1.25,
     items: { building: 3, house: 2.4, lamp: 1.3, tree: 1, bush: 1 },
-    events: ['crossing', 'ducks', 'barrier', 'digger'], animal: null },
+    events: ['water', 'rock', 'signal', 'crossing', 'ducks', 'barrier', 'digger'], animal: null, critters: ['duck'] },
   { id: 'beach', ground: '#f3dfa0', bank: '#e2c987', water: '#3fb8e6', name: 'Sandy Bay', patch: '#ead293', fence: false, density: 1, beach: true,
     items: { palm: 3, hut: 1.2, parasol: 1.5, rock: 1, pond: 0.45, bush: 0.4 },
-    events: ['animals', 'ducks', 'crossing', 'barrier'], animal: 'crab' },
+    events: ['water', 'rock', 'signal', 'animals', 'ducks', 'crossing', 'barrier'], animal: 'crab', critters: ['crab', 'duck'] },
 ];
 
 export class World {
@@ -39,6 +39,7 @@ export class World {
     this.tunnels = [];   // {s0, s1, mat}
     this.rivers = [];    // {x, z, tx, tz}
     this.mounts = [];    // {x, z, tx, tz, A, B}
+    this.junctions = []; // {s0, s1, W, choice, x, z, tx, tz}
     this._straight(40);
     this.genLeg();
     this.genLeg();
@@ -81,6 +82,15 @@ export class World {
     const leg = { k, S, biome, night: k % 3 === 2, name: biome.name, feats: [], events: [], end: 0 };
     this._straight(30);
     this._random(70 + r() * 40);
+    // junction: the line splits round a pond and joins again; pick a side
+    const j0 = this.length + 4;
+    this._straight(78);
+    const jf = this.frameRaw(j0 + 35);
+    const J = { s0: j0, s1: j0 + 70, W: 6, choice: 0, leg: k, x: jf.x, z: jf.z, tx: jf.tx, tz: jf.tz };
+    this.junctions.push(J);
+    leg.junction = J;
+    leg.feats.push({ type: 'junction', c: j0 + 35, zone: 42 });
+    this._random(20 + r() * 20);
     const ft = ['bridge', 'tunnel', 'hill'][k % 3];
     if (ft === 'bridge') {
       const c = this.length + 32;
@@ -96,7 +106,7 @@ export class World {
       leg.feats.push({ type: 'hill', c, H: 6.5, flat: 16, ramp: 44, zone: 66 });
       this._random(130);
     }
-    this._random(110 + r() * 60);
+    this._random(160 + r() * 60);
     this._straight(46);
     leg.end = this.length;
 
@@ -112,7 +122,7 @@ export class World {
       this.ys[i] = y;
     }
     for (const f of leg.feats) {
-      const fr = this.frame(f.c);
+      const fr = this.frameRaw(f.c);
       if (f.type === 'bridge') this.rivers.push({ x: fr.x, z: fr.z, tx: fr.tx, tz: fr.tz });
       if (f.type === 'tunnel') this.mounts.push({ x: fr.x, z: fr.z, tx: fr.tx, tz: fr.tz, A: f.A, B: f.B });
     }
@@ -121,19 +131,41 @@ export class World {
     let pool = biome.events.filter(e => e !== 'animals' || biome.animal);
     for (let i = pool.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const lo = S + 55, hi = leg.end - 55, chosen = [];
-    for (let t = 0; t < 80 && chosen.length < 3; t++) {
+    for (let t = 0; t < 80 && chosen.length < 4; t++) {
       const s = lo + r() * (hi - lo);
       if (leg.feats.some(f => Math.abs(s - f.c) < f.zone + 8)) continue;
       if (chosen.some(c => Math.abs(c - s) < 55)) continue;
       chosen.push(s);
     }
     chosen.sort((a, b) => a - b);
-    leg.events = chosen.map((s, i) => ({ type: pool[i % pool.length], s, leg: k, frame: this.frame(s) }));
+    leg.events = chosen.map((s, i) => ({ type: pool[i % pool.length], s, leg: k, frame: this.frameRaw(s) }));
     this.legs.push(leg);
   }
 
   // ------------------------------------------------------------ lookups
+  // where the train actually goes (follows the chosen side of a junction)
   frame(s, o = {}) {
+    this.frameRaw(s, o);
+    const J = this.junctionAt(s);
+    if (J && J.choice) { const [off, doff] = this._jOff(J, s, J.choice); this._applyOff(o, off, doff); }
+    return o;
+  }
+  junctionAt(s) {
+    for (const J of this.junctions) if (s > J.s0 && s < J.s1) return J;
+    return null;
+  }
+  _jBump(J, s) { const u = (s - J.s0) / (J.s1 - J.s0); return Math.min(smooth(u / 0.3), smooth((1 - u) / 0.3)); }
+  _jOff(J, s, side) {
+    const e = 0.05, db = (this._jBump(J, s + e) - this._jBump(J, s - e)) / (2 * e);
+    return [side * J.W * this._jBump(J, s), side * J.W * db];
+  }
+  _applyOff(o, off, doff) {
+    o.x += o.nx * off; o.z += o.nz * off;
+    const tx = o.tx + o.nx * doff, tz = o.tz + o.nz * doff, L = Math.hypot(tx, tz);
+    o.tx = tx / L; o.tz = tz / L; o.nx = o.tz; o.nz = -o.tx; o.ry = Math.atan2(o.tx, o.tz);
+  }
+  *taps() { for (const g of this.chunks.values()) if (g.userData.taps) yield* g.userData.taps; }
+  frameRaw(s, o = {}) {
     const n = this.xs.length;
     let f = s / DS;
     if (f < 0) f = 0;
@@ -189,7 +221,8 @@ export class World {
   _dispose(g) {
     this.scene.remove(g);
     g.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.userData.cloud) { o.material.dispose(); return; }
+      if (o.geometry && !o.parent.userData.cloud) o.geometry.dispose();
       if (o.material && o.userData.own) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
     });
   }
@@ -202,7 +235,7 @@ export class World {
 
   _build(c) {
     const s0 = c * CH, s1 = (c + 1) * CH;
-    const f0 = this.frame(s0);
+    const f0 = this.frameRaw(s0);
     const ox = f0.x, oz = f0.z;
     const b = new Builder(ox, oz), gl = new Builder(ox, oz), dec = new Builder(ox, oz);
     const g = new THREE.Group();
@@ -216,7 +249,13 @@ export class World {
       }
       if (leg.S >= s0 && leg.S < s1) this._station(b, gl, g, leg);
     }
-    this._scenery(b, gl, dec, s0, s1, c);
+    const taps = [];
+    g.userData.taps = taps;
+    for (const J of this.junctions) {
+      const mid = (J.s0 + J.s1) / 2;
+      if (mid >= s0 && mid < s1) this._pond(b, dec, g, taps, J);
+    }
+    this._scenery(b, gl, dec, s0, s1, c, g, taps);
     const m = b.mesh(MAT.flat);
     if (m) { m.castShadow = m.receiveShadow = true; g.add(m); }
     const gm = gl.mesh(MAT.glow);
@@ -235,8 +274,11 @@ export class World {
       const j = i + 1;
       const th = this.th[i], nx = Math.sin(th), nz = -Math.cos(th);
       const hp = [nx, 0.3, nz], hm = [-nx, 0.3, -nz];
-      const lat = this.legAt(i * DS);
-      const bank = lat.biome.bank;
+      const bank = this.legAt(i * DS).biome.bank;
+      const J = this.junctionAt(i * DS + DS / 2);
+      for (const side of J ? [-1, 1] : [0]) {
+      const oi = J ? this._jOff(J, i * DS, side)[0] : 0, oj = J ? this._jOff(J, j * DS, side)[0] : 0;
+      const L = (k, lat, dy) => this._lp(k, lat + (k === i ? oi : oj), dy);
       b.quad(L(i, -1.05, 0.14), L(i, 1.05, 0.14), L(j, 1.05, 0.14), L(j, -1.05, 0.14), BAL, UP);
       b.quad(L(i, 1.05, 0.14), L(i, 1.5, 0), L(j, 1.5, 0), L(j, 1.05, 0.14), BALS, hp);
       b.quad(L(i, -1.05, 0.14), L(i, -1.5, 0), L(j, -1.5, 0), L(j, -1.05, 0.14), BALS, hm);
@@ -252,13 +294,18 @@ export class World {
         b.quad(L(i, 1.5, 0), L(i, wi, -yi), L(j, wj, -yj), L(j, 1.5, 0), bank, hp);
         b.quad(L(i, -1.5, 0), L(i, -wi, -yi), L(j, -wj, -yj), L(j, -1.5, 0), bank, hm);
       }
+      }
     }
     const SL = '#6d4c33';
     const fr = {};
     for (let s = Math.ceil(s0 / 0.8) * 0.8; s < s1; s += 0.8) {
-      this.frame(s, fr);
-      b.setBase(fr.x, fr.y, fr.z, fr.ry);
-      b.part('box', SL, 0, 0.19, 0, 1.8, 0.1, 0.3);
+      const J = this.junctionAt(s);
+      for (const side of J ? [-1, 1] : [0]) {
+        this.frameRaw(s, fr);
+        if (J) { const [off, doff] = this._jOff(J, s, side); this._applyOff(fr, off, doff); }
+        b.setBase(fr.x, fr.y, fr.z, fr.ry);
+        b.part('box', SL, 0, 0.19, 0, 1.8, 0.1, 0.3);
+      }
     }
   }
   _onBridge(s) {
@@ -268,7 +315,7 @@ export class World {
   }
 
   _bridge(b, dec, f, biome) {
-    const fr = this.frame(f.c), H = f.H;
+    const fr = this.frameRaw(f.c), H = f.H;
     b.setBase(fr.x, 0, fr.z, fr.ry);
     const RED = '#c62828', STONE = '#a0a0a0';
     b.part('box', '#8d6e63', 0, H - 0.3, 0, 3.3, 0.6, 27.2);
@@ -284,7 +331,7 @@ export class World {
     }
     // close the ends of the embankments
     for (const e of [-1, 1]) {
-      const s = f.c + e * 13.5, q = this.frame(s), h = q.y, w = 1.5 + h * 1.7;
+      const s = f.c + e * 13.5, q = this.frameRaw(s), h = q.y, w = 1.5 + h * 1.7;
       const P = (lat, y) => [q.x + q.nx * lat, y, q.z + q.nz * lat];
       const hint = [-e * q.tx, 0, -e * q.tz];
       b.quad(P(-w, 0), P(-1.5, h), P(1.5, h), P(w, 0), STONE, hint);
@@ -300,7 +347,7 @@ export class World {
   }
 
   _tunnel(g, f, biome) {
-    const fr = this.frame(f.c), { A, B, H } = f;
+    const fr = this.frameRaw(f.c), { A, B, H } = f;
     const b = new Builder(fr.x, fr.z);
     const seed = (f.c * 0.37) % 7;
     const hf = (u, v) => {
@@ -336,7 +383,7 @@ export class World {
   }
 
   _station(b, gl, g, leg) {
-    const fr = this.frame(leg.S);
+    const fr = this.frameRaw(leg.S);
     b.setBase(fr.x, fr.y, fr.z, fr.ry);
     gl.setBase(fr.x, fr.y, fr.z, fr.ry);
     const P = 0.76;
@@ -402,6 +449,10 @@ export class World {
       const [u, v] = local(rv, rv.x, rv.z);
       if (Math.abs(u) < 9.5 && Math.abs(v) < 47) return false;
     }
+    for (const J of this.junctions) {
+      const [u, v] = local(J, J.x, J.z);
+      if (Math.abs(u) < 38 && Math.abs(v) < J.W + 3.8) return false;
+    }
     for (const m of this.mounts) {
       const [u, v] = local(m, m.x, m.z);
       if (Math.abs(u) < m.A + 3 && Math.abs(v) < m.B + 2) return false;
@@ -409,7 +460,7 @@ export class World {
     const k = this.legIndexAt(s);
     for (let j = Math.max(0, k - 1); j <= Math.min(this.legs.length - 1, k + 1); j++) {
       const leg = this.legs[j];
-      const sf = this.frame(leg.S);
+      const sf = this.frameRaw(leg.S);
       const [u, v] = local(sf, sf.x, sf.z);
       if (u > -22 && u < 9 && v > -5 && v < 15) return false;
       for (const ev of leg.events) {
@@ -421,13 +472,30 @@ export class World {
     return true;
   }
 
-  _scenery(b, gl, dec, s0, s1, c) {
+  _pond(b, dec, g, taps, J) {
+    const B = this.legs[J.leg].biome, ry = Math.atan2(J.tx, J.tz);
+    dec.setBase(J.x, 0, J.z, ry);
+    dec.part('cyl16', B.snow ? '#dfe9f2' : B.beach ? '#e8d08a' : '#7c6a4f', 0, 0.025, 0, 7.8, 0.03, 22);
+    dec.part('cyl16', B.water, 0, 0.04, 0, 6.6, 0.03, 20);
+    b.setBase(J.x, 0, J.z, ry);
+    for (const z of [-8, -5, 6, 8.5]) b.part('cyl6', '#558b2f', 2.6, 0.5, z, 0.08, 1.0, 0.08);
+    for (const [x, z] of [[-0.8, -2], [1.2, 3]]) {
+      const o = makeDuck(x < 0);
+      o.position.set(J.x + J.tz * x + J.tx * z, 0.05, J.z - J.tx * x + J.tz * z);
+      o.rotation.y = x * 2;
+      o.scale.setScalar(1.4);
+      g.add(o);
+      taps.push({ kind: 'critter', animal: 'duck', obj: o, hop: 0, ph: x });
+    }
+  }
+
+  _scenery(b, gl, dec, s0, s1, c, g, taps) {
     const r = rng(this.seed + c * 7919);
     const fr = {};
     // soft patches of a different shade so the ground isn't flat colour
     for (let i = 0; i < 14; i++) {
       const s = s0 + r() * CH, B = this.legAt(s).biome;
-      this.frame(s, fr);
+      this.frameRaw(s, fr);
       const lat = (r() < 0.5 ? -1 : 1) * (4 + r() * 40);
       const px = fr.x + fr.nx * lat, pz = fr.z + fr.nz * lat;
       dec.setBase(px, 0, pz, r() * 6.3, 1);
@@ -439,7 +507,7 @@ export class World {
       for (const side of [-1, 1]) {
         if (r() < 0.35) continue;
         for (let s = s0; s < s1; s += 2.5) {
-          this.frame(s, fr);
+          this.frameRaw(s, fr);
           if (fr.y > 0.05 || this._onBridge(s)) continue;
           const lat = side * 4.6, px = fr.x + fr.nx * lat, pz = fr.z + fr.nz * lat;
           if (!this._freeOther(px, pz, s)) continue;
@@ -452,7 +520,7 @@ export class World {
     }
     for (let s = s0; s < s1; s += 2) {
       const B = this.legAt(s).biome;
-      this.frame(s, fr);
+      this.frameRaw(s, fr);
       for (const side of [-1, 1]) {
         if (r() > 0.75 * B.density) continue;
         const lat = side * (3.8 + Math.pow(r(), 1.6) * 36);
@@ -461,8 +529,38 @@ export class World {
         const type = pickItem(r, B.items, Math.abs(lat) > 10);
         const ry = r() * Math.PI * 2, sc = 0.8 + r() * 0.5;
         b.setBase(px, 0, pz, ry, sc); gl.setBase(px, 0, pz, ry, sc); dec.setBase(px, 0, pz, ry, sc);
-        SCENERY[type](b, gl, dec, r, !!B.snow, B.water);
+        const top = SCENERY[type](b, gl, dec, r, !!B.snow, B.water);
+        if (TAPPABLE.has(type)) taps.push({ kind: type, x: px, z: pz, h: (top || TOP[type] || 1) * sc, busy: 0 });
       }
+    }
+    // animals in the fields (tap them)
+    const B = this.legAt(s0 + CH / 2).biome;
+    for (let i = 0; i < 4; i++) {
+      if (r() < 0.25) continue;
+      const s = s0 + r() * CH;
+      this.frameRaw(s, fr);
+      const lat = (r() < 0.5 ? -1 : 1) * (6 + r() * 18);
+      const px = fr.x + fr.nx * lat, pz = fr.z + fr.nz * lat;
+      if (!this._free(px, pz, s, Math.abs(lat))) continue;
+      const animal = B.critters[(r() * B.critters.length) | 0];
+      const o = animal === 'duck' ? makeDuck(r() < 0.4) : makeAnimal(animal).group;
+      o.scale.setScalar(animal === 'duck' ? 1.4 : 1.15);
+      o.position.set(px, 0, pz);
+      o.rotation.y = r() * Math.PI * 2;
+      g.add(o);
+      taps.push({ kind: 'critter', animal, obj: o, hop: 0, ph: r() * 6 });
+    }
+    // clouds (tap for rain and a rainbow)
+    if (r() < 0.85) {
+      const s = s0 + r() * CH;
+      this.frameRaw(s, fr);
+      const lat = (r() < 0.5 ? -1 : 1) * (4.5 + r() * 4.5);
+      const m = makeCloud(r);
+      m.scale.setScalar(0.8);
+      m.position.set(fr.x + fr.nx * lat, 7 + r() * 1.5, fr.z + fr.nz * lat);
+      m.rotation.y = r() * 6;
+      g.add(m);
+      taps.push({ kind: 'cloud', obj: m, busy: 0 });
     }
   }
 }

@@ -2,7 +2,7 @@
 // track until it's over (the train stops itself in front of it).
 // Some just need waiting for (ducks, cars, digger), some need a tap
 // (barrier, animals on the line).
-import { THREE, V3, bmesh, makeDuck, makeCar, makeDigger, makeBarrier, makeAnimal } from './models.js';
+import { THREE, V3, bmesh, makeDuck, makeCar, makeDigger, makeBarrier, makeAnimal, makeWaterTower, makeCrane, makeSignal } from './models.js';
 import { sfx } from './audio.js';
 
 const HALF = Math.PI / 2;
@@ -28,7 +28,7 @@ export function createEvent(ev, biome, scene, r) {
       g.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     },
   };
-  const build = { ducks, crossing, barrier, digger, animals }[ev.type];
+  const build = { ducks, crossing, barrier, digger, animals, water, rock, signal }[ev.type];
   build(E, r, biome);
   return E;
 }
@@ -247,4 +247,115 @@ function animals(E, r, biome) {
       c.award(A.sticker, list[0].m.group);
     }
   };
+}
+
+// ---------------------------------------------------------------- water tower: tap to fill up
+function water(E, r) {
+  E.stopGap = -6;             // drive past so the tender stops under the spout
+  E.needsTap = true;
+  const T = makeWaterTower();
+  E.group.add(T.group);
+  E.hintObj = T.tank;
+  let state = 'wait', t = 0;
+  const go = () => { if (state !== 'wait') return; state = 'down'; t = 0; sfx.clunk(); E.hintObj = null; };
+  E.targets = [{ obj: T.tank, r: 140, tap: go }];
+  E.update = (dt, c) => {
+    speakOnce(E, c, 30, 'The train is thirsty! Tap the water tower!');
+    if (state === 'wait' && c.wait > 22) go();
+    if (state === 'wait') { E.hintObj = c.s > E.ev.s + 1 ? T.tank : null; return; }
+    t += dt;
+    if (state === 'down') {
+      T.spout.rotation.z = -Math.PI / 2 + Math.min(1, t / 0.8) * (Math.PI / 2 + 0.12);
+      if (t >= 0.8) { state = 'pour'; t = 0; sfx.pour(); }
+    } else if (state === 'pour') {
+      T.water.visible = true;
+      const len = 1.6;
+      T.water.scale.set(1 + Math.sin(t * 30) * 0.1, len * Math.min(1, t * 4), 1 + Math.cos(t * 27) * 0.1);
+      T.water.position.set(0, 3.55 - T.water.scale.y / 2, 0);
+      if (Math.floor(t / 0.7) !== Math.floor((t - dt) / 0.7)) sfx.glug();
+      if (t >= 2.4) { state = 'up'; t = 0; T.water.visible = false; c.award('💧', T.tank); c.say('All full up!'); }
+    } else if (state === 'up') {
+      T.spout.rotation.z = 0.12 - Math.min(1, t / 0.8) * (Math.PI / 2 + 0.12);
+      if (t >= 0.8) { state = 'done'; E.blocked = false; }
+    }
+  };
+  const d0 = E.dispose;
+  E.dispose = () => { d0(); T.water.material.dispose(); };
+}
+
+// ---------------------------------------------------------------- rock on the line: the crane lifts it off
+function rock(E, r) {
+  E.stopGap = 5.5;
+  E.needsTap = true;
+  const C = makeCrane();
+  E.group.add(C.group);
+  const R = bmesh(b => { b.part('dodec', '#8d8478', 0, 0, 0, 2.0, 1.5, 1.8, 0.4, 0.7); b.part('dodec', '#9e968a', 0.3, 0.4, 0.2, 1.0, 0.7, 0.9, 1, 2); });
+  R.position.set(-0.8, 0.75, 0);
+  E.group.add(R);
+  E.hintObj = R;
+  let state = 'wait', t = 0, yaw = 0, hookY = 4.4;
+  const tip = new V3();
+  const place = () => {
+    tip.set(-8 + Math.cos(yaw) * C.tipR, C.tipY, -Math.sin(yaw) * C.tipR);
+    C.turret.rotation.y = yaw;
+    C.hook.position.set(tip.x, hookY, tip.z);
+    const len = Math.max(0.1, tip.y - hookY - 0.3);
+    C.cable.scale.y = len;
+    C.cable.position.set(tip.x, hookY + 0.3 + len / 2, tip.z);
+  };
+  place();
+  const go = () => { if (state !== 'wait') return; state = 'lower'; t = 0; sfx.whirr(); E.hintObj = null; };
+  E.targets = [{ obj: R, r: 120, tap: go }, { obj: C.turret, r: 120, tap: go }];
+  E.update = (dt, c) => {
+    speakOnce(E, c, 38, 'A rock on the track! Tap the rock, and the crane will lift it!');
+    if (state === 'wait' && c.wait > 22) go();
+    if (state === 'wait') return;
+    t += dt;
+    if (state === 'lower') {
+      hookY = 4.4 - Math.min(1, t / 1.0) * 2.4;
+      if (t >= 1.0) { state = 'lift'; t = 0; sfx.clunk(); }
+    } else if (state === 'lift') {
+      hookY = 2.0 + Math.min(1, t / 1.2) * 2.6;
+      if (t >= 1.2) { state = 'swing'; t = 0; sfx.whirr(); }
+    } else if (state === 'swing') {
+      yaw = Math.min(1, t / 1.6) * Math.PI * 0.85;
+      if (E.blocked && t > 0.8) { E.blocked = false; c.award('🪨', R); c.say('Hooray! Well done crane!'); }
+      if (t >= 1.6) { state = 'drop'; t = 0; }
+    } else if (state === 'drop') {
+      hookY = 4.6 - Math.min(1, t / 1.0) * 2.6;
+      if (t >= 1.0) { state = 'done'; sfx.clunk(); }
+    }
+    place();
+    if (state !== 'lower' && state !== 'wait') R.position.set(C.hook.position.x, Math.max(0.75, C.hook.position.y - 1.1), C.hook.position.z);
+  };
+  const d0 = E.dispose;
+  E.dispose = () => { d0(); C.cable.material.dispose(); };
+}
+
+// ---------------------------------------------------------------- red signal: tap to make it green
+function signal(E, r) {
+  E.stopGap = 5;
+  E.needsTap = true;
+  const S = makeSignal();
+  S.group.scale.setScalar(1.4);
+  S.group.position.x = -1.0;
+  E.group.add(S.group);
+  E.hintObj = S.red;
+  let green = false, t = 0;
+  const go = () => {
+    if (green) return;
+    green = true; E.hintObj = null;
+    S.red.material.color.set('#3d0a0a'); S.green.material.color.set('#00e676');
+    sfx.ding();
+  };
+  E.targets = [{ obj: S.red, r: 120, tap: go }];
+  E.update = (dt, c) => {
+    t += dt;
+    speakOnce(E, c, 36, 'Red light! Tap the signal to make it green!');
+    if (!green && c.wait > 22) go();
+    if (!green) S.red.scale.setScalar(1 + Math.max(0, Math.sin(t * 6)) * 0.25);
+    else if (E.blocked) { E.blocked = false; S.red.scale.setScalar(1); c.award('🚦', S.green); c.say('Green means go!'); }
+  };
+  const d0 = E.dispose;
+  E.dispose = () => { d0(); S.red.material.dispose(); S.green.material.dispose(); };
 }

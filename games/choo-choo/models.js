@@ -465,3 +465,93 @@ export function makeBird(r, gull) {
   }
   return { group: g, wings };
 }
+
+// ---------------------------------------------------------------- track-side helpers
+export function makeWaterTower() {
+  const g = new THREE.Group();
+  g.add(bmesh(b => {
+    for (const [x, z] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) b.part('box', '#5d4037', 4.4 + x, 1.8, z, 0.25, 3.6, 0.25);
+    b.part('box', '#6d4c41', 4.4, 1.6, 0, 2.0, 0.15, 0.15);
+    b.part('box', '#6d4c41', 4.4, 1.6, 0, 0.15, 0.15, 2.0);
+    b.part('cyl16', '#c0392b', 4.4, 4.6, 0, 3.0, 2.2, 3.0);
+    for (const y of [3.8, 4.6, 5.4]) b.part('cyl16', '#424242', 4.4, y, 0, 3.06, 0.1, 3.06);
+    b.part('cone', '#7b241c', 4.4, 6.1, 0, 3.4, 0.9, 3.4);
+    b.part('box', '#5d4037', 4.4, 0.05, 0, 2.4, 0.1, 2.4);
+  }));
+  const spout = new THREE.Group();
+  spout.position.set(3.0, 4.2, 0);
+  spout.add(bmesh(b => {
+    b.part('cyl', '#37474f', -1.5, 0, 0, 0.32, 3.0, 0.32, 0, 0, HALF);
+    b.part('cyl', '#263238', -3.0, -0.15, 0, 0.42, 0.4, 0.42);
+  }));
+  spout.rotation.z = -HALF;
+  g.add(spout);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 1, 10), new THREE.MeshBasicMaterial({ color: '#4fc3f7', transparent: true, opacity: 0.85 }));
+  water.visible = false;
+  g.add(water);
+  const tank = new THREE.Object3D(); tank.position.set(4.4, 4.6, 0); g.add(tank);
+  return { group: g, spout, water, tank };
+}
+
+export function makeCrane() {
+  const g = new THREE.Group();
+  const Y = '#ff9800';
+  g.add(bmesh(b => {
+    b.part('box', Y, -8, 0.9, 0, 3.2, 0.8, 5.0);
+    b.part('box', '#37474f', -8, 0.45, 0, 3.0, 0.3, 4.6);
+    for (const z of [-1.7, 0, 1.7]) for (const s of [-1, 1]) b.part('cyl16', '#212121', -8 + s * 1.5, 0.5, z, 1.0, 0.4, 1.0, 0, 0, HALF);
+    b.part('box', '#ffeb3b', -8, 1.32, 0, 3.0, 0.05, 0.3);
+  }));
+  const turret = new THREE.Group();
+  turret.position.set(-8, 1.3, 0);
+  turret.add(bmesh(b => {
+    b.part('cyl16', '#424242', 0, 0.1, 0, 2.2, 0.2, 2.2);
+    b.part('box', Y, -0.4, 0.9, 0, 1.6, 1.4, 1.6);
+    b.part('box', '#b3e5fc', 0.41, 1.1, 0, 0.04, 0.6, 1.1);
+    b.part('box', '#5d4037', -1.4, 0.7, 0, 0.6, 1.0, 1.4);
+    b.part('box', Y, 3.6, 2.4, 0, 8.0, 0.35, 0.45, 0, 0, 0.45);
+  }));
+  g.add(turret);
+  const cable = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1, 0.06), new THREE.MeshLambertMaterial({ color: '#212121' }));
+  g.add(cable);
+  const hook = bmesh(b => {
+    b.part('box', '#ffc107', 0, 0.15, 0, 0.45, 0.3, 0.45);
+    b.part('box', '#616161', 0, -0.15, 0, 0.12, 0.4, 0.12);
+  });
+  g.add(hook);
+  return { group: g, turret, cable, hook, tipR: 7.2, tipY: 5.44 };
+}
+
+export function makeSignal() {
+  const g = new THREE.Group();
+  g.add(bmesh(b => {
+    b.part('box', '#eceff1', 2.4, 1.9, 0, 0.2, 3.8, 0.2);
+    b.part('box', '#212121', 2.4, 3.8, 0.05, 0.75, 1.5, 0.45);
+    b.part('box', '#212121', 2.4, 4.6, 0.15, 0.85, 0.1, 0.65);
+    b.part('box', '#ffc107', 2.4, 0.1, 0, 0.8, 0.2, 0.8);
+  }));
+  const red = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), new THREE.MeshBasicMaterial({ color: '#ff1744' }));
+  const green = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), new THREE.MeshBasicMaterial({ color: '#1b3d1f' }));
+  red.position.set(2.4, 4.15, 0.3); green.position.set(2.4, 3.45, 0.3);
+  g.add(red, green);
+  return { group: g, red, green };
+}
+
+let cloudGeo = null;
+export function makeCloud(r) {
+  if (!cloudGeo) cloudGeo = new THREE.SphereGeometry(1, 16, 12);
+  const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', emissive: '#b8c4cf' });
+  const g = new THREE.Group();
+  const n = 4 + ((r() * 3) | 0);
+  for (let i = 0; i < n; i++) {
+    const s = 1.3 + r() * 0.9 - Math.abs(i - (n - 1) / 2) * 0.15;
+    const m = new THREE.Mesh(cloudGeo, mat);
+    m.position.set((i - (n - 1) / 2) * 1.5, (r() - 0.3) * 0.5, (r() - 0.5) * 1.2);
+    m.scale.set(s * 1.2, s * 0.8, s);
+    m.castShadow = true;
+    g.add(m);
+  }
+  g.material = mat;
+  g.userData.cloud = true;
+  return g;
+}

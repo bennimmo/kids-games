@@ -9,6 +9,7 @@ import { THREE, V3, clamp, lerp, rng, makeLoco, makeTender, makeCarriage, puffTe
 import { World } from './world.js';
 import { createEvent } from './events.js';
 import { sfx, say, stopSpeech } from './audio.js';
+import { Fun } from './interact.js';
 import { startLoop } from '../../js/engine/loop.js';
 
 const VMAX = 7, ACC = 2.4, DEC = 3.0, BRAKE = 3.0;
@@ -44,6 +45,8 @@ export function mount(stage) {
     <button class="cc-whistle" aria-label="Whistle">${WHISTLE_SVG}</button>
     <div class="cc-hand cc-tap">👆</div>
     <div class="cc-go"><div class="cc-ring"></div><span>👆</span></div>
+    <button class="cc-arrow cc-left" aria-label="Go left">⬅</button>
+    <button class="cc-arrow cc-right" aria-label="Go right">➡</button>
     <div class="cc-bubble">CHOO CHOO!</div>
     <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done!</div><div class="cc-name"></div></div>
     <div class="cc-confetti"></div>`;
@@ -238,6 +241,8 @@ export function mount(stage) {
     }, 950);
   }
 
+  const fun = new Fun(scene, r, award);
+
   // ------------------------------------------------------------------ input
   const holds = new Set();
   let keyHold = false;
@@ -262,6 +267,16 @@ export function mount(stage) {
       if (!p.ok) continue;
       const d = Math.hypot(p.x - x, p.y - y);
       if (d < t.r * k && d < bd) { bd = d; best = t; }
+    }
+    if (best) return best;
+    // things in the world: houses, trees, animals, clouds...
+    const v3 = new V3();
+    for (const t of world.taps()) {
+      fun.pos(t, v3).project(camera);
+      if (v3.z > 1 || v3.z < -1) continue;
+      const d = Math.hypot((v3.x + 1) / 2 * rect.width - x, (1 - v3.y) / 2 * rect.height - y);
+      const rr = (t.kind === 'cloud' ? 110 : t.kind === 'critter' ? 80 : 65) * k;
+      if (d < rr && d < bd) { bd = d; best = { tap: () => fun.tap(t, { night: nightNow }) }; }
     }
     return best;
   }
@@ -495,7 +510,11 @@ export function mount(stage) {
         const sa = E.ev.s - E.stopGap;
         if (sa > s - 0.3 && sa < stopAt) { stopAt = sa; blockE = E; }
       }
+      jNext = world.junctions.find(J => !J.choice && J.s0 > s - 1) || null;
+      if (jNext && jNext.s0 - 3 < stopAt) { stopAt = jNext.s0 - 3; blockE = null; }
     } else stopAt = s;
+    const jBlock = !!(jNext && phase === 'drive' && stopAt === jNext.s0 - 3);
+    junction(dt, jBlock);
     const dist = Math.max(0, stopAt - s);
     if (holding && phase === 'drive') v = Math.min(VMAX, v + ACC * dt);
     else v = Math.max(0, v - DEC * dt);
@@ -558,6 +577,8 @@ export function mount(stage) {
 
     // birds
     const env = environment(dt);
+    nightNow = env.night;
+    fun.update(dt, world.taps(), camera);
     world.frame(s, fT);
     if (!bird) {
       birdTimer -= dt;
@@ -619,6 +640,26 @@ export function mount(stage) {
     snowGeo.attributes.position.needsUpdate = true;
   }
 
+  // ------------------------------------------------------------------ junctions: pick a way
+  let jNext = null, jWait = 0, jSaid = null, nightNow = 0;
+  const arrowL = ui.querySelector('.cc-left'), arrowR = ui.querySelector('.cc-right');
+  function choose(side) {
+    if (!jNext || jNext.choice) return;
+    jNext.choice = side;
+    sfx.clunk();
+    say('Off we go!');
+    arrowL.classList.remove('show'); arrowR.classList.remove('show');
+  }
+  for (const [btn, side] of [[arrowL, 1], [arrowR, -1]]) {
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); sfx.unlock(); choose(side); });
+  }
+  function junction(dt, jBlock) {
+    const show = !!(jNext && phase === 'drive' && jNext.s0 - s < 45);
+    arrowL.classList.toggle('show', show); arrowR.classList.toggle('show', show);
+    if (show && jSaid !== jNext) { jSaid = jNext; say('Which way shall we go? Tap an arrow!'); }
+    if (jBlock && v < 0.15) { jWait += dt; if (jWait > 25) choose(r() < 0.5 ? 1 : -1); } else jWait = 0;
+  }
+
   function hud(dt, holding, blockE) {
     // progress to next station
     const legK = phase === 'station' ? station.leg.k : (nextStation ? nextStation.k - 1 : 0);
@@ -634,7 +675,7 @@ export function mount(stage) {
       el.hand.classList.add('show');
     } else el.hand.classList.remove('show');
     // hold-to-go hint
-    const showGo = phase === 'drive' && !holding && v < 0.1 && !blockE && stillT > 1.2;
+    const showGo = phase === 'drive' && !holding && v < 0.1 && !blockE && stillT > 1.2 && !arrowL.classList.contains('show');
     el.go.classList.toggle('show', showGo);
     // CHOO CHOO bubble
     if (bubbleT > 0) {
@@ -646,6 +687,15 @@ export function mount(stage) {
   }
 
   const stopLoop = startLoop(update, () => renderer.render(scene, camera));
+  window.__ccFind = kind => {
+    const v3 = new V3(), rect = canvas.getBoundingClientRect();
+    for (const t of world.taps()) if (t.kind === kind) {
+      fun.pos(t, v3).project(camera);
+      const x = (v3.x + 1) / 2 * rect.width, y = (1 - v3.y) / 2 * rect.height;
+      if (x > 100 && x < rect.width - 140 && y > 90 && y < rect.height - 130 && v3.z < 1) return { x, y };
+    }
+    return null;
+  };
   window.__ccJump = to => { s = to; world.buildAll(s); };
   window.__cc = () => ({ nextS: nextStation && nextStation.S, s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
 
@@ -654,11 +704,13 @@ export function mount(stage) {
     stopSpeech();
     delete window.__cc;
     delete window.__ccJump;
+    delete window.__ccFind;
     removeEventListener('resize', onResize);
     removeEventListener('keydown', onKey);
     removeEventListener('keyup', onKey);
     if (ro) ro.disconnect();
     for (const E of events) E.dispose();
+    fun.dispose();
     world.disposeAll();
     scene.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     renderer.dispose();
