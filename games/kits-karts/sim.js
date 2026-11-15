@@ -366,7 +366,8 @@ function updateCar(race, car, input, dt) {
         car.assist = k;
         ev.push({ type: 'bigjump', id: car.id });
       } else if (ramp) {
-        car.vz = 140 + car.vF * 0.5;
+        car.vz = 160 + car.vF * 0.5;
+        car.z = gz + 0.5; // leave the ground now, or we'd 'land' straight away
         ev.push({ type: 'jump', id: car.id });
       }
       car.trick = false;
