@@ -2,7 +2,7 @@
 // drag to draw a loop, drag extras on. Crossings show a 🚀 jump / 🌉 bridge
 // badge: tap it to switch.
 import { WORLD, TRACK_W, JUMP_L, WATER_RX, WATER_RY, BOOST_L } from '../race-track/track.js';
-import { RAMP, BARRIER, arrowSpots } from './course.js';
+import { RAMP, BARRIER, arrowSpots, barrierRuns } from './course.js';
 import { THEMES, PLANT_ICON } from './themes.js';
 
 export const EXTRA_ICON = { box: '❓', boost: '⏩', jump: '🛹', mud: '🟤', ice: '🧊', water: '💧', cone: '🔺', tyres: '⚫', tree: '🌳', stand: '🏟️' };
@@ -23,9 +23,9 @@ export function drawCourse(g, course, items, theme, time = 0, opts = {}) {
   const pts = course.pts, n = course.n;
   g.lineJoin = 'round'; g.lineCap = 'round';
   // barriers (the dotted line round the road)
-  pathOf(g, pts);
-  g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = BARRIER * 2 + 6; g.setLineDash([3, 9]); g.stroke(); g.setLineDash([]);
-  g.strokeStyle = T.ed.bg; g.lineWidth = BARRIER * 2; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 5; g.setLineDash([4, 10]);
+  for (const run of barrierRuns(course)) { g.beginPath(); run.forEach((q, k) => (k ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); g.stroke(); }
+  g.setLineDash([]);
   // kerbs, then road
   pathOf(g, pts);
   g.strokeStyle = T.kerb[1]; g.lineWidth = TRACK_W + 14; g.stroke();

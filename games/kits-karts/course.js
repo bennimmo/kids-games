@@ -80,7 +80,80 @@ export function makeCourse(track, modes = []) {
       if (ad <= g + RAMP) jumpOf[i] = k;
     }
   });
-  return { track, n, pts: track.pts, crossings, elev, gap, lip, jumpOf, deck };
+  const course = { track, n, pts: track.pts, crossings, elev, gap, lip, jumpOf, deck };
+  barriers(course);
+  return course;
+}
+
+// How far out the barrier is on each side of every point.
+// Normally BARRIER, but where another bit of road comes close it goes halfway between,
+// so you can't cut across to the other road. Tight bends pull it in too.
+// Near crossings (exempt) the barriers just stay clear of all road.
+function barriers(course) {
+  const { n, pts, crossings } = course;
+  const exempt = new Uint8Array(n);
+  crossings.forEach(c => {
+    const reach = Math.ceil((c.half + RAMP + TRACK_W) / SPACING);
+    for (const at of [c.top, c.low]) for (let o = -reach; o <= reach; o++) exempt[((at + o) % n + n) % n] = 1;
+  });
+  const MIN = TRACK_W / 2 + 10;
+  const win = Math.ceil((BARRIER * 2.6) / SPACING);   // nearby points on the same bit of road don't count
+  const lim = [new Float32Array(n).fill(BARRIER), new Float32Array(n).fill(BARRIER)];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const nx = -Math.sin(p.a), ny = Math.cos(p.a);
+    // other road close by
+    for (let j = 0; j < n; j++) {
+      let di = Math.abs(i - j); di = Math.min(di, n - di);
+      if (di < win) continue;
+      const q = pts[j];
+      const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);
+      if (d > BARRIER * 2.2 || d < 1) continue;
+      const along = (dx * nx + dy * ny) / d;     // which side, and how square-on
+      if (Math.abs(along) < 0.5) continue;
+      const side = along > 0 ? 1 : 0;
+      lim[side][i] = Math.min(lim[side][i], Math.max(MIN, d / 2 - 2));
+    }
+    // tight bends: the inside barrier must not fold over itself
+    const a0 = pts[(i - 3 + n) % n].a, a1 = pts[(i + 3) % n].a;
+    const turn = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0));
+    if (Math.abs(turn) > 0.01) {
+      const r = (6 * SPACING) / Math.abs(turn);
+      const inner = turn > 0 ? 1 : 0;           // turning towards +normal side
+      lim[inner][i] = Math.min(lim[inner][i], Math.max(MIN, r * 0.85));
+    }
+  }
+  // smooth (take the smallest nearby, then soften) so walls don't zig-zag
+  for (const L of lim) {
+    const m = Float32Array.from(L, (_, i) => Math.min(L[(i - 2 + n) % n], L[(i - 1 + n) % n], L[i], L[(i + 1) % n], L[(i + 2) % n]));
+    for (let i = 0; i < n; i++) L[i] = (m[(i - 1 + n) % n] + m[i] * 2 + m[(i + 1) % n]) / 4;
+  }
+  course.lim = lim;
+  course.exempt = exempt;
+}
+
+// Barrier distance at index i (+fraction f) on side (lat > 0 = side 1).
+export function limAt(course, i, f, lat) {
+  const L = course.lim[lat > 0 ? 1 : 0];
+  return L[i % course.n] * (1 - f) + L[(i + 1) % course.n] * f;
+}
+
+// The barrier lines, as runs of points [{x, y}], for drawing (2D and 3D).
+export function barrierRuns(course) {
+  if (course.runs) return course.runs;
+  const { n, pts } = course, runs = [];
+  for (const side of [-1, 1]) {
+    let run = null;
+    for (let k = 0; k <= n; k++) {
+      const i = k % n, p = pts[i];
+      const off = (course.exempt[i] ? BARRIER : course.lim[side > 0 ? 1 : 0][i]) - 1.5;
+      const x = p.x - Math.sin(p.a) * off * side, y = p.y + Math.cos(p.a) * off * side;
+      const ok = course.exempt[i] ? distToRoad(course, x, y) > BARRIER - 6 : true;
+      if (ok) { if (!run) { run = []; runs.push(run); } run.push({ x, y, a: p.a }); } else run = null;
+    }
+  }
+  course.runs = runs.filter(r => r.length > 1);
+  return course.runs;
 }
 
 // Height of the road at a point index + fraction.
@@ -139,7 +212,7 @@ export function rng(seed) {
 export function distToRoad(course, x, y) {
   const { pts, n } = course;
   let best = Infinity;
-  for (let i = 0; i < n; i += 2) {
+  for (let i = 0; i < n; i++) {
     const d = (pts[i].x - x) ** 2 + (pts[i].y - y) ** 2;
     if (d < best) best = d;
   }

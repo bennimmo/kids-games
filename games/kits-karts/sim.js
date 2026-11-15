@@ -2,7 +2,7 @@
 //   stepRace(race, inputs, dt)   inputs = { [carId]: { up, down, left, right, fire } }
 // The world is 2D (x, y from the track designer) plus a height z.
 import { WORLD, SOLIDS, JUMP_L, WATER_RX, WATER_RY, BOOST_L } from '../race-track/track.js';
-import { TRACK_W, RAIL_H, LAND_H, BARRIER, locate, elevAt } from './course.js';
+import { TRACK_W, RAIL_H, LAND_H, BARRIER, locate, elevAt, limAt } from './course.js';
 import { statsOf } from './karts.js';
 
 export const LAPS = 3;
@@ -393,9 +393,12 @@ function updateCar(race, car, input, dt) {
 
   // barriers a little way off the road: you can go on the grass, but not get lost
   if (car.z < 15) {
-    const lim = BARRIER - 11;
-    let L = locate(course, car.x, car.y, car.idx);
-    if (L.d > lim) L = locate(course, car.x, car.y, car.idx, true); // maybe near another bit of road
+    let L = locate(course, car.x, car.y, car.idx), lim;
+    if (!course.exempt[L.i]) lim = limAt(course, L.i, L.f, L.lat) - 11;     // this road's own barrier
+    else {
+      lim = BARRIER - 11;
+      if (L.d > lim) L = locate(course, car.x, car.y, car.idx, true);      // near a crossing: any road will do
+    }
     if (L.d > lim) {
       const s = Math.sign(L.lat), push = L.d - lim;
       const nx = L.nx * s, ny = L.ny * s;

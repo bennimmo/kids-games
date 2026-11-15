@@ -3,7 +3,7 @@
 // 3D axes: X = track x, Z = track y, Y = up (height).
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { WORLD, SOLIDS, JUMP_L, WATER_RX, WATER_RY, BOOST_L } from '../race-track/track.js';
-import { TRACK_W, RAIL_H, BARRIER, trackSeed, rng, distToRoad, arrowSpots } from './course.js';
+import { TRACK_W, RAIL_H, BARRIER, trackSeed, rng, distToRoad, arrowSpots, barrierRuns } from './course.js';
 import { buildKart } from './karts.js';
 
 const CX = WORLD.w / 2, CZ = WORLD.h / 2;
@@ -466,21 +466,17 @@ export function createWorld(course, items, theme, opts = {}) {
   // barriers each side, a little way off the road (not where they'd cross other road)
   {
     const bm = std('#ffffff', { r: 0.5, m: 0.2 }); bm.map = stripeTex(theme.kerb[0], '#ffffff'); bm.side = THREE.DoubleSide;
-    const capM = std('#9e9e9e', { r: 0.4, m: 0.6 });
+    const capM = std('#9e9e9e', { r: 0.4, m: 0.6, ds: true });
     const H = 9;
-    for (const side of [-1, 1]) {
+    for (const run of barrierRuns(course)) {
       const pos = [], uv = [], idx = [], top = [], tidx = [];
-      let v = 0, prevOK = false;
-      for (let k = 0; k <= course.n; k++) {
-        const i = k % course.n, p = course.pts[i];
-        const x = p.x - Math.sin(p.a) * BARRIER * side, z = p.y + Math.cos(p.a) * BARRIER * side;
-        if (k) { const q = course.pts[k - 1]; v += Math.hypot(p.x - q.x, p.y - q.y) / 30; }
-        pos.push(x, 0, z, x, H, z); uv.push(v, 0, v, 1);
-        top.push(x - Math.sin(p.a) * 1.5, H, z + Math.cos(p.a) * 1.5, x + Math.sin(p.a) * 1.5, H, z - Math.cos(p.a) * 1.5);
-        const ok = distToRoad(course, x, z) > BARRIER - 6;
-        if (k && ok && prevOK) { const a = (k - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); tidx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-        prevOK = ok;
-      }
+      let v = 0;
+      run.forEach((q, k) => {
+        if (k) v += Math.hypot(q.x - run[k - 1].x, q.y - run[k - 1].y) / 30;
+        pos.push(q.x, 0, q.y, q.x, H, q.y); uv.push(v, 0, v, 1);
+        top.push(q.x - Math.sin(q.a) * 1.5, H, q.y + Math.cos(q.a) * 1.5, q.x + Math.sin(q.a) * 1.5, H, q.y - Math.cos(q.a) * 1.5);
+        if (k) { const a = (k - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); tidx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      });
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
@@ -489,7 +485,7 @@ export function createWorld(course, items, theme, opts = {}) {
       const tg = new THREE.BufferGeometry();
       tg.setAttribute('position', new THREE.Float32BufferAttribute(top, 3));
       tg.setIndex(tidx); tg.computeVertexNormals();
-      const capMesh = new THREE.Mesh(tg, capM); capMesh.material.side = THREE.DoubleSide; scene.add(capMesh);
+      scene.add(new THREE.Mesh(tg, capM));
     }
   }
 
