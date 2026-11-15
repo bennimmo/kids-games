@@ -664,7 +664,7 @@ export function createWorld(course, items, theme, opts = {}) {
       m.position.set(o.x, o.z, o.y);
       if (o.kind === 'rocket') { m.rotation.y = -o.a; m.position.y = o.z + 4; m.userData.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1); }
       if (o.kind === 'ball') m.rotation.y += dt * 8;
-      if (o.kind === 'banana') m.rotation.y = o.id;
+      if (o.kind === 'banana') m.rotation.y = (o.x * 7.3) % 6.28;
       if (o.kind === 'bomb') { m.userData.spark.visible = Math.floor(anim.t * (o.fuse < 0.6 ? 20 : 8)) % 2 === 0; const s = 1 + (o.fuse < 0.6 ? Math.sin(anim.t * 40) * 0.15 : 0); m.scale.setScalar(s); }
     }
     for (const [id, m] of anim.items) if (!seen.has(id)) { scene.remove(m); anim.items.delete(id); }
@@ -762,7 +762,7 @@ export function createWorld(course, items, theme, opts = {}) {
     for (const c of cars) {
       const k = karts.get(c.id);
       if (!k) continue;
-      k.root.visible = c.rescueT <= 0 || Math.floor(c.rescueT * 10) % 2 === 0 && c.rescueT < 0.5;
+      k.root.visible = !c.gone && (c.rescueT <= 0 || Math.floor(c.rescueT * 10) % 2 === 0 && c.rescueT < 0.5);
       k.root.position.set(c.x, c.z, c.y);
       k.root.rotation.y = -c.a;
       // flips and tricks

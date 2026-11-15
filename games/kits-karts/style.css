@@ -146,3 +146,33 @@
   .kk-tb { width: 70px; height: 70px; font-size: 28px; }
   .kk-tb-fire { width: 80px; height: 80px; }
 }
+
+/* ---- online */
+.kk-badge { position: absolute; left: 50%; top: 78px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 10px; border-radius: 26px; background: rgba(0,0,0,.45); }
+.kk-badge .kk-code span { width: 48px; height: 48px; font-size: 30px; border-radius: 14px; border-width: 3px; }
+.kk-badge .kk-code { margin: 0; gap: 6px; }
+.kk-badge.up { top: 12px; }
+.kk-friends { display: flex; gap: 4px; }
+.kk-friends .kk-kimg { width: 60px; height: 40px; object-fit: contain; background: rgba(255,255,255,.85); border-radius: 10px; }
+.kk-badge .kk-btn { width: 46px; height: 46px; font-size: 22px; }
+.kk-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
+.kk-code span { width: 76px; height: 76px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 48px; display: flex; align-items: center; justify-content: center; }
+.kk-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; justify-content: center; }
+.kk-keypad button { width: 72px; height: 72px; border-radius: 18px; font-size: 42px; background: #e3f2fd; box-shadow: 0 5px 0 rgba(0,0,0,.25); }
+.kk-keypad button:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+.kk-choice { position: relative; width: 240px; border-radius: 20px; background: #eceff1; padding: 0; overflow: hidden; border: 4px solid #cfd8dc !important; }
+.kk-choice canvas, .kk-blank { width: 100%; height: 150px; display: flex; align-items: center; justify-content: center; font-size: 70px; }
+.kk-choice span { display: block; font-size: 40px; padding: 4px; }
+.kk-choice.off { opacity: .4; pointer-events: none; }
+.kk-hint { font-size: 30px; margin-top: 8px; }
+.kk-card > .kk-back { margin-top: 12px; }
+.kk-wait { font-size: 56px; animation: kk-pulse 1s infinite; }
+.kk-netwait { position: absolute; right: 16px; top: 140px; font-size: 30px; animation: kk-pulse .8s infinite; pointer-events: none; }
+.kk-lobby-info { flex: 1 1 auto; justify-content: center; font-size: 40px; gap: 18px; }
+.kk-lobby-info span { font-size: 30px; }
+@media (max-width: 760px), (max-height: 560px) {
+  .kk-keypad { grid-template-columns: repeat(4, 58px); }
+  .kk-keypad button { width: 58px; height: 58px; font-size: 34px; }
+  .kk-choice { width: 180px; }
+  .kk-choice canvas, .kk-blank { height: 112px; }
+}

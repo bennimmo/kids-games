@@ -95,7 +95,7 @@ export function createRace(course, items, racers, theme) {
     cones: all.filter(i => i.type === 'cone').map(i => ({ x: i.x, y: i.y, z: 0, vx: 0, vy: 0, vz: 0, spin: 0, rot: 0, tip: 0, down: false })),
     solids: all.filter(i => SOLIDS[i.type]),
     pads: all.filter(i => ['boost', 'jump', 'mud', 'ice', 'water'].includes(i.type)).map(i => ({ ...i, z: i.idx >= 0 ? course.elev[i.idx] : 0 })),
-    objs: [], nextId: 1, firstFinish: -1, doneT: -1,
+    objs: [], nextId: 1, firstFinish: -1, doneT: -1, hitIds: new Set(), netFx: [],
   };
 }
 
@@ -103,6 +103,7 @@ const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 // ------------------------------------------------------------------ hits
 function hitCar(race, car, kind, by) {
+  if (car.remote || car.gone) return false; // friends' karts are looked after on their own device
   if (car.starT > 0 || car.rescueT > 0 || car.safeT > 0) return false;
   if (car.shieldT > 0) { car.shieldT = 0; race.events.push({ type: 'shield', id: car.id }); return true; }
   if (kind === 'flip') {
@@ -166,17 +167,27 @@ function useItem(race, car) {
   if (it === 'shield') car.shieldT = 12;
   if (it === 'star') { car.starT = 7; car.spinT = 0; car.smallT = 0; }
   if (it === 'zap') {
-    for (const c of race.cars) {
-      if (c === car || c.dist < car.dist || c.finished) continue;
-      if (c.starT > 0) continue;
-      if (c.shieldT > 0) { c.shieldT = 0; race.events.push({ type: 'shield', id: c.id }); continue; }
-      c.smallT = 4; c.spinT = 0.5; c.vF *= 0.5;
-      race.events.push({ type: 'zapped', id: c.id });
-    }
+    zapAhead(race, car.dist, car.id);
+    race.netFx.push({ id: car.id + ':' + id, type: 'zap', dist: car.dist, by: car.id });
   }
   race.events.push(ev);
   car.itemN--;
   if (car.itemN <= 0) car.item = null;
+}
+
+// zap every (local) kart ahead of 'dist'. Also used for a friend's zap online.
+export function zapAhead(race, dist, byId) {
+  for (const c of race.cars) {
+    if (c.id === byId || c.remote || c.dist < dist || c.finished || c.starT > 0) continue;
+    if (c.shieldT > 0) { c.shieldT = 0; race.events.push({ type: 'shield', id: c.id }); continue; }
+    c.smallT = 4; c.spinT = 0.5; c.vF *= 0.5;
+    race.events.push({ type: 'zapped', id: c.id });
+  }
+}
+// a bomb going off (ours, or a friend's online)
+export function boomAt(race, x, y, z, owner) {
+  race.events.push({ type: 'boom', x, y, z });
+  for (const c of race.cars) if (Math.hypot(c.x - x, c.y - y) < 80 && Math.abs(c.z - z) < 40) hitCar(race, c, 'flip', owner);
 }
 
 // ------------------------------------------------------------------ one car
@@ -457,7 +468,7 @@ function bashCars(race) {
   const cs = race.cars;
   for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
     const a = cs[i], b = cs[j];
-    if (a.rescueT > 0 || b.rescueT > 0) continue;
+    if (a.rescueT > 0 || b.rescueT > 0 || a.gone || b.gone || (a.remote && b.remote)) continue;
     if (Math.abs(a.z - b.z) > 12) continue;
     const ra = CAR_R * (a.smallT > 0 ? 0.6 : 1), rb = CAR_R * (b.smallT > 0 ? 0.6 : 1);
     const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
@@ -465,8 +476,9 @@ function bashCars(race) {
     const nx = dx / d, ny = dy / d, pen = ra + rb - d;
     let ma = a.p.mass * (a.smallT > 0 ? 0.4 : 1) * (a.starT > 0 ? 6 : 1);
     let mb = b.p.mass * (b.smallT > 0 ? 0.4 : 1) * (b.starT > 0 ? 6 : 1);
-    a.x -= nx * pen * mb / (ma + mb); a.y -= ny * pen * mb / (ma + mb);
-    b.x += nx * pen * ma / (ma + mb); b.y += ny * pen * ma / (ma + mb);
+    const fa = a.remote ? 0 : b.remote ? 1 : mb / (ma + mb), fb = b.remote ? 0 : a.remote ? 1 : ma / (ma + mb);
+    a.x -= nx * pen * fa; a.y -= ny * pen * fa;
+    b.x += nx * pen * fb; b.y += ny * pen * fb;
     const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
     if (rv >= 0) continue;
     const J = -(1 + 0.9) * rv / (1 / ma + 1 / mb) + 40; // a bit extra so bashes feel strong
@@ -475,13 +487,14 @@ function bashCars(race) {
       const fx = Math.cos(c.a), fy = Math.sin(c.a);
       c.vF = vx * fx + vy * fy; c.vR = -vx * fy + vy * fx;
     };
-    push(a, -1, ma); push(b, 1, mb);
+    if (!a.remote) push(a, -1, ma);
+    if (!b.remote) push(b, 1, mb);
     if (a.starT > 0 && b.starT <= 0) hitCar(race, b, 'flip', a.id);
     if (b.starT > 0 && a.starT <= 0) hitCar(race, a, 'flip', b.id);
     if (-rv > 60) race.events.push({ type: 'bash', id: a.id, id2: b.id, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, hard: -rv > 200 });
     if (-rv > 220) { // big bash: the lighter one hops
       const light = ma < mb ? a : b;
-      if (!light.air && light.starT <= 0) { light.air = true; light.vz = 120; }
+      if (!light.air && !light.remote && light.starT <= 0) { light.air = true; light.vz = 120; }
     }
   }
 }
@@ -490,7 +503,7 @@ function updateBoxes(race, dt) {
   for (const b of race.boxes) {
     if (b.cool > 0) { b.cool -= dt; continue; }
     for (const c of race.cars) {
-      if (c.rescueT > 0 || Math.abs(c.z - b.z) > 16) continue;
+      if (c.remote || c.gone || c.rescueT > 0 || Math.abs(c.z - b.z) > 16) continue;
       if (Math.hypot(c.x - b.x, c.y - b.y) < CAR_R + 9) {
         b.cool = BOX_RESPAWN;
         race.events.push({ type: 'box', id: c.id, x: b.x, y: b.y, z: b.z });
@@ -525,6 +538,22 @@ function updateObjs(race, dt) {
   const keep = [];
   for (const o of race.objs) {
     let dead = false;
+    if (o.remote) { // a friend's item: it moves on their device, we only check if it hits our karts
+      if (race.hitIds.has(o.id)) continue;
+      const R = o.kind === 'oil' ? 24 : o.kind === 'banana' ? 13 : 16;
+      for (const c of race.cars) {
+        if (c.remote || c.rescueT > 0 || o.kind === 'bomb') continue;
+        if (Math.abs(c.z - o.z) > 14 || Math.hypot(c.x - o.x, c.y - o.y) > R + CAR_R) continue;
+        if (o.kind === 'oil') { if ((c.hitCool[o.id] || 0) > race.t) continue; c.hitCool[o.id] = race.t + 2; if (!c.air) hitCar(race, c, 'oil', o.owner); continue; }
+        hitCar(race, c, o.kind === 'rocket' ? 'flip' : 'spin', o.owner);
+        race.events.push({ type: 'pop', x: o.x, y: o.y, z: o.z, kind: o.kind });
+        race.hitIds.add(o.id);
+        dead = true;
+        break;
+      }
+      if (!dead) keep.push(o);
+      continue;
+    }
     if (o.life !== undefined) { o.life -= dt; if (o.life <= 0) dead = true; }
     if (o.kind === 'rocket') {
       const tgt = race.cars.find(c => c.id === o.target);
@@ -561,15 +590,15 @@ function updateObjs(race, dt) {
       o.fuse -= dt;
       if (o.fuse <= 0) {
         dead = true;
-        race.events.push({ type: 'boom', x: o.x, y: o.y, z: o.z });
-        for (const c of race.cars) if (Math.hypot(c.x - o.x, c.y - o.y) < 80 && Math.abs(c.z - o.z) < 40) hitCar(race, c, 'flip', o.owner);
+        boomAt(race, o.x, o.y, o.z, o.owner);
+        race.netFx.push({ id: o.owner + ':' + o.id, type: 'boom', x: o.x, y: o.y, z: o.z, by: o.owner });
       }
     }
     // hit a kart?
     if (!dead && o.kind !== 'bomb') {
       const R = o.kind === 'oil' ? 24 : o.kind === 'banana' ? 13 : 16;
       for (const c of race.cars) {
-        if (c.rescueT > 0) continue;
+        if (c.rescueT > 0 || c.remote || c.gone) continue;
         if ((o.kind === 'rocket' || o.kind === 'ball') && c.id === o.owner && (o.kind === 'rocket' || o.safe > 0)) continue;
         if (o.kind === 'rocket' && o.life > 6.6 && c.id === o.owner) continue;
         if (Math.abs(c.z - o.z) > 14) continue;
@@ -616,16 +645,16 @@ export function stepRace(race, inputs, dt) {
     if (n < race.beeped && n >= 1 && n <= 3) { race.beeped = n; race.events.push({ type: 'beep', n }); }
     if (race.countdown <= 0) { race.phase = 'racing'; race.goT = race.t; race.events.push({ type: 'go' }); }
   }
-  for (const c of race.cars) updateCar(race, c, inputs[c.id] || {}, dt);
+  for (const c of race.cars) if (!c.remote && !c.gone) updateCar(race, c, inputs[c.id] || {}, dt);
   bashCars(race);
-  for (const c of race.cars) hitSolids(race, c);
+  for (const c of race.cars) if (!c.remote) hitSolids(race, c);
   updateBoxes(race, dt);
   updateCones(race, dt);
   updateObjs(race, dt);
   standings(race).forEach((c, i) => { c.place = i + 1; });
 
   if (race.phase === 'racing') {
-    const humans = race.cars.filter(c => !c.cpu);
+    const humans = race.cars.filter(c => !c.cpu && !c.gone);
     const allHumans = humans.length && humans.every(c => c.finished);
     const tooLong = race.firstFinish >= 0 && race.t - race.firstFinish > MAX_LAST;
     if (allHumans || tooLong || race.cars.every(c => c.finished)) {

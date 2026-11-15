@@ -49,6 +49,9 @@ Then open http://localhost:8000
 - 2 players = split screen (P1 arrows + Enter, P2 WASD + Space). Solo: either keys. Gamepads work (A go, B brake, X fire). Touch: ◀ ▶ ▼ 💥, goes by itself.
 - 🔧 Garage (tap your kart): 10 bodies (go-kart, F1, off-road, monster, NASA rover, rocket, tractor, hover, police, bath tub), colours, decals, wheels (slicks, knobbly, big, gold, neon), drivers (kid, astronaut, robot, cat, dog, bear, alien, dino), helmet, spoilers, toppers, boost flame colour. Bodies and wheels change the stat bars (speed, accel, turn, weight, off-road).
 - Saved tracks 🖼️ keep the theme and jump/bridge choices.
+- 🌍 Online (up to 8 karts): host draws the track, then 🌍 → host. Friends tap 🌍 → 🔑 and the 3 pictures. Friends watch the track being made and can do up their kart 🔧. Host picks robots/laps and taps 🏁; host's device drives the robots.
+  - Each device drives its own karts and sends where they are ~15×/sec (`live/<uid>_p1`). Items are sent too: bananas, oil, rockets, balls and bombs show on friends' screens and hit their karts; zaps and bomb blasts are sent as one-off events. A device that's hit sends back the item id so the owner removes it.
+  - Test with 2 tabs: `?net=local`.
 - `?kkdebug` puts `window.__kk()` in the console. `?kklow` turns shadows off.
 - Files: `course.js` (heights, jumps, bridges), `sim.js` (physics, items, laps), `ai.js`, `karts.js` (options + 3D karts), `world.js` (3D world + scenery), `editor.js` (2D designer), `preview.js` (garage viewer), `themes.js`, `game.js` (screens, HUD, split screen).
 

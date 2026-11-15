@@ -11,7 +11,8 @@ import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from '../race-track/track.js';
 import { makeCourse } from './course.js';
-import { createRace, stepRace, standings, ITEMS, ITEM_LIST, withAutoBoxes, boxesOf } from './sim.js';
+import { createRace, stepRace, standings, ITEMS, ITEM_LIST, zapAhead, boomAt } from './sim.js';
+import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { aiInput } from './ai.js';
 import { THEMES, THEME_IDS, PLANT_ICON } from './themes.js';
 import { createWorld, chaseCam } from './world.js';
@@ -33,6 +34,10 @@ const LEVELS = ['🐢', '🐇', '🚀'];
 const LAP_CHOICES = [1, 2, 3, 5];
 const P_COLORS = ['#ff3d6e', '#2ec4ff'];
 const BOT_NAMES = ['Bolt', 'Zippy', 'Sparky', 'Gizmo', 'Nitro', 'Beep', 'Rusty'];
+const GAME = 'kits-karts';
+const SEND_EVERY = 1 / 15;
+const MAX_KARTS = 8;
+const NET_KINDS = ['banana', 'oil', 'rocket', 'ball', 'bomb'];
 
 const CONTROLS = {
   arrows: k => ({ up: k.isDown('ArrowUp'), down: k.isDown('ArrowDown'), left: k.isDown('ArrowLeft'), right: k.isDown('ArrowRight'),
@@ -77,7 +82,7 @@ export function mount(stage) {
 
   const prefs = loadPrefs();
   const S = {
-    phase: 'build',      // build | race | results | saved
+    phase: 'build',      // build | saved | online | join | lobby | race | results
     theme: THEME_IDS.includes(prefs.theme) ? prefs.theme : 'country',
     players: (Array.isArray(prefs.players) && prefs.players.length ? prefs.players.slice(0, 2) : [{}]).map((p, i) => ({ id: 'p' + (i + 1), look: cleanLook(p.look, i), controls: i ? 'wasd' : 'arrows' })),
     bots: Number.isInteger(prefs.bots) ? Math.max(0, Math.min(6, prefs.bots)) : 3,
@@ -85,8 +90,12 @@ export function mount(stage) {
     laps: LAP_CHOICES.includes(prefs.laps) ? prefs.laps : 3,
     track: null, modes: [], items: [], course: null,
     stroke: null, drag: null, garage: null, gTab: 'body', paused: false, time: 0,
+    net: null, busy: false, sad: 0, joinCode: '',
   };
   function savePrefs() {
+    hostSync();
+    syncMyPlayers();
+    if (S.net && !S.net.isHost) { try { localStorage.setItem(PREFS, JSON.stringify({ ...loadPrefs(), players: S.players.map(p => ({ look: p.look })) })); } catch (e) { /* ignore */ } return; }
     try { localStorage.setItem(PREFS, JSON.stringify({ theme: S.theme, players: S.players.map(p => ({ look: p.look })), bots: S.bots, level: S.level, laps: S.laps })); } catch (e) { /* ignore */ }
   }
 
@@ -99,6 +108,7 @@ export function mount(stage) {
     S.course = S.track ? makeCourse(S.track, S.modes) : null;
     if (S.course) S.items = resnapItems(S.items, S.track);
     editor.setScene(S.course, S.items, S.theme);
+    hostSync();
   }
 
   // ------------------------------------------------------------ build screen
@@ -109,6 +119,13 @@ export function mount(stage) {
     root.classList.toggle('racing', S.phase === 'race' || S.phase === 'results');
     if (S.phase === 'build') buildUI();
     if (S.phase === 'saved') savedUI();
+    if (S.phase === 'online') onlineUI();
+    if (S.phase === 'join') joinUI();
+    if (S.phase === 'lobby') lobbyUI();
+    if (S.net && (S.phase === 'build' || S.phase === 'lobby')) badgeUI();
+    if (S.net && S.net.status === 'waiting') ui.appendChild(el(`<div class="kk-netwait">📶⏳</div>`));
+    if (S.busy) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">⏳</div></div>`));
+    if (S.time < S.sad) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">😢</div></div>`));
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
     if (S.garage) garageUI();
@@ -118,12 +135,14 @@ export function mount(stage) {
     const top = el(`<div class="kk-top">
       <div class="kk-themes">${THEME_IDS.map(t => `<button class="kk-theme ${t === S.theme ? 'on' : ''}" data-t="${t}" title="${THEMES[t].name}">${THEMES[t].icon}</button>`).join('')}</div>
       <div class="kk-tools">
+        ${S.net ? '' : '<button class="kk-btn kk-online" title="Race friends">🌍</button>'}
         <button class="kk-btn kk-dice" title="Make me a track">🎲</button>
         <button class="kk-btn kk-saved" title="Saved tracks">🖼️</button>
         <button class="kk-btn kk-clear" title="Clear">🗑️</button>
       </div></div>`);
     top.querySelectorAll('.kk-theme').forEach(b => click(b, () => { S.theme = b.dataset.t; savePrefs(); setCourse(); render(); }));
     click(top.querySelector('.kk-dice'), randomTrack);
+    click(top.querySelector('.kk-online'), () => { S.phase = 'online'; render(); });
     click(top.querySelector('.kk-saved'), () => { S.phase = 'saved'; render(); });
     click(top.querySelector('.kk-clear'), () => { S.track = null; S.items = []; S.modes = []; setCourse(); render(); });
     ui.appendChild(top);
@@ -168,7 +187,7 @@ export function mount(stage) {
     });
     bar.appendChild(pal);
     const go = el(`<button class="kk-go ${S.track ? '' : 'off'}">🏁</button>`);
-    click(go, () => { if (S.track) startRace(); });
+    click(go, () => { if (S.track) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     ui.appendChild(bar);
     ui.appendChild(el(`<div class="kk-bin">🗑️</div>`));
@@ -337,29 +356,39 @@ export function mount(stage) {
   }
 
   function startRace() {
-    const r3 = getRenderer();
-    if (!r3) { alert('Sorry, this game needs 3D (WebGL).'); return; }
-    endRace();
-    saveTrack();
-    const theme = THEMES[S.theme];
     const humans = S.players.map((p, i) => ({ id: p.id, name: 'P' + (i + 1), look: p.look }));
     const bots = Array.from({ length: S.bots }, (_, k) => ({ id: 'bot' + k, name: BOT_NAMES[k % BOT_NAMES.length], look: botLook(k + (S.theme.length * 3)), cpu: true, level: S.level }));
     // humans start at the back so there's someone to catch
-    const racers = [...bots, ...humans];
+    beginRace([...bots, ...humans], S.laps, humans.map(h => h.id));
+  }
+
+  // localIds: the car id for each of S.players (on this device)
+  function beginRace(racers, laps, localIds, countdown) {
+    const r3 = getRenderer();
+    if (!r3) { alert('Sorry, this game needs 3D (WebGL).'); return false; }
+    endRace();
+    saveTrack();
+    const theme = THEMES[S.theme];
     const race = createRace(S.course, S.items, racers, theme);
-    race.laps = S.laps;
+    race.laps = laps;
+    if (countdown) race.countdown = countdown;
+    if (S.net) race.cars.forEach(c => { c.remote = !isMine(c.id); });
     const world = createWorld(S.course, race.items, theme, { shadows: !location.search.includes('kklow') });
     race.cars.forEach(c => {
-      const hi = humans.findIndex(h => h.id === c.id);
-      world.addKart(c.id, c.look, hi >= 0 && humans.length > 1 ? { text: 'P' + (hi + 1), color: P_COLORS[hi], layer: 10 + hi } : null);
+      const hi = localIds.indexOf(c.id);
+      let tag = null;
+      if (hi >= 0 && localIds.length > 1) tag = { text: 'P' + (hi + 1), color: P_COLORS[hi], layer: 10 + hi };
+      else if (c.remote && !c.cpu) tag = { text: c.name || '🙂', color: c.look.color };
+      world.addKart(c.id, c.look, tag);
     });
-    const views = humans.map((h, i) => ({ car: race.cars.find(c => c.id === h.id), cam: new THREE.PerspectiveCamera(70, 1, 2, 9000), i, first: true }));
-    views.forEach((v, i) => humans.forEach((_, j) => { if (j !== i) v.cam.layers.enable(10 + j); })); // see the other player's tag, not your own
-    R = { race, world, views, engines: views.map(() => makeEngine()), msgs: views.map(() => ({ text: '', until: 0 })), mini: null };
+    const views = localIds.map((id, i) => ({ car: race.cars.find(c => c.id === id), cam: new THREE.PerspectiveCamera(70, 1, 2, 9000), i, first: true }));
+    views.forEach((v, i) => localIds.forEach((_, j) => { if (j !== i) v.cam.layers.enable(10 + j); })); // see the other player's tag, not your own
+    R = { race, world, views, localIds, engines: views.map(() => makeEngine()), msgs: views.map(() => ({ text: '', until: 0 })), mini: null };
     acc = 0;
     S.paused = false;
     S.phase = 'race';
     render();
+    return true;
   }
 
   function layout() {
@@ -401,8 +430,9 @@ export function mount(stage) {
     hud.appendChild(mini);
     R.mini = mini;
     R.miniBg = null;
-    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">⏸</button></div>`);
-    click(top.querySelector('.kk-pause'), () => { S.paused = true; pauseUI(); });
+    const guest = S.net && !S.net.isHost;
+    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">${guest ? '🚪' : '⏸'}</button></div>`);
+    click(top.querySelector('.kk-pause'), () => { if (guest) { leaveOnline(); return; } S.paused = !S.net; pauseUI(); });
     ui.appendChild(top);
     if (S.paused) pauseUI();
   }
@@ -413,30 +443,323 @@ export function mount(stage) {
       <button class="kk-big-btn kk-resume">▶️</button><button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button>
     </div></div></div>`);
     click(box.querySelector('.kk-resume'), () => { S.paused = false; box.remove(); });
-    click(box.querySelector('.kk-again'), () => startRace());
+    click(box.querySelector('.kk-again'), () => raceAgain());
     click(box.querySelector('.kk-edit'), () => toBuild());
     ui.appendChild(box);
   }
 
   function resultsUI() {
     const list = standings(R.race);
+    const guest = S.net && !S.net.isHost;
     const box = el(`<div class="kk-overlay"><div class="kk-card kk-results"><div class="kk-trophy">🏆</div><ol></ol>
-      <div class="kk-actions"><button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button></div></div></div>`);
+      <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : '<button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button>'}</div></div></div>`);
     list.forEach((c, i) => {
-      const hi = S.players.findIndex(p => p.id === c.id);
-      const li = el(`<li class="${hi >= 0 ? 'me' : ''}" style="--pc:${hi >= 0 ? P_COLORS[hi] : '#888'}"><span class="kk-medal">${MEDALS[i] || ORD(i + 1)}</span>${kartImg(c.look)}<b>${hi >= 0 ? 'P' + (hi + 1) : '🤖 ' + c.name}</b></li>`);
+      const hi = R.localIds.indexOf(c.id);
+      const who = hi >= 0 ? 'P' + (hi + 1) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
+      const li = el(`<li class="${hi >= 0 ? 'me' : ''}" style="--pc:${hi >= 0 ? P_COLORS[hi] : c.cpu ? '#888' : c.look.color}"><span class="kk-medal">${MEDALS[i] || ORD(i + 1)}</span>${kartImg(c.look)}<b>${who}</b></li>`);
       box.querySelector('ol').appendChild(li);
     });
-    click(box.querySelector('.kk-again'), () => startRace());
+    click(box.querySelector('.kk-again'), () => raceAgain());
     click(box.querySelector('.kk-edit'), () => toBuild());
     ui.appendChild(box);
   }
 
   function toBuild() {
     endRace();
-    S.phase = 'build';
+    S.phase = S.net && !S.net.isHost ? 'lobby' : 'build';
     S.paused = false;
+    if (S.net && S.net.isHost) S.net.room.setMeta({ state: 'build' });
     render();
+  }
+  function raceAgain() { if (S.net) hostStartRace(); else startRace(); }
+
+  // ------------------------------------------------------------ online
+  const pidOf = p => `${S.net.room.uid}_${p.id}`;
+  const isMine = id => !!S.net && id.startsWith(S.net.room.uid + '_');
+
+  function trackData() {
+    if (!S.track) return null;
+    return {
+      pts: trackToJSON(S.track),
+      items: S.items.map(({ type, x, y }) => ({ type, x: Math.round(x), y: Math.round(y) })),
+      modes: S.course ? S.course.crossings.map(c => c.mode) : [],
+      theme: S.theme,
+    };
+  }
+  function hostSync() {
+    if (!S.net || !S.net.isHost) return;
+    S.net.room.setMeta({ track: trackData(), bots: S.bots, level: S.level, laps: S.laps, hostUid: S.net.room.uid });
+  }
+  function syncMyPlayers() {
+    if (!S.net) return;
+    const now = new Set();
+    S.players.forEach((p, i) => {
+      const id = pidOf(p);
+      now.add(id);
+      S.net.room.setPlayer(id, { look: p.look, name: DRIVER_ICON[p.look.driver] || '🙂', joined: S.net.joined + i });
+    });
+    S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
+    S.net.synced = now;
+  }
+
+  // everyone in the room, same order on every device: robots first, then people
+  function roster() {
+    const m = S.net.meta || {};
+    const humans = Object.entries(S.net.players)
+      .filter(([, p]) => p && p.look)
+      .sort((a, b) => (a[1].joined - b[1].joined) || (a[0] < b[0] ? -1 : 1))
+      .slice(0, MAX_KARTS)
+      .map(([id, p]) => ({ id, look: cleanLook(p.look), name: typeof p.name === 'string' ? p.name.slice(0, 8) : '🙂' }));
+    const nb = Math.max(0, Math.min(6, m.bots | 0, MAX_KARTS - humans.length));
+    const theme = (m.track && m.track.theme) || '';
+    const bots = Array.from({ length: nb }, (_, k) => ({ id: `${m.hostUid}_bot${k}`, name: BOT_NAMES[k % BOT_NAMES.length], look: botLook(k + theme.length * 3), cpu: true, level: Math.max(0, Math.min(2, m.level | 0)) }));
+    return [...bots, ...humans];
+  }
+
+  function goOnline(room) {
+    S.net = { room, isHost: room.isHost, code: room.code, meta: null, players: {}, live: {}, raceId: 0, trackKey: '', synced: new Set(), joined: room.now(), sendAcc: 0, unsubs: [], status: 'ok', seenFx: new Set() };
+    keepAwake(true);
+    S.net.unsubs.push(room.onMeta(onMeta));
+    if (room.onStatus) S.net.unsubs.push(room.onStatus(st => { if (!S.net || S.net.status === st) return; S.net.status = st; if (!R) render(); }));
+    S.net.unsubs.push(room.onPlayers(p => { if (!S.net) return; S.net.players = p; if (['build', 'lobby'].includes(S.phase)) render(); }));
+    S.net.unsubs.push(room.onLive(l => { if (S.net) S.net.live = l; }));
+    syncMyPlayers();
+    hostSync();
+  }
+
+  async function hostRoom() {
+    if (!S.track) return;
+    S.busy = true; render();
+    try {
+      const room = await createRoom(GAME, { state: 'build', raceId: 0 });
+      S.busy = false;
+      goOnline(room);
+      S.phase = 'build';
+    } catch (e) {
+      console.warn('online failed', e);
+      S.busy = false; S.sad = S.time + 2; S.phase = 'build';
+    }
+    render();
+  }
+
+  async function tryJoin(code) {
+    S.busy = true; render();
+    try {
+      const room = await joinRoom(GAME, code);
+      S.busy = false;
+      if (!room) { S.joinCode = ''; S.sad = S.time + 1.5; sound.bump(); render(); return; }
+      goOnline(room);
+      S.phase = 'lobby';
+    } catch (e) {
+      console.warn('online failed', e);
+      S.busy = false; S.joinCode = ''; S.sad = S.time + 2;
+    }
+    render();
+  }
+
+  function leaveOnline(gone = false) {
+    if (!S.net) return;
+    const net = S.net;
+    S.net = null;
+    keepAwake(false);
+    net.unsubs.forEach(u => u && u());
+    net.room.leave();
+    endRace();
+    S.paused = false;
+    S.phase = 'build';
+    if (gone) S.sad = S.time + 2;
+    setCourse();
+    render();
+  }
+
+  function onMeta(m) {
+    if (!S.net) return;
+    if (!m) { leaveOnline(true); return; } // the host left
+    S.net.meta = m;
+    if (!S.net.isHost && m.track) {
+      const key = JSON.stringify(m.track);
+      if (key !== S.net.trackKey) {
+        S.net.trackKey = key;
+        S.track = trackFromJSON(m.track.pts);
+        S.items = resnapItems(m.track.items || [], S.track);
+        S.modes = Array.isArray(m.track.modes) ? m.track.modes : [];
+        if (THEME_IDS.includes(m.track.theme)) S.theme = m.track.theme;
+        if (!R) setCourse();
+      }
+    }
+    if (!S.net.isHost && S.phase === 'lobby') { const b = $('.kk-lobby-info'); if (b) b.innerHTML = lobbyInfo(); }
+    if (m.state === 'race' && m.raceId !== S.net.raceId) startOnlineRace(m);
+    if (m.state === 'build' && !S.net.isHost && (S.phase === 'race' || S.phase === 'results')) { endRace(); setCourse(); S.phase = 'lobby'; render(); }
+  }
+
+  function hostStartRace() {
+    const n = S.net;
+    hostSync();
+    n.room.setMeta({ state: 'race', raceId: ((n.meta && n.meta.raceId) || 0) + 1, startAt: n.room.now() + 3500 });
+  }
+
+  function startOnlineRace(m) {
+    const n = S.net;
+    n.raceId = m.raceId;
+    if (!S.track) return;
+    setCourse();
+    const cd = Math.max(0.01, (m.startAt - n.room.now()) / 1000);
+    if (cd < -60) return; // an old race we missed
+    const laps = LAP_CHOICES.includes(m.laps) ? m.laps : 3;
+    if (beginRace(roster(), laps, S.players.map(pidOf), cd)) n.sendAcc = 0;
+  }
+
+  const r1 = v => Math.round(v * 10) / 10;
+  function sendCars(dt) {
+    const n = S.net, race = R.race;
+    n.sendAcc += dt;
+    if (n.sendAcc < SEND_EVERY) return;
+    n.sendAcc = 0;
+    race.netFx.forEach(e => { if (e.t === undefined) e.t = race.t; });
+    race.netFx = race.netFx.filter(e => race.t - e.t < 3);
+    const hit = [...race.hitIds].slice(-20);
+    for (const c of race.cars) {
+      if (c.remote) continue;
+      n.room.setLive(c.id, {
+        r: n.raceId, t: n.room.now(),
+        x: r1(c.x), y: r1(c.y), z: r1(c.z), a: Math.round(c.a * 1000) / 1000, vx: Math.round(c.vx), vy: Math.round(c.vy),
+        g: r1(c.ground), air: c.air ? 1 : 0, vz: Math.round(c.vz), sv: Math.round(c.slopeVz || 0), sp: Math.round(c.speed), vF: Math.round(c.vF), st: Math.round(c.steer * 100) / 100,
+        b: c.boostT > 0 ? 1 : 0, sh: c.shieldT > 0 ? 1 : 0, s: c.starT > 0 ? 1 : 0, sm: c.smallT > 0 ? 1 : 0, dr: c.drifting ? 1 : 0, dT: r1(c.driftT),
+        fl: r1(c.flipT), tr: r1(c.trickT), td: c.trickDir || 1, rs: r1(c.rescueT), sf: c.surface, sk: Math.round(c.skid),
+        idx: c.idx, dist: c.dist, lap: c.lap, fin: c.finished ? 1 : 0, ft: c.finished ? r1(c.finishT) : -1,
+        o: race.objs.filter(o => o.owner === c.id && !o.remote).map(o => [`${o.owner}:${o.id}`, o.kind, r1(o.x), r1(o.y), r1(o.z), Math.round((o.a || 0) * 100) / 100, Math.round(o.vx || Math.cos(o.a || 0) * (o.sp || 0)), Math.round(o.vy || Math.sin(o.a || 0) * (o.sp || 0)), r1(o.fuse || 0)]),
+        hit,
+        fx: race.netFx.filter(e => e.by === c.id).map(({ id, type, x, y, z, dist }) => ({ id, type, x: r1(x || 0), y: r1(y || 0), z: r1(z || 0), dist: dist || 0 })),
+      });
+    }
+  }
+
+  // friends' karts glide to where they really are; their items can hit our karts
+  function applyRemote(dt) {
+    const n = S.net, race = R.race;
+    const k = 1 - Math.exp(-12 * dt);
+    const now = n.room.now();
+    const ghosts = [], theyHit = new Set();
+    const before = race.events.length;
+    for (const [id, s] of Object.entries(n.live)) {
+      if (isMine(id) || !s || s.r !== n.raceId) continue;
+      const age = Math.min(0.3, Math.max(0, (now - s.t) / 1000));
+      (s.o || []).forEach(o => {
+        if (!Array.isArray(o) || !NET_KINDS.includes(o[1]) || race.hitIds.has(o[0])) return;
+        const [oid, kind, x, y, z, a, vx, vy, fuse] = o;
+        const moving = kind === 'rocket' || kind === 'ball';
+        ghosts.push({ id: String(oid), kind, x: x + (moving ? vx * age : 0), y: y + (moving ? vy * age : 0), z, a, fuse, remote: true, owner: id });
+      });
+      (s.hit || []).forEach(h => theyHit.add(h));
+      (s.fx || []).forEach(e => {
+        if (!e || n.seenFx.has(e.id)) return;
+        n.seenFx.add(e.id);
+        if (e.type === 'zap') { zapAhead(race, e.dist, id); R.flash = 0.25; sound.noise(0.5, 3000, 0.2); }
+        if (e.type === 'boom') boomAt(race, e.x, e.y, e.z, id);
+      });
+    }
+    race.objs = race.objs.filter(o => !o.remote && !theyHit.has(`${o.owner}:${o.id}`)).concat(ghosts);
+    if (race.events.length > before) handleEvents(race.events.splice(before));
+    for (const c of race.cars) {
+      if (!c.remote) continue;
+      const s = n.live[c.id];
+      if (!s || s.r !== n.raceId) {
+        if (race.phase === 'racing' && !c.cpu && !n.players[c.id]) { c.goneT = (c.goneT || 0) + dt; if (c.goneT > 5) c.gone = true; }
+        continue;
+      }
+      c.goneT = 0;
+      const age = Math.min(0.3, Math.max(0, (now - s.t) / 1000));
+      const tx = s.x + s.vx * age, ty = s.y + s.vy * age;
+      if (Math.hypot(tx - c.x, ty - c.y) > 200) { c.x = tx; c.y = ty; c.a = s.a; }
+      else {
+        c.x += (tx - c.x) * k; c.y += (ty - c.y) * k;
+        c.a += Math.atan2(Math.sin(s.a - c.a), Math.cos(s.a - c.a)) * k;
+      }
+      c.z += (s.z - c.z) * k;
+      Object.assign(c, {
+        vx: s.vx, vy: s.vy, ground: s.g, air: !!s.air, vz: s.vz, slopeVz: s.sv, speed: s.sp, vF: s.vF, steer: s.st,
+        boostT: s.b ? 0.5 : 0, shieldT: s.sh ? 1 : 0, starT: s.s ? 1 : 0, smallT: s.sm ? 1 : 0, drifting: !!s.dr, driftT: s.dT,
+        flipT: s.fl, trickT: s.tr, trickDir: s.td, rescueT: s.rs, surface: s.sf, skid: s.sk, idx: s.idx, dist: s.dist, lap: s.lap,
+      });
+      if (s.fin && !c.finished) {
+        c.finished = true; c.finishT = s.ft >= 0 ? s.ft : race.t;
+        if (race.firstFinish < 0) race.firstFinish = race.t;
+        R.world.fx.confetti(c.x, c.y, c.z);
+      }
+    }
+  }
+
+  // keep the iPad screen on while playing online
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && navigator.wakeLock && document.visibilityState === 'visible') {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } else if (!on && wakeLock) { wakeLock.release(); wakeLock = null; }
+    } catch (e) { /* not supported */ }
+  }
+  const onVisible = () => { if (S.net && document.visibilityState === 'visible') keepAwake(true); };
+  document.addEventListener('visibilitychange', onVisible);
+
+  const picsHTML = code => `<div class="kk-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+  function badgeUI() {
+    const list = roster().filter(r => !r.cpu);
+    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => kartImg(r.look)).join('')}</div><button class="kk-btn kk-leave" title="Leave">🚪</button></div>`);
+    click(b.querySelector('.kk-leave'), () => leaveOnline());
+    ui.appendChild(b);
+  }
+  function lobbyInfo() {
+    const m = (S.net && S.net.meta) || {};
+    return `✏️⏳ <span>🤖${Math.min(6, m.bots | 0)}</span> <span>🏁${m.laps || 3}</span>`;
+  }
+  // a friend waits (and can do up their kart) while the host draws
+  function lobbyUI() {
+    const bar = el(`<div class="kk-bar"><div class="kk-panel kk-players"></div><div class="kk-panel kk-lobby-info">${lobbyInfo()}</div></div>`);
+    const pl = bar.querySelector('.kk-players');
+    S.players.forEach((p, i) => {
+      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>P${i + 1}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
+      click(card, () => openGarage(i));
+      click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
+      pl.appendChild(card);
+    });
+    if (S.players.length < 2) {
+      const add = el(`<button class="kk-player kk-add" title="Two players">➕<b>P2</b></button>`);
+      click(add, () => { S.players.push({ id: 'p2', look: cleanLook(null, 1), controls: 'wasd' }); savePrefs(); openGarage(1); });
+      pl.appendChild(add);
+    }
+    ui.appendChild(bar);
+  }
+  function onlineUI() {
+    const box = el(`<div class="kk-overlay"><div class="kk-card">
+      <div class="kk-actions">
+        <button class="kk-choice kk-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🌍</span></button>
+        <button class="kk-choice kk-join"><div class="kk-blank">🔑</div><span>🌍</span></button>
+      </div>
+      ${S.track ? '' : '<div class="kk-hint">✏️ ➜ 🌍</div>'}
+      <button class="kk-btn kk-back">↩️</button>
+    </div></div>`);
+    if (S.track) drawThumb(box.querySelector('canvas'), S.course, S.items, S.theme);
+    click(box.querySelector('.kk-host'), () => { if (S.track) hostRoom(); });
+    click(box.querySelector('.kk-join'), () => { S.joinCode = ''; S.phase = 'join'; render(); });
+    click(box.querySelector('.kk-back'), () => { S.phase = 'build'; render(); });
+    ui.appendChild(box);
+  }
+  function joinUI() {
+    const slots = Array.from({ length: CODE_LEN }, (_, i) => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
+    const box = el(`<div class="kk-overlay"><div class="kk-card">
+      <div class="kk-code kk-slots">${slots}</div>
+      <div class="kk-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
+      <div class="kk-actions"><button class="kk-btn kk-back">↩️</button><button class="kk-btn kk-del-pic">⌫</button></div>
+    </div></div>`);
+    box.querySelectorAll('.kk-keypad button').forEach(b => click(b, () => {
+      if (S.joinCode.length >= CODE_LEN) return;
+      S.joinCode += b.dataset.h;
+      if (S.joinCode.length === CODE_LEN) tryJoin(S.joinCode); else render();
+    }));
+    click(box.querySelector('.kk-del-pic'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
+    click(box.querySelector('.kk-back'), () => { S.phase = 'online'; render(); });
+    ui.appendChild(box);
   }
 
   // ------------------------------------------------------------ HUD
@@ -488,7 +811,7 @@ export function mount(stage) {
     g.drawImage(R.miniBg, 0, 0);
     const order = [...R.race.cars].sort((a, b) => (a.cpu ? 0 : 1) - (b.cpu ? 0 : 1));
     for (const c of order) {
-      const hi = S.players.findIndex(p => p.id === c.id);
+      const hi = R.localIds.indexOf(c.id);
       g.fillStyle = hi >= 0 ? P_COLORS[hi] : c.look.color;
       g.strokeStyle = hi >= 0 ? '#fff' : '#222'; g.lineWidth = hi >= 0 ? 3 : 1.5;
       g.beginPath(); g.arc(ox + c.x * s, oy + c.y * s, hi >= 0 ? 8 : 5.5, 0, 7); g.fill(); g.stroke();
@@ -543,7 +866,9 @@ export function mount(stage) {
     });
     for (const t of touches.values()) if (inputs[t.p]) inputs[t.p][t.k] = true;
     if (TOUCH) for (const p of S.players) { const i = inputs[p.id]; if (!i.down && !keys.isDown('ArrowDown')) i.up = true; }
+    if (S.net) S.players.forEach(p => { inputs[pidOf(p)] = inputs[p.id]; });
     for (const c of R.race.cars) {
+      if (c.remote) continue;
       if (c.cpu || c.finished || R.race.phase === 'done') inputs[c.id] = aiInput(c, R.race);
     }
     return inputs;
@@ -686,14 +1011,15 @@ export function mount(stage) {
         else sound.bump();
       } else sound.bump();
       editor.setScene(S.course, S.items, S.theme);
+      hostSync();
     }
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onUp);
   const onKey = e => {
-    if (e.code === 'Escape' && S.phase === 'race') { S.paused = !S.paused; if (S.paused) pauseUI(); else { const b = $('.kk-pausebox'); if (b) b.remove(); } }
-    if ((e.code === 'Enter' || e.code === 'Space') && S.phase === 'results') startRace();
+    if (e.code === 'Escape' && S.phase === 'race' && !S.net) { S.paused = !S.paused; if (S.paused) pauseUI(); else { const b = $('.kk-pausebox'); if (b) b.remove(); } }
+    if ((e.code === 'Enter' || e.code === 'Space') && S.phase === 'results' && !(S.net && !S.net.isHost)) raceAgain();
   };
   window.addEventListener('keydown', onKey);
 
@@ -710,12 +1036,14 @@ export function mount(stage) {
         acc -= STEP; steps++;
       }
       if (steps === 4) acc = 0;
+      if (S.net && R) { applyRemote(dt); sendCars(dt); }
       R.views.forEach((v, i) => R.engines[i] && R.engines[i].set(v.car.speed, S.phase === 'race', v.car.boostT > 0));
       if (S.phase === 'race' && R.doneAt && S.time - R.doneAt > 1.8) { S.phase = 'results'; render(); }
     }
     if (R && S.paused) R.engines.forEach(e => e && e.set(0, false));
   }, () => {
-    if (S.phase === 'build' || S.phase === 'saved') {
+    if (S.sad && S.time >= S.sad) { S.sad = 0; render(); }
+    if (['build', 'saved', 'online', 'join', 'lobby'].includes(S.phase)) {
       editor.frame({ insets: { top: 76, bottom: 128 }, stroke: S.stroke, drag: S.drag && S.drag.item, hint: !S.track && !S.stroke, time: S.time });
     }
     if (S.garage && preview) preview.frame(1 / 60);
@@ -751,6 +1079,9 @@ export function mount(stage) {
   if (location.search.includes('kkdebug')) window.__kk = () => ({ S, R, renderer });
 
   return () => {
+    if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; }
+    keepAwake(false);
+    document.removeEventListener('visibilitychange', onVisible);
     stopLoop();
     endRace();
     keys.destroy();
