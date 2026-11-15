@@ -12,7 +12,7 @@ import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { createRoom, joinRoom, joinPublic, serverNow, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
-import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
+import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, VILLAGES, townMask, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
 import { createTerrain } from './terrain.js';
 import { createScenery } from './scenery.js';
@@ -209,21 +209,25 @@ export function mount(stage) {
     }
     g.putImageData(img, 0, 0);
     const P = (x, z) => [(x + HALF) / px, (z + HALF) / px];
-    // towns: grey blocks with streets
+    // towns: their wobbly outline, with streets; hamlets as little dots
     for (const t of TOWNS) {
-      g.save(); g.translate(...P(t.x, t.z)); g.rotate(-t.rot);
-      const w = t.w / px, d = t.d / px;
-      g.fillStyle = t.kind === 'city' ? 'rgba(170,166,158,.9)' : 'rgba(200,180,150,.75)'; g.fillRect(-w / 2, -d / 2, w, d);
-      g.strokeStyle = 'rgba(90,90,95,.6)'; g.lineWidth = 1;
-      const step = (t.kind === 'city' ? 130 : 60) / px;
-      for (let x = -w / 2; x <= w / 2; x += step) { g.beginPath(); g.moveTo(x, -d / 2); g.lineTo(x, d / 2); g.stroke(); }
-      for (let y = -d / 2; y <= d / 2; y += step) { g.beginPath(); g.moveTo(-w / 2, y); g.lineTo(w / 2, y); g.stroke(); }
+      const outline = [];
+      for (let ang = 0; ang < Math.PI * 2; ang += 0.08) { let r = 0; while (r < 3000 && townMask(t, t.x + Math.cos(ang) * r, t.z + Math.sin(ang) * r) < 1) r += 15; outline.push(P(t.x + Math.cos(ang) * r, t.z + Math.sin(ang) * r)); }
+      g.save();
+      g.beginPath(); outline.forEach((pt, i) => (i ? g.lineTo(...pt) : g.moveTo(...pt))); g.closePath();
+      g.fillStyle = t.kind === 'city' ? 'rgba(175,170,160,.92)' : 'rgba(205,185,155,.85)'; g.fill();
+      g.clip();
+      g.translate(...P(t.x, t.z)); g.rotate(-t.rot);
+      g.strokeStyle = 'rgba(90,90,95,.55)'; g.lineWidth = 1;
+      const step = (t.kind === 'city' ? 120 : t.kind === 'resort' ? 90 : 70) / px, R2 = 3000 / px;
+      for (let x = -R2; x <= R2; x += step) { g.beginPath(); g.moveTo(x, -R2); g.lineTo(x, R2); g.stroke(); g.beginPath(); g.moveTo(-R2, x); g.lineTo(R2, x); g.stroke(); }
       g.restore();
     }
+    for (const v of VILLAGES) { g.fillStyle = '#c9a77c'; g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 1; g.beginPath(); g.arc(...P(v.x, v.z), 3, 0, 7); g.fill(); g.stroke(); }
     // roads + railway
     for (const r of ROADS) {
       if (!r.path) continue;
-      const line = () => { g.beginPath(); r.path.forEach((p, i) => { const [a, b] = P(p[0], p[2]); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke(); };
+      const line = () => { g.beginPath(); let on = false; r.path.forEach(p => { const [a, b] = P(p[0], p[2]); if (p[5] === 'tunnel') { on = false; return; } on ? g.lineTo(a, b) : g.moveTo(a, b); on = true; }); g.stroke(); };
       g.lineCap = 'round'; g.lineJoin = 'round';
       if (r.kind === 'rail') { g.setLineDash([]); g.strokeStyle = '#5a4030'; g.lineWidth = 3; line(); g.setLineDash([4, 4]); g.strokeStyle = '#f0e6d0'; g.lineWidth = 1.5; line(); g.setLineDash([]); }
       else { g.strokeStyle = '#6b5a3a'; g.lineWidth = 4; line(); g.strokeStyle = '#f6d684'; g.lineWidth = 2.2; line(); }

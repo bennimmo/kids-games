@@ -39,12 +39,26 @@ export const HELIPADS = [];   // filled once the town is known (roof tops)
 export const LANDMARKS = [];  // { icon, name, x, z } for the map (filled by scenery.js)
 
 // Flat areas for towns.
+// towns are blob shaped (see townMask), w/d = rough size
 export const TOWNS = [
-  { id: 'sunny', name: 'Sunny Town', x: -2600, z: 9000, w: 2600, d: 1700, rot: 0.1, kind: 'city' },
-  { id: 'alpine', name: 'Snow Village', x: -3600, z: -3300, w: 700, d: 500, rot: 0.5, kind: 'chalet' },
-  { id: 'oasis', name: 'Oasis', x: 6200, z: 2600, w: 700, d: 600, rot: -0.3, kind: 'adobe' },
-  { id: 'farm', name: 'Farm Village', x: -9200, z: 4400, w: 600, d: 600, rot: 0.2, kind: 'village' },
+  { id: 'sunny', name: 'Sunny Town', x: -2600, z: 9000, w: 2700, d: 1800, rot: 0.1, kind: 'city' },
+  { id: 'alpine', name: 'Snow Village', x: -3600, z: -3300, w: 800, d: 600, rot: 0.5, kind: 'chalet' },
+  { id: 'oasis', name: 'Oasis', x: 6200, z: 2600, w: 900, d: 700, rot: -0.3, kind: 'adobe' },
+  { id: 'farm', name: 'Farm Village', x: -9200, z: 4400, w: 800, d: 700, rot: 0.2, kind: 'village' },
+  { id: 'palm', name: 'Palm Bay', x: 10800, z: 6800, w: 1300, d: 900, rot: 0.6, kind: 'resort' },
+  { id: 'fish', name: 'Fishport', x: -11600, z: 1600, w: 900, d: 700, rot: -0.4, kind: 'village' },
+  { id: 'lake', name: 'Lakeside', x: -5000, z: 300, w: 700, d: 600, rot: 0.3, kind: 'village' },
 ];
+// 0 in the middle of a town, 1 at its edge (wobbly, so towns aren't squares)
+export function townMask(t, x, z) {
+  const c = Math.cos(t.rot), s = Math.sin(t.rot), dx = x - t.x, dz = z - t.z;
+  const u = (dx * c - dz * s) / (t.w / 2), v = (dx * s + dz * c) / (t.d / 2);
+  const a = Math.atan2(v, u);
+  const wob = 1 + 0.22 * Math.sin(a * 3 + t.x * 0.001) + 0.12 * Math.sin(a * 5 + t.z * 0.002) + (N2.n2(x / 400, z / 400)) * 0.15;
+  return Math.hypot(u, v) / wob;
+}
+// little hamlets dotted about (a farm, a few houses)
+export const VILLAGES = [];
 
 export const LAKE = { x: -6200, z: -400, r: 900 };
 
@@ -135,8 +149,13 @@ function flatten(x, z, h) {
     if (d < blend) h = lerp(ap.elev, h, smooth(0, blend, d));
   }
   for (const t of TOWNS) {
-    const d = rectDist(x, z, t.x, t.z, t.w / 2, t.d / 2, t.rot);
-    if (d < 600) h = lerp(t.elev, h, smooth(0, 600, d));
+    if (Math.abs(x - t.x) > t.w * 1.4 || Math.abs(z - t.z) > t.w * 1.4) continue;
+    const m = townMask(t, x, z);
+    if (m < 1.5) h = lerp(t.elev, h, smooth(0.85, 1.5, m));
+  }
+  for (const v of VILLAGES) {
+    const d = Math.hypot(x - v.x, z - v.z);
+    if (d < v.r * 2.2) h = lerp(v.elev, h, smooth(v.r * 0.6, v.r * 2.2, d));
   }
   const ld = Math.hypot(x - LAKE.x, z - LAKE.z) / LAKE.r + (N.fbm(x / 500, z / 500, 2) - 0.5) * 0.5;
   if (ld < 1.6) h = lerp(-9, h, smooth(0.55, 1.6, ld));
@@ -160,6 +179,26 @@ function settle() {
 }
 settle();
 
+// hamlets: flat-ish land away from towns and airports (same every time)
+(function placeVillages() {
+  let seed = 9871;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const kinds = { south: 'cottage', west: 'farm', desert: 'adobe', mountain: 'chalet' };
+  for (let tries = 0; tries < 4000 && VILLAGES.length < 34; tries++) {
+    const x = (rnd() - 0.5) * 26000, z = (rnd() - 0.5) * 26000;
+    const h = rawHeight(x, z);
+    if (h < 4 || h > 700) continue;
+    const sl = Math.abs(rawHeight(x + 80, z) - h) + Math.abs(rawHeight(x, z + 80) - h);
+    if (sl > 14) continue;
+    if (AIRPORTS.some(a => Math.hypot(a.x - x, a.z - z) < a.len * 0.9)) continue;
+    if (TOWNS.some(t => Math.hypot(t.x - x, t.z - z) < Math.max(t.w, t.d) * 0.9 + 400)) continue;
+    if (VILLAGES.some(v => Math.hypot(v.x - x, v.z - z) < 1300)) continue;
+    const { wm, wd, ww } = regionWeights(x, z);
+    const kind = wm > 0.5 ? kinds.mountain : wd > 0.5 ? kinds.desert : ww > 0.5 ? kinds.west : kinds.south;
+    VILLAGES.push({ x, z, r: 110 + rnd() * 70, elev: Math.round(h), kind, seed: Math.floor(rnd() * 1e6) });
+  }
+})();
+
 export function exactHeight(x, z) { return flatten(x, z, rawHeight(x, z)); }
 
 // ---------------------------------------------------------------- the height grid (built once)
@@ -175,7 +214,70 @@ export async function buildHeights(progress) {
     for (let i = 0; i < n; i++) heights[j * n + i] = exactHeight(-HALF + i * CELL, z);
     if (performance.now() - t0 > 30) { progress && progress(j / n); await new Promise(r => setTimeout(r, 0)); t0 = performance.now(); }
   }
+  carveRoutes();
   return heights;
+}
+
+// Roads and the railway get gentle slopes: the ground is cut away or built up under them,
+// with bridges over deep dips and tunnels through big hills (like real ones).
+// Each route gets .path = [[x, y, z, dirX, dirZ, 'bridge' | 'tunnel' | ''], ...] every 20 m.
+function carveRoutes() {
+  const n = GRID + 1;
+  const best = new Map();   // grid index -> [distance, target height]
+  for (const road of ROADS) {
+    const rail = road.kind === 'rail';
+    const pts = splinePath(road.pts, 10);
+    const g = pts.map(p => terrainHeight(p[0], p[2]));
+    // smooth, then limit how steep it can be
+    const W = rail ? 12 : 8, G = (rail ? 0.04 : 0.1) * 10;
+    const t = g.map((_, i) => { let sm = 0, c = 0; for (let k = Math.max(0, i - W); k <= Math.min(g.length - 1, i + W); k++) { sm += Math.max(g[k], 2); c++; } return sm / c; });
+    t[0] = Math.max(g[0], 2); t[t.length - 1] = Math.max(g[g.length - 1], 2);
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < t.length; i++) t[i] = clamp(t[i], t[i - 1] - G, t[i - 1] + G);
+      for (let i = t.length - 2; i >= 0; i--) t[i] = clamp(t[i], t[i + 1] - G, t[i + 1] + G);
+    }
+    const fillMax = rail ? 18 : 9, cutMax = rail ? 30 : 18, halfW = rail ? 8 : 10, blend = CELL * 2.2;
+    const flags = t.map((ti, i) => (ti - g[i] > fillMax || g[i] < 0.5 ? 'bridge' : g[i] - ti > cutMax ? 'tunnel' : ''));
+    // tidy: short gaps between bridges/tunnels join up
+    for (let i = 1; i < flags.length - 1; i++) if (!flags[i] && flags[i - 1] && flags[i - 1] === flags[Math.min(flags.length - 1, i + 3)]) flags[i] = flags[i - 1];
+    pts.forEach((p, i) => {
+      if (flags[i]) return;
+      const R = halfW + blend, ci = Math.round((p[0] + HALF) / CELL), cj = Math.round((p[2] + HALF) / CELL), rc = Math.ceil(R / CELL);
+      for (let dj = -rc; dj <= rc; dj++) for (let di = -rc; di <= rc; di++) {
+        const ii = ci + di, jj = cj + dj;
+        if (ii < 0 || jj < 0 || ii >= n || jj >= n) continue;
+        const d = Math.hypot(-HALF + ii * CELL - p[0], -HALF + jj * CELL - p[2]);
+        if (d > R) continue;
+        const k = jj * n + ii, b = best.get(k);
+        if (!b || d < b[0]) best.set(k, [d, t[i], halfW, blend]);
+      }
+    });
+    road.path = [];
+    for (let i = 0; i < pts.length; i += 2) {
+      const p = pts[i];
+      road.path.push([p[0], t[i] + (rail ? 0.7 : 0.4), p[2], p[3], p[4], flags[i]]);
+    }
+  }
+  for (const [k, [d, ti, halfW, blend]] of best) {
+    const h = heights[k];
+    // don't touch runways / town centres (already flat)
+    heights[k] = lerp(ti, h, smooth(halfW, halfW + blend, d));
+  }
+}
+function splinePath(p, step) {
+  const out = [];
+  const cr = (a, b, c, d, t) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  for (let i = 0; i < p.length - 1; i++) {
+    const a = p[Math.max(0, i - 1)], b = p[i], c = p[i + 1], d = p[Math.min(p.length - 1, i + 2)];
+    const nn = Math.max(1, Math.round(Math.hypot(c[0] - b[0], c[1] - b[1]) / step));
+    for (let k = 0; k < nn; k++) { const t = k / nn; out.push([cr(a[0], b[0], c[0], d[0], t), 0, cr(a[1], b[1], c[1], d[1], t)]); }
+  }
+  out.push([p[p.length - 1][0], 0, p[p.length - 1][1]]);
+  for (let i = 0; i < out.length; i++) {
+    const a = out[Math.max(0, i - 1)], b = out[Math.min(out.length - 1, i + 1)], l = Math.hypot(b[0] - a[0], b[2] - a[2]) || 1;
+    out[i][3] = (b[0] - a[0]) / l; out[i][4] = (b[2] - a[2]) / l;
+  }
+  return out;
 }
 
 // height of the terrain mesh (triangles split the same way as the mesh)
@@ -258,7 +360,7 @@ export function biomeAt(x, z) {
 
 export function placeName(x, z) {
   for (const ap of AIRPORTS) if (Math.hypot(x - ap.x, z - ap.z) < ap.len * 0.8) return ap.icon + ' ' + ap.name;
-  for (const t of TOWNS) if (Math.hypot(x - t.x, z - t.z) < Math.max(t.w, t.d) * 0.8) return '🏘️ ' + t.name;
+  for (const t of TOWNS) if (Math.hypot(x - t.x, z - t.z) < Math.max(t.w, t.d) * 0.7) return '🏘️ ' + t.name;
   if (Math.hypot(x - CARRIER.x, z - CARRIER.z) < 1200) return '🚢 Carrier';
   if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r * 1.5) return '🦆 Duck Lake';
   const b = biomeAt(x, z);
@@ -273,7 +375,11 @@ export const ROADS = [
   { kind: 'road', pts: [[-2900, 8600], [-5000, 7700], [-7400, 6000], [-9200, 4400], [-8400, 3000], [-7350, 2350]] },
   { kind: 'road', pts: [[4200, 7900], [5100, 6600], [5900, 4600], [6200, 2600], [7300, 900], [8350, -300]] },
   { kind: 'road', pts: [[-2400, 8400], [-2000, 6000], [-2500, 3000], [-3100, 300], [-3600, -3300], [-2500, -4500], [-1600, -4950]] },
-  { kind: 'rail', pts: [[-3300, 8500], [-1500, 7300], [600, 6500], [3000, 6250], [5000, 5000], [6000, 3100]] },
+  { kind: 'road', pts: [[5900, 4600], [7800, 5300], [9400, 6200], [10800, 6800]] },
+  { kind: 'road', pts: [[-9200, 4400], [-10400, 3000], [-11600, 1600]] },
+  { kind: 'road', pts: [[-2500, 3000], [-3600, 1500], [-5000, 300]] },
+  // the railway: Forest Farm - Farm Village - Sunny Town - past the airport - Oasis - Desert Strip
+  { kind: 'rail', pts: [[-7300, 2600], [-8400, 3600], [-8800, 4900], [-7200, 6700], [-5200, 7900], [-3400, 8300], [-1500, 7300], [600, 6500], [3000, 6250], [5000, 5000], [6000, 3100], [7000, 1500], [8000, 200]] },
 ];
 // smooth path, a point every `step` metres: [[x, y, z, dirX, dirZ], ...]
 export function roadPath(road, step = 15) {
