@@ -36,6 +36,14 @@ Then open http://localhost:8000
 - `sound.js` – little beeps, no audio files needed
 - `coming-soon.js` – placeholder screen
 
+## 📞 Friends (on the menu)
+- Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
+- Up to 4 friends in a group. Anyone in the group can let more in.
+- Friend bubbles float on the side over every game. Drag them up/down or to the other side.
+- Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
+- `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
+- Some networks block direct links: a TURN server would fix that (not added yet).
+
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
 3D flight simulator with an easy mode. Built with three.js.

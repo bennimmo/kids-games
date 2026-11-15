@@ -1,6 +1,8 @@
 import { GAMES } from './games.js';
 import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX } from './engine/profile.js';
+import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
+import { nameChanged } from './engine/friends.js';
 
 const app = document.getElementById('app');
 let cleanup = null;
@@ -94,7 +96,7 @@ function editName() {
   const input = o.querySelector('input');
   input.value = myName();
   const close = () => { o.remove(); showMenu(); };
-  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); setMyName(input.value); sound.pop(); close(); });
+  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); setMyName(input.value); nameChanged(); sound.pop(); close(); });
   o.querySelector('.name-clear').addEventListener('click', () => { input.value = ''; input.focus(); });
   o.addEventListener('click', e => { if (e.target === o) close(); });
   document.body.appendChild(o);
@@ -107,6 +109,7 @@ function showMenu() {
       ${nameButton()}
       ${appButtons()}
       <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
+      ${friendBarHTML()}
       <div class="grid">
         ${GAMES.map(g => `
           <button class="tile" style="--c:${g.color}" data-id="${g.id}">
@@ -116,6 +119,7 @@ function showMenu() {
       </div>
     </div>`;
   wireAppButtons();
+  refreshFriendBar();
   app.querySelector('.name-btn').addEventListener('click', () => { sound.pop(); editName(); });
   app.querySelectorAll('.tile').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -146,8 +150,9 @@ function route() {
   const id = location.hash.replace(/^#\/?/, '');
   const game = GAMES.find(g => g.id === id);
   if (game) showGame(game);
-  else showMenu();
+  else { showMenu(); newCode(); } // a new friend code every visit
 }
 
+mountFriends({ editName });
 window.addEventListener('hashchange', route);
 route();
