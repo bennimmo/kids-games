@@ -4,7 +4,7 @@ import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import {
-  onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup,
+  onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
@@ -13,7 +13,7 @@ const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da'
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
 const picsHTML = c => codeToPics(c).map(p => `<span>${p}</span>`).join('');
 
-let layer, dock, knockEl, panel = null;
+let layer, dock, list, micBtn, knockEl, panel = null;
 let onEditName = () => {};
 
 // Keep taps on our things away from the game underneath.
@@ -41,13 +41,12 @@ function wireDrag() {
   let start = null;
   dock.addEventListener('pointerdown', e => {
     start = { x: e.clientX, y: e.clientY, top: dock.offsetTop, moved: false, id: e.pointerId };
-    dock.setPointerCapture(e.pointerId);
   });
   dock.addEventListener('pointermove', e => {
     if (!start || e.pointerId !== start.id) return;
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!start.moved && Math.hypot(dx, dy) < 8) return;
-    start.moved = true;
+    if (!start.moved) { start.moved = true; try { dock.setPointerCapture(e.pointerId); } catch (er) { /* */ } }
     dock.classList.add('dragging');
     dock.style.top = (start.top + dy) + 'px';
     dock.style.transform = `translateX(${dx}px)`;
@@ -70,25 +69,28 @@ function wireDrag() {
 
 function renderBubbles(s) {
   const want = new Map(s.friends.map(f => [f.uid, f]));
-  for (const el of [...dock.children]) if (!want.has(el.dataset.uid)) el.remove();
+  for (const el of [...list.children]) if (!want.has(el.dataset.uid)) el.remove();
   for (const f of s.friends) {
-    let el = dock.querySelector(`[data-uid="${f.uid}"]`);
+    let el = list.querySelector(`[data-uid="${f.uid}"]`);
     if (!el) {
       el = document.createElement('div');
       el.className = 'fb';
       el.dataset.uid = f.uid;
-      // <video> is ready for when friends turn their camera on (unmute it for voice).
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><div class="fb-name"></div>`;
-      dock.appendChild(el);
+      // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      list.appendChild(el);
       sound.pop();
     }
     el.classList.toggle('on', f.status === 'on');
     el.querySelector('.fb-face b').textContent = [...f.name][0] || '?';
     el.querySelector('.fb-name').textContent = f.name;
-    const v = el.querySelector('video');
-    if (v.srcObject !== f.stream) v.srcObject = f.stream || null;
+    const v = el.querySelector('video'), a = el.querySelector('audio');
+    if (v.srcObject !== (f.stream || null)) v.srcObject = f.stream || null;
+    if (a.srcObject !== (f.stream || null)) { a.srcObject = f.stream || null; if (f.stream) a.play().catch(() => {}); }
     el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
   }
+  micBtn.textContent = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : (s.muted || s.micStatus !== 'on') ? '🔇' : '🎤';
+  micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   dock.hidden = !s.friends.length;
   placeDock();
 }
@@ -186,6 +188,7 @@ function renderPanel(s) {
       </div>`}
       ${s.friends.length ? `<div class="fsec">
         <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${nameHTML(f.name)}</span>`).join('')}</div>
+        <select class="fmic" aria-label="Microphone" hidden></select>
         <button class="app-btn fleave" aria-label="End call">👋</button>
       </div>` : ''}
       <button class="app-btn fclose" aria-label="Close">✔️</button>
@@ -206,6 +209,13 @@ function renderPanel(s) {
   });
   q('.fcancel')?.addEventListener('click', () => { sound.pop(); cancelAsk(); });
   q('.fleave')?.addEventListener('click', () => { sound.pop(); leaveGroup(); });
+  const sel = q('.fmic');
+  if (sel && s.micStatus === 'on') listMics().then(mics => {
+    if (!panel || !sel.isConnected || mics.length < 2) return;
+    sel.innerHTML = mics.map(m => `<option value="${m.id.replace(/"/g, '')}"${m.chosen ? ' selected' : ''}>🎤 ${m.label.replace(/[<>&"]/g, '')}</option>`).join('');
+    sel.hidden = false;
+    sel.addEventListener('change', () => { sound.pop(); chooseMic(sel.value); });
+  });
 }
 
 // ------------------------------------------------------------ start
@@ -214,9 +224,21 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = '<div class="fb-dock" hidden></div><div class="app-help fk" hidden></div>';
+  layer.innerHTML = '<div class="fb-dock" hidden><button class="fb-mic" aria-label="Microphone">🎤</button><div class="fb-list"></div></div><div class="app-help fk" hidden></div>';
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
+  list = layer.querySelector('.fb-list');
+  micBtn = layer.querySelector('.fb-mic');
+  micBtn.addEventListener('click', () => {
+    const s = friendState();
+    sound.pop();
+    if (s.micStatus === 'on') setMuted(!s.muted);
+    else { setMuted(false); startMic(); }
+  });
+  // Browsers only play sound after a tap: any tap starts friends' voices if they were blocked.
+  document.addEventListener('pointerdown', () => {
+    layer.querySelectorAll('.fb audio').forEach(a => { if (a.srcObject && a.paused) a.play().catch(() => {}); });
+  }, true);
   knockEl = layer.querySelector('.fk');
   shield(dock); shield(knockEl);
   wireDrag();

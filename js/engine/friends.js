@@ -41,11 +41,12 @@ const answered = new Set();
 let outgoing = null;                  // { code, name, status: asking|no|full|none|self|offline }
 let outUnsub = null, outTimer = null, outToken = 0;
 let group = null;                     // { id, peers: Map(uid -> peer), unsubs, live, timer }
+let mic = null, micStatus = 'off', muted = false; // micStatus: off | asking | on | denied
 
 const subs = new Set();
 const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
-  inGroup: !!group,
+  inGroup: !!group, micStatus, muted,
   friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, status: p.status, stream: p.stream })) : [],
 });
 let emitQueued = false;
@@ -56,6 +57,69 @@ function emit() {
 }
 export function onFriends(cb) { subs.add(cb); cb(state()); return () => subs.delete(cb); }
 export const friendState = state;
+export const friendPeers = () => (group ? [...group.peers.values()] : []); // for tests / debugging
+
+// ------------------------------------------------------------ voice
+
+// Mic on (asks permission the first time). Sent to every friend in the group.
+export async function startMic() {
+  if (mic || micStatus === 'asking') return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micStatus = 'denied'; emit(); return; }
+  micStatus = 'asking'; emit();
+  try {
+    const m = await getMic();
+    if (!group) { m.getTracks().forEach(t => t.stop()); micStatus = 'off'; emit(); return; } // left meanwhile
+    mic = m; micStatus = 'on';
+    mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
+    group.peers.forEach(addMic);
+  } catch (e) { micStatus = 'denied'; }
+  emit();
+}
+const MIC_KEY = 'kg-mic';
+const savedMic = () => { try { return localStorage.getItem(MIC_KEY) || ''; } catch (e) { return ''; } };
+function getMic() {
+  const id = savedMic();
+  return navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(id ? { deviceId: { ideal: id } } : {}) },
+    video: false,
+  });
+}
+// [{ id, label, chosen }] (names only show once the mic has been allowed)
+export async function listMics() {
+  try {
+    const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId);
+    const cur = mic && mic.getAudioTracks()[0] && mic.getAudioTracks()[0].getSettings().deviceId;
+    return all.map((d, i) => ({ id: d.deviceId, label: d.label || `Mic ${i + 1}`, chosen: d.deviceId === cur }));
+  } catch (e) { return []; }
+}
+// Swap to another mic without dropping the call.
+export async function chooseMic(id) {
+  try { localStorage.setItem(MIC_KEY, id); } catch (e) { /* */ }
+  if (!mic) return startMic();
+  const m = await getMic().catch(() => null);
+  if (!m) return;
+  const t = m.getAudioTracks()[0];
+  t.enabled = !muted;
+  const old = mic;
+  mic = m;
+  if (group) group.peers.forEach(p => { if (p.micSender) p.micSender.replaceTrack(t).catch(() => {}); else addMic(p); });
+  old.getTracks().forEach(x => x.stop());
+  emit();
+}
+function stopMic() {
+  if (mic) mic.getTracks().forEach(t => t.stop());
+  mic = null; micStatus = 'off'; emit();
+}
+function addMic(p) {
+  if (!mic || p.micSender || p.pc.signalingState === 'closed') return;
+  const t = mic.getAudioTracks()[0];
+  if (t) p.micSender = p.pc.addTrack(t, mic); // starts a new hand-shake by itself
+}
+export function setMuted(m) {
+  muted = !!m;
+  if (mic) mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
+  emit();
+}
 
 // ------------------------------------------------------------ my code
 
@@ -215,6 +279,7 @@ async function joinGroup(id) {
   keep();
   g.timer = setInterval(keep, 20000);
   emit();
+  startMic();
 
   let first = true, online = true;
   g.unsubs.push(D.onValue(D.ref(fb.db, '.info/connected'), s => {
@@ -257,6 +322,7 @@ export async function leaveGroup() {
   clearInterval(g.timer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
+  stopMic();
   emit();
   const { D, uid } = fb;
   const meR = ref(`${g.id}/players/${uid}_m`), liveR = ref(`${g.id}/live/${uid}_m`);
@@ -323,6 +389,7 @@ function makePeer(g, theirUid, theirSid) {
   };
   dc.onclose = () => setStatus('connecting');
   peer.dc = dc;
+  addMic(peer);
 
   async function handle(msg) {
     if (closed || !msg) return;

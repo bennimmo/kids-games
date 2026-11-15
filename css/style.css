@@ -215,3 +215,13 @@ html, body { overscroll-behavior: none; }
   background: rgba(0,0,0,.45); color: #fff; font-size: 13px; font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.fb-list { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.fb audio { display: none; }
+.fb-mic {
+  width: 48px; height: 48px; border: 0; border-radius: 50%; background: #a5d6a7; font-size: 24px; cursor: pointer;
+  box-shadow: 0 4px 0 rgba(0,0,0,.2); padding: 0;
+}
+.fb-mic.off { background: #ffab91; }
+.fb-mic:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.2); }
+.fmic { max-width: 100%; font-family: inherit; font-size: 18px; padding: 8px 12px; border-radius: 14px; border: 3px solid #b388ff; background: #fff; color: var(--ink); }
+.fmic[hidden] { display: none; }
