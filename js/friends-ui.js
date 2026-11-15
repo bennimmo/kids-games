@@ -2,7 +2,7 @@
 // and the floating friend bubbles that stay on top of every game.
 import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
-import { sound } from './engine/sound.js';
+import { sound, resetAudio } from './engine/sound.js';
 import {
   onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
@@ -242,8 +242,13 @@ export function mountFriends({ editName }) {
   knockEl = layer.querySelector('.fk');
   shield(dock); shield(knockEl);
   wireDrag();
-  let wasAsking = false;
+  let wasAsking = false, micWas = 'off', needAudioReset = false;
+  const onMenu = () => !location.hash.replace(/^#\/?/, '');
+  addEventListener('hashchange', () => { if (needAudioReset && onMenu()) { needAudioReset = false; resetAudio(); } });
   onFriends(s => {
+    // mic just came on: fresh sound context (now, or when back on the menu so games keep theirs)
+    if (s.micStatus === 'on' && micWas !== 'on') { if (onMenu()) resetAudio(); else needAudioReset = true; }
+    micWas = s.micStatus;
     renderBubbles(s);
     renderKnock(s);
     renderBar(s);

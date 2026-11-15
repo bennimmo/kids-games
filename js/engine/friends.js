@@ -67,7 +67,11 @@ export async function startMic() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micStatus = 'denied'; emit(); return; }
   micStatus = 'asking'; emit();
   try {
-    const m = await getMic();
+    const m = await getMic().catch(e => { // chosen mic gone (unplugged): use the normal one
+      if (!savedMic()) throw e;
+      try { localStorage.removeItem(MIC_KEY); } catch (er) { /* */ }
+      return getMic();
+    });
     if (!group) { m.getTracks().forEach(t => t.stop()); micStatus = 'off'; emit(); return; } // left meanwhile
     mic = m; micStatus = 'on';
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
@@ -80,16 +84,21 @@ const savedMic = () => { try { return localStorage.getItem(MIC_KEY) || ''; } cat
 function getMic() {
   const id = savedMic();
   return navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(id ? { deviceId: { ideal: id } } : {}) },
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(id ? { deviceId: { exact: id } } : {}) },
     video: false,
   });
 }
 // [{ id, label, chosen }] (names only show once the mic has been allowed)
 export async function listMics() {
   try {
-    const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId);
-    const cur = mic && mic.getAudioTracks()[0] && mic.getAudioTracks()[0].getSettings().deviceId;
-    return all.map((d, i) => ({ id: d.deviceId, label: d.label || `Mic ${i + 1}`, chosen: d.deviceId === cur }));
+    // Windows/Chrome also lists "default" and "communications" copies of real mics: skip those.
+    const all = (await navigator.mediaDevices.enumerateDevices())
+      .filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    const t = mic && mic.getAudioTracks()[0];
+    const set = t ? t.getSettings() : {};
+    let cur = all.find(d => d.deviceId === set.deviceId) || all.find(d => set.groupId && d.groupId === set.groupId);
+    if (!cur && t) cur = all.find(d => d.label === t.label);
+    return all.map((d, i) => ({ id: d.deviceId, label: d.label || `Mic ${i + 1}`, chosen: d === cur }));
   } catch (e) { return []; }
 }
 // Swap to another mic without dropping the call.

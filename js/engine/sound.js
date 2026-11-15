@@ -43,6 +43,14 @@ function noise(dur = 0.4, freq = 1000, vol = 0.3) {
   } catch (e) { /* sound is optional */ }
 }
 
+// Start sound again with a fresh context. iPad/Safari: turning the mic on changes the
+// sound hardware's speed, and an older context then plays too high/low.
+export function resetAudio() {
+  const old = ctx;
+  ctx = null;
+  if (old) old.close().catch(() => {});
+}
+
 // Shared audio context (for things like engine sounds).
 export function audioCtx() {
   try { return ac(); } catch (e) { return null; }
