@@ -15,6 +15,7 @@ import { myName } from '../../js/engine/profile.js';
 import { makeRoom, findRoom, connect, CODE_PICS, MAP_IDS } from './online.js';
 
 const TURN_TIME = 45;
+const NEXT_GAME = 15;   // online: seconds until the next game starts
 const MAX_TANKS = 6;
 const LOOK_KEY = 'tt-look', LOCAL_KEY = 'tt-local';
 const DANCES = ['bounce', 'spin', 'wiggle', 'flip'];
@@ -335,8 +336,15 @@ export function mount(stage) {
       match.over = { t: 0, kind: DANCES[Math.floor(Math.random() * DANCES.length)] };
       if (isDemo()) { setTimeout(() => { if (!closed && isDemo() && match.world === w) startDemo(); }, 3500); }
       else { sound.win(); winCard(); }
+      if (match.mode === 'online') match.over.nextAt = time + NEXT_GAME;
     }
     match.over.t += dt;
+    if (match.mode === 'online' && match.over.nextAt) {   // next game starts by itself
+      const left = Math.max(0, Math.ceil(match.over.nextAt - time));
+      const el = ui.querySelector('.tt-next b');
+      if (el && el.textContent !== String(left)) el.textContent = left;
+      if (left <= 0 && net && net.isHost && !match.over.started) { match.over.started = true; hostStart(); }
+    }
     if (w.winner >= 0 && Math.random() < dt * 4) {
       const t = w.tanks[w.winner];
       renderer.confetti(t.x + (Math.random() - 0.5) * 300, t.y - 250);
@@ -708,31 +716,44 @@ export function mount(stage) {
     const title = t ? `🏆 ${esc(t.look.name)} wins!` : '🤝 Nobody wins!';
     let buttons;
     if (match.mode === 'online') {
+      const next = `<p class="tt-msg tt-next">Next game in <b>${NEXT_GAME}</b>… 🔁</p>`;
       buttons = net && net.isHost
-        ? `<button class="tt-btn" data-a="again">🔁 Play again</button><button class="tt-btn alt" data-a="lobby">👥 Lobby</button>`
-        : `<p class="tt-msg">Waiting for the host… ⏳</p><button class="tt-btn alt" data-a="leave">🚪 Leave</button>`;
+        ? `${next}<div class="tt-row"><button class="tt-btn" data-a="again">▶ Play now</button><button class="tt-btn alt" data-a="lobby">👥 Room</button></div>`
+        : `${next}<button class="tt-small" data-a="leave">🚪 Leave room</button>`;
     } else buttons = `<button class="tt-btn" data-a="again">🔁 Play again</button><button class="tt-btn alt" data-a="menu">🏠 Menu</button>`;
     setTimeout(() => {
       if (closed || !match || match.world !== w || screen !== 'game') return;
-      const wrap = card(`${t ? '<canvas class="tt-big-tank"></canvas>' : ''}<h2>${title}</h2><div class="tt-row">${buttons}</div>`);
+      const wrap = card(`${t ? '<canvas class="tt-big-tank"></canvas>' : ''}<h2>${title}</h2>${match.mode === 'online' ? buttons : `<div class="tt-row">${buttons}</div>`}`);
       wrap.classList.add('low');
       if (t) tankIcon(wrap.querySelector('canvas'), t.look, 120);
       wrap.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
         sound.pop();
         const a = b.dataset.a;
-        if (a === 'again') { if (match.mode === 'online') hostStart(); else startLocal(); }
+        if (a === 'again') { if (match.mode === 'online') { match.over.started = true; hostStart(); } else startLocal(); }
         else if (a === 'menu') { startDemo(); show('local'); }
         else if (a === 'lobby') { net.setLobby({ phase: 'lobby' }); }
-        else if (a === 'leave') leaveRoom();
+        else if (a === 'leave') confirmLeave();
       }));
     }, 2200);
   }
 
   function quitCard() {
     const online = match && match.mode === 'online';
+    if (online) {   // the host can take everyone back to the room; friends can leave
+      const host = net && net.isHost;
+      const wrap = card(`<h2>${host ? 'Stop this game?' : 'Leave the room?'}</h2><div class="tt-row">
+        <button class="tt-btn" data-a="no">▶ Keep playing</button>
+        ${host ? '<button class="tt-btn alt" data-a="room">👥 Everyone back to room</button>' : ''}
+        <button class="tt-btn alt" data-a="leave">🚪 Leave room</button></div>`);
+      wrap.querySelector('[data-a="no"]').addEventListener('click', () => { sound.pop(); hideCard(); });
+      const room = wrap.querySelector('[data-a="room"]');
+      if (room) room.addEventListener('click', () => { sound.pop(); net.setLobby({ phase: 'lobby' }); });
+      wrap.querySelector('[data-a="leave"]').addEventListener('click', () => { sound.pop(); leaveRoom(); });
+      return;
+    }
     const wrap = card(`<h2>Stop the game?</h2><div class="tt-row">
       <button class="tt-btn" data-a="no">▶ Keep playing</button>
-      <button class="tt-btn alt" data-a="yes">${online ? '🚪 Leave' : '⏹️ Stop'}</button></div>`);
+      <button class="tt-btn alt" data-a="yes">⏹️ Stop</button></div>`);
     wrap.querySelector('[data-a="no"]').addEventListener('click', () => { sound.pop(); hideCard(); if (!match.ready) readyCard(); });
     wrap.querySelector('[data-a="yes"]').addEventListener('click', () => {
       sound.pop();
@@ -918,6 +939,31 @@ export function mount(stage) {
     sound.win();
     show('lobby');
   }
+  // Are you sure? (so nobody leaves the room by accident)
+  function confirmLeave(thenHome = false) {
+    const old = ui.querySelector('.tt-modal.leave');
+    if (old) old.remove();
+    const m = document.createElement('div');
+    m.className = 'tt-modal leave';
+    const host = net && net.isHost;
+    m.innerHTML = `<div class="tt-edit"><h2>${host ? 'Close the room for everyone?' : 'Leave the room?'}</h2>
+      <div class="tt-row"><button class="tt-btn" data-a="stay">👍 Stay</button><button class="tt-btn alt" data-a="go">🚪 Leave</button></div></div>`;
+    ui.appendChild(m);
+    m.querySelector('[data-a="stay"]').addEventListener('click', () => { sound.pop(); m.remove(); });
+    m.querySelector('[data-a="go"]').addEventListener('click', async () => {
+      sound.pop(); m.remove();
+      await leaveRoom();
+      if (thenHome) location.hash = '';
+    });
+  }
+  const onHomeClick = e => {
+    if (!net || closed) return;
+    if (!(e.target.closest && e.target.closest('.home-btn'))) return;
+    e.stopPropagation(); e.preventDefault();
+    confirmLeave(true);
+  };
+  document.addEventListener('click', onHomeClick, true);
+
   async function leaveRoom() {
     const n = net;
     net = null;
@@ -989,7 +1035,7 @@ export function mount(stage) {
     }));
     p.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => { sound.pop(); net.setLobby({ map: b.dataset.map }); }));
     const q = s => p.querySelector(s);
-    q('[data-a="leave"]').addEventListener('click', () => { sound.pop(); leaveRoom(); });
+    q('[data-a="leave"]').addEventListener('click', () => { sound.pop(); confirmLeave(); });
     q('[data-a="tank"]').addEventListener('click', () => { sound.pop(); editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); if (net) net.setLook(l); lastLobbyHtml = ''; lobbyScreen(); }); });
     const go = q('[data-a="go"]');
     if (go) go.addEventListener('click', () => { sound.pop(); hostStart(); });
@@ -1002,7 +1048,7 @@ export function mount(stage) {
       ...players.map(pl => ({ pid: pl.pid, look: pl.look })),
       ...lobbyBots().map(b => ({ bot: b.level === 'tricky' ? 'tricky' : 'easy', look: sanitizeLook(b.look) })),
     ].slice(0, MAX_TANKS);
-    if (roster.length < 2) return;
+    if (roster.length < 2) { net.setLobby({ phase: 'lobby' }); return; }   // everyone else left: wait in the room
     const meta = net.meta() || {};
     net.startGame({
       id: Math.random().toString(36).slice(2, 10),
@@ -1024,6 +1070,7 @@ export function mount(stage) {
     clearTimeout(bannerTimer);
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('keyup', onKey);
+    document.removeEventListener('click', onHomeClick, true);
     if (net) net.leave();
     view.destroy();
     root.remove();
