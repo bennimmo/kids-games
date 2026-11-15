@@ -377,7 +377,7 @@ export function mount(stage) {
   // ---------------------------------------------------------------- screens
   const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
   const click = (node, fn) => node && node.addEventListener('click', e => { e.preventDefault(); fn(e); });
-  const picsHTML = code => `<div class="sd-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+  const picsHTML = code => `<div class="sd-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
 
   function render() {
     ui.innerHTML = '';
@@ -462,7 +462,7 @@ export function mount(stage) {
     const box = el(`<div class="sd-overlay"><div class="sd-card">
       <h2>🌍 Race a friend</h2>
       <div class="sd-row sd-play">
-        <button class="sd-go sd-host"><span>🚀</span>Make a room</button>
+        <button class="sd-go sd-host"><span>🏠</span>Make a room</button>
         <button class="sd-go sd-join"><span>🔑</span>Join a room</button>
       </div>
       ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}

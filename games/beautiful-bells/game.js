@@ -177,7 +177,7 @@ export function mount(stage) {
             <span class="bb-roombar-f">${friendDots()}</span>
             <button class="bb-leave">Leave 🚪</button>
           </div>` : `
-          <button class="bb-friends-btn">👭 Play with friends</button>`}
+          <button class="bb-friends-btn">🌍 Play with friends</button>`}
         <p class="bb-sub">Pick your girl!</p>
         <div class="bb-girls">
           ${GIRLS.map(g => `

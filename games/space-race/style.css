@@ -86,3 +86,4 @@
   .sd-place { font-size: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } .sd-wait, .sd-netwait, .sd-ships .sd-empty { animation: none; } }
+.sd-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
