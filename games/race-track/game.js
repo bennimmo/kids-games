@@ -12,21 +12,26 @@ import { sound, audioCtx } from '../../js/engine/sound.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
-import { createRace, stepRace, LAPS, lapsDone, standings } from './sim.js';
+import { createRace, stepRace, LAPS, lapsDone, standings, withAutoBoxes, boxesFromItems, PICKUPS } from './sim.js';
+import { aiInput } from './ai.js';
 import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb, STYLES, DECALS } from './render.js';
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#fb8c00', '#8e24aa', '#ec407a', '#212121'];
-const EXTRAS = ['jump', 'boost', 'water', 'mud', 'ice', 'tunnel', 'cone', 'tyres', 'tree', 'stand'];
+const EXTRAS = ['box', 'jump', 'boost', 'water', 'mud', 'ice', 'tunnel', 'cone', 'tyres', 'tree', 'stand'];
+const ITEM_ICON = { rocket: '🥊', banana: '🍌', turbo: '⚡' };
+const CPU_KEY = 'raffy-race-cpu';
 const STEP = 1 / 60;
 const MEDALS = ['🥇', '🥈', '🥉', '🏅'];
 
 const CONTROLS = {
-  arrows: k => ({ up: k.isDown('ArrowUp'), down: k.isDown('ArrowDown'), left: k.isDown('ArrowLeft'), right: k.isDown('ArrowRight') }),
-  wasd: k => ({ up: k.isDown('KeyW'), down: k.isDown('KeyS'), left: k.isDown('KeyA'), right: k.isDown('KeyD') }),
+  arrows: k => ({ up: k.isDown('ArrowUp'), down: k.isDown('ArrowDown'), left: k.isDown('ArrowLeft'), right: k.isDown('ArrowRight'),
+    fire: k.isDown('Enter') || k.isDown('ShiftRight') || k.isDown('Slash') || k.isDown('NumpadEnter') }),
+  wasd: k => ({ up: k.isDown('KeyW'), down: k.isDown('KeyS'), left: k.isDown('KeyA'), right: k.isDown('KeyD'),
+    fire: k.isDown('Space') || k.isDown('ShiftLeft') || k.isDown('KeyE') }),
 };
 const KEY_LABELS = { arrows: ['▲', '◀', '▼', '▶'], wasd: ['W', 'A', 'S', 'D'] };
 const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼' };
+const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼', fire: '💥' };
 const PLAYERS_KEY = 'raffy-race-players-v1';
 const GAME = 'raffy-race';
 const SEND_EVERY = 1 / 15;
@@ -80,6 +85,8 @@ export function mount(stage) {
     items: [],
     players: loadPlayers(),
     customFor: null,      // player id whose customise box is open
+    cpuOn: (() => { try { return localStorage.getItem(CPU_KEY) !== 'off'; } catch (e) { return true; } })(),
+    raceItems: [],        // extras used in this race (+ automatic item boxes)
     race: null,
     stroke: null,
     drag: null,
@@ -99,9 +106,22 @@ export function mount(stage) {
   const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
   const click = (node, fn) => node.addEventListener('click', e => { e.stopPropagation(); sound.pop(); fn(e); });
 
+  // the computer car joins when you play alone (not online)
+  function cpuPlayer() {
+    const used = S.players.map(p => p.color);
+    return { id: 'cpu', cpu: true, color: COLORS.find(c => !used.includes(c)) || '#757575', style: 'truck', decal: 'flames' };
+  }
+  const cpuPlaying = () => !S.net && S.players.length === 1 && S.cpuOn;
+  const racers = () => (S.net ? roster() : cpuPlaying() ? [...S.players, cpuPlayer()] : S.players);
+  function setCpu(on) {
+    S.cpuOn = on;
+    try { localStorage.setItem(CPU_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+    render();
+  }
+
   function previewCars() {
     if (!S.track) return [];
-    return createRace(S.track, S.net ? roster() : S.players).cars;
+    return createRace(S.track, racers()).cars;
   }
 
   // ---------- screens ----------
@@ -149,6 +169,17 @@ export function mount(stage) {
       if (x) click(x, () => { S.players.splice(i, 1); S.customFor = null; savePlayers(S.players); syncMyPlayers(); render(); });
       pl.appendChild(card);
     });
+    if (cpuPlaying()) {
+      const bot = el(`<div class="rt-player rt-cpu"><canvas width="120" height="72"></canvas><div class="rt-robot">🤖</div><button class="rt-x">✖</button></div>`);
+      drawCarIcon(bot.querySelector('canvas'), cpuPlayer());
+      click(bot.querySelector('.rt-x'), () => setCpu(false));
+      pl.appendChild(bot);
+    } else if (!S.net && S.players.length === 1) {
+      const bot = el(`<button class="rt-player rt-add rt-cpu-add"><canvas width="120" height="72"></canvas><div class="rt-plus">🤖</div></button>`);
+      drawCarIcon(bot.querySelector('canvas'), { color: '#bdbdbd', style: 'truck' });
+      click(bot, () => setCpu(true));
+      pl.appendChild(bot);
+    }
     if (S.players.length < 2) {
       const add = el(`<button class="rt-player rt-add"><canvas width="120" height="72"></canvas><div class="rt-plus">➕</div></button>`);
       drawCarIcon(add.querySelector('canvas'), { color: '#bdbdbd', style: 'truck' });
@@ -255,8 +286,8 @@ export function mount(stage) {
 
     const hud = el(`<div class="rt-hud"></div>`);
     S.race.cars.forEach(c => {
-      const row = el(`<div class="rt-row" data-id="${c.id}"><canvas width="60" height="36"></canvas>
-        <div class="rt-dots">${Array.from({ length: LAPS }, () => '<i></i>').join('')}</div><span class="rt-medal"></span></div>`);
+      const row = el(`<div class="rt-row" data-id="${c.id}"><canvas width="60" height="36"></canvas>${c.cpu ? '<span class="rt-bot">🤖</span>' : ''}
+        <div class="rt-dots">${Array.from({ length: LAPS }, () => '<i></i>').join('')}</div><span class="rt-item"></span><span class="rt-medal"></span></div>`);
       drawCarIcon(row.querySelector('canvas'), c);
       hud.appendChild(row);
     });
@@ -279,10 +310,10 @@ export function mount(stage) {
     const wrap = el(`<div class="rt-touch"></div>`);
     if (S.players.length === 1) {
       wrap.appendChild(pad(S.players[0], ['left', 'right'], 'rt-pad-l'));
-      wrap.appendChild(pad(S.players[0], ['down', 'up'], 'rt-pad-r'));
+      wrap.appendChild(pad(S.players[0], ['fire', 'down', 'up'], 'rt-pad-r'));
     } else {
-      wrap.appendChild(pad(S.players[0], ['left', 'right', 'down', 'up'], 'rt-pad-l rt-pad-4'));
-      wrap.appendChild(pad(S.players[1], ['left', 'right', 'down', 'up'], 'rt-pad-r rt-pad-4'));
+      wrap.appendChild(pad(S.players[0], ['left', 'right', 'fire', 'down', 'up'], 'rt-pad-l rt-pad-4'));
+      wrap.appendChild(pad(S.players[1], ['left', 'right', 'fire', 'down', 'up'], 'rt-pad-r rt-pad-4'));
     }
     ui.appendChild(wrap);
   }
@@ -327,6 +358,10 @@ export function mount(stage) {
         d.className = i < done ? 'on' : (i === done && !c.finished ? 'now' : '');
       });
       row.querySelector('.rt-medal').textContent = c.finished ? MEDALS[places.indexOf(c)] || '🏅' : '';
+      const slot = row.querySelector('.rt-item');
+      const icon = !c.item ? '' : c.rollT > 0 ? ITEM_ICON[PICKUPS[Math.floor(S.time * 12) % PICKUPS.length]] : ITEM_ICON[c.item];
+      if (slot.textContent !== icon) slot.textContent = icon;
+      slot.classList.toggle('ready', !!c.item && c.rollT <= 0);
     });
     const end = $('.rt-end');
     if (end) {
@@ -608,6 +643,7 @@ export function mount(stage) {
     if (!n.isHost) saveTrack(S.track, S.items);
     stopEngines();
     R.setScene(S.track, S.items);
+    S.raceItems = withAutoBoxes(S.track, S.items);
     S.race = createRace(S.track, roster());
     S.race.countdown = Math.max(0.01, (m.startAt - n.room.now()) / 1000);
     S.race.cars.forEach(c => { c.remote = !isMine(c.id); });
@@ -634,7 +670,10 @@ export function mount(stage) {
         x: r1(c.x), y: r1(c.y), a: Math.round(c.a * 1000) / 1000, vx: Math.round(c.vx), vy: Math.round(c.vy),
         z: r1(c.z), air: c.air, up: c.up, on: c.onTrack, w: c.inWater, sk: Math.round(c.skid), sp: Math.round(c.speed),
         idx: c.idx, prog: c.prog, lap: c.lap, ld: c.lapsDone, fin: c.finished, ft: c.finished ? c.finishT : -1,
-        bt: c.boostT > 0 ? 1 : 0, md: c.inMud ? 1 : 0, ic: c.onIce ? 1 : 0,
+        bt: c.boostT > 0 ? 1 : 0, md: c.inMud ? 1 : 0, ic: c.onIce ? 1 : 0, spn: c.spinT > 0 ? 1 : 0,
+        sh: S.race.shots.filter(o => o.owner === c.id).map(o => [o.id, r1(o.x), r1(o.y), Math.round(o.vx), Math.round(o.vy)]),
+        bn: S.race.bananas.filter(o => o.owner === c.id).map(o => [o.id, r1(o.x), r1(o.y), Math.round(o.a * 100) / 100]),
+        hit: [...S.race.hitIds].slice(-20),
       });
     }
   }
@@ -643,6 +682,21 @@ export function mount(stage) {
   function applyRemote(dt) {
     const n = S.net;
     const k = 1 - Math.exp(-12 * dt);
+    // friends' rockets and bananas, and the ones of ours they say they were hit by
+    const shots = [], bananas = [], theyHit = new Set();
+    for (const [id, s] of Object.entries(n.live)) {
+      if (isMine(id) || !s || s.r !== n.raceId) continue;
+      const age = Math.min(0.3, Math.max(0, (n.room.now() - s.t) / 1000));
+      (s.sh || []).forEach(([sid, x, y, vx, vy]) => { if (!S.race.hitIds.has(sid)) shots.push({ id: sid, x: x + vx * age, y: y + vy * age, vx, vy }); });
+      (s.bn || []).forEach(([sid, x, y, a]) => { if (!S.race.hitIds.has(sid)) bananas.push({ id: sid, x, y, a }); });
+      (s.hit || []).forEach(h => theyHit.add(h));
+    }
+    S.race.remoteShots = shots;
+    S.race.remoteBananas = bananas;
+    if (theyHit.size) {
+      S.race.shots = S.race.shots.filter(o => !theyHit.has(o.id));
+      S.race.bananas = S.race.bananas.filter(o => !theyHit.has(o.id));
+    }
     for (const c of S.race.cars) {
       if (!c.remote) continue;
       const s = n.live[c.id];
@@ -659,7 +713,7 @@ export function mount(stage) {
       Object.assign(c, {
         vx: s.vx, vy: s.vy, z: s.z, air: s.air, up: s.up, onTrack: s.on, inWater: s.w, skid: s.sk, speed: s.sp,
         idx: s.idx, prog: s.prog, lap: s.lap, lapsDone: s.ld || 0, finished: s.fin, finishT: s.ft >= 0 ? s.ft : undefined,
-        boostT: s.bt ? 0.5 : 0, inMud: !!s.md, onIce: !!s.ic,
+        boostT: s.bt ? 0.5 : 0, inMud: !!s.md, onIce: !!s.ic, spinT: s.spn ? 0.3 : 0,
       });
       if (justFinished) { R.burst(c.x, c.y, '255,215,0', 30); finishToast(c); }
     }
@@ -768,7 +822,8 @@ export function mount(stage) {
   function startRace() {
     stopEngines();
     saveTrack(S.track, S.items);
-    S.race = createRace(S.track, S.players);
+    S.raceItems = withAutoBoxes(S.track, S.items);
+    S.race = createRace(S.track, racers());
     S.paused = false;
     S.doneAt = 0;
     acc = 0;
@@ -816,6 +871,11 @@ export function mount(stage) {
       if (e.type === 'mud') sound.squelch();
       if (e.type === 'crash') { sound.bump(); R.dust(car.x, car.y); }
       if (e.type === 'cone') sound.tok();
+      if (e.type === 'pickup') [0, 1, 2, 3, 4].forEach(k => setTimeout(() => sound.tone(500 + k * 120, 0.06, 'square', 0.08), k * 150));
+      if (e.type === 'use' && e.item === 'rocket') sound.tone(250, 0.3, 'sawtooth', 0.12, 700);
+      if (e.type === 'use' && e.item === 'banana') sound.tone(400, 0.15, 'sine', 0.15, 200);
+      if (e.type === 'hit') { sound.bump(); sound.tone(700, 0.4, 'triangle', 0.15, 200); R.pop(car.x, car.y); }
+      if (e.type === 'pop') R.pop(e.x, e.y);
       if (e.type === 'done') S.doneAt = S.time;
     }
   }
@@ -858,6 +918,7 @@ export function mount(stage) {
   // online, our cars are called "<uid>_p1" instead of "p1"
   function onlineInputs() {
     const inputs = gatherInputs();
+    if (S.race) for (const c of S.race.cars) if (c.cpu) inputs[c.id] = aiInput(c, S.race, S.track, STEP);
     if (!S.net) return inputs;
     const out = {};
     for (const p of S.players) out[pidOf(p)] = inputs[p.id];
@@ -946,7 +1007,7 @@ export function mount(stage) {
     if (S.race && !S.paused) {
       acc += dt;
       while (acc >= STEP) {
-        stepRace(S.race, S.track, S.items, onlineInputs(), STEP);
+        stepRace(S.race, S.track, S.raceItems, onlineInputs(), STEP);
         handleEvents(S.race.events);
         acc -= STEP;
       }
@@ -969,6 +1030,9 @@ export function mount(stage) {
       insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: TOUCH ? 40 : 8 },
       cars: S.race ? S.race.cars : previewCars(),
       cones: S.race ? S.race.cones : undefined,
+      boxes: S.race ? S.race.boxes : (S.track ? boxesFromItems(withAutoBoxes(S.track, S.items)) : []),
+      shots: S.race ? [...S.race.shots, ...S.race.remoteShots] : [],
+      bananas: S.race ? [...S.race.bananas, ...S.race.remoteBananas] : [],
       live: !!S.race && !S.paused,
       dt: S.paused ? 0 : (S._dt || 0),
       stroke: S.stroke || gd.stroke,

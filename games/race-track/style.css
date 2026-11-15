@@ -271,3 +271,15 @@
 }
 .rt-end.show { transform: translateX(-50%) scale(1); }
 .rt-end b { display: inline-block; min-width: 1.2em; text-align: center; }
+
+/* computer car + items */
+.rt-cpu { border-color: #b0bec5; }
+.rt-robot { position: absolute; bottom: 2px; font-size: 26px; }
+.rt-bot { font-size: 18px; margin-left: -6px; }
+.rt-item {
+  width: 34px; height: 34px; border-radius: 10px; font-size: 24px; display: inline-flex; align-items: center; justify-content: center;
+  background: #eceff1; border: 2px dashed #b0bec5;
+}
+.rt-item:empty { opacity: .45; }
+.rt-item.ready { background: #fff8e1; border: 2px solid #ffb300; animation: rt-pulse .8s infinite; }
+.rt-tb-fire { background: rgba(255,143,0,.75); }
