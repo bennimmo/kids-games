@@ -19,12 +19,12 @@ function voiceCtx() {
 }
 
 // Called for each bubble's <audio> whenever things change.
-export function playVoice(audioEl, stream) {
+export function playVoice(audioEl, stream, quiet) {
   const web = voiceOpts().player === 'webaudio';
   if (audioEl.srcObject !== (stream || null)) audioEl.srcObject = stream || null;
-  audioEl.muted = web; // Chrome needs the element playing (muted) for Web Audio to get the sound
+  audioEl.muted = web || !!quiet; // Chrome needs the element playing (muted) for Web Audio to get the sound
   if (stream && audioEl.paused) audioEl.play().catch(() => {});
-  if (web && stream && stream.getAudioTracks().length && !nodes.has(stream)) {
+  if (web && !quiet && stream && stream.getAudioTracks().length && !nodes.has(stream)) {
     try {
       const c = voiceCtx();
       const src = c.createMediaStreamSource(stream);

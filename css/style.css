@@ -236,3 +236,19 @@ html, body { overscroll-behavior: none; }
 .vt-info div { display: flex; gap: 8px; justify-content: space-between; }
 .vt-info span { text-align: right; overflow-wrap: anywhere; }
 .vt-close { align-self: center; }
+
+/* bubble buttons: show on hover (mouse) or after a tap on the bubbles */
+.fb-tools { display: none; flex-direction: column; gap: 8px; align-items: center; }
+.fb-dock.open .fb-tools { display: flex; }
+@media (hover: hover) { .fb-dock:hover .fb-tools { display: flex; } .fb-dock:hover .fb-quiet { display: flex; } .fb-dock:hover .fb-badge { display: none; } }
+.fb-hang { width: 48px; height: 48px; border: 0; border-radius: 50%; background: #ef5350; font-size: 24px; cursor: pointer; box-shadow: 0 4px 0 rgba(0,0,0,.2); padding: 0; }
+.fb-hang.sure { background: #ffca28; animation: bob .6s ease-in-out infinite; }
+.fb-badge { font-size: 20px; background: #ffab91; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 0 rgba(0,0,0,.2); }
+.fb-badge[hidden], .fb-dock.open .fb-badge { display: none; }
+.fb { position: relative; }
+.fb-quiet {
+  display: none; position: absolute; top: -6px; right: -2px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+  background: #fff; font-size: 16px; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.2);
+}
+.fb-dock.open .fb-quiet, .fb.quiet .fb-quiet { display: flex; }
+.fb.quiet .fb-face { filter: grayscale(.7); }

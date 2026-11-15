@@ -31,6 +31,7 @@ const AREA = 'games/friends/rooms';
 const KEEP_KEY = 'kg-group';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
+const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
 const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
@@ -328,6 +329,9 @@ async function joinGroup(id) {
       p.name = cleanName(m.name) || '?';
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
+    // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
+    if (!g.peers.size && !g.aloneTimer) g.aloneTimer = setTimeout(() => { if (group === g && !g.peers.size) leaveGroup(); }, ALONE_MS);
+    if (g.peers.size && g.aloneTimer) { clearTimeout(g.aloneTimer); g.aloneTimer = null; }
     readSignals(g);
     emit();
   }));
@@ -344,6 +348,7 @@ export async function leaveGroup() {
   group = null;
   forget();
   clearInterval(g.timer);
+  clearTimeout(g.aloneTimer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
   stopMic();
