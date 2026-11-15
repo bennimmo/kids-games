@@ -37,6 +37,20 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## Games
+### 🚂 Choo Choo Wilf (`games/choo-choo/`)
+3D steam train for age 2–3 (no reading needed, spoken prompts). Built with three.js.
+- Hold anywhere = go (puffs of steam + chuff chuff). Let go = slows down. Red button = whistle "CHOO CHOO!".
+- Endless track: corners, bridges over rivers, tunnels through mountains, hills.
+- Things get in the way. The train always stops itself:
+  - 🦆 ducks cross, 🚗 cars at a level crossing, 🚜 digger drives across (just wait).
+  - 🚧 barrier down, 🐄🐑🐧🦀 animals on the line (tap them; a 👆 shows where).
+- 🐦 birds fly over now and then. Tap to spot them.
+- Every sticker flies to the row at the bottom.
+- 🚉 Each stretch ends at a station: "Well done Wilf!", passengers (animals) hop off and on.
+- Lands change at each station: meadow → forest → snowy (snowing) → town → seaside. Every 3rd stretch is at night (headlight, glowing windows).
+- Keyboard: Space = go, W = whistle.
+- Files: `world.js` (track, land, stations), `scenery.js`, `models.js` (train, animals, vehicles), `events.js`, `audio.js` (sounds + speech), `game.js`.
+
 ### 🏎️ Raffy Race (`games/race-track/`)
 - Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
 - Drag extras onto the track: jump, speed boost, water, mud, ice, tunnel. Scenery anywhere: cones (knock them over), tyre walls, trees (drive under), grandstand (crowd cheers). Drag to 🗑️ to remove.
