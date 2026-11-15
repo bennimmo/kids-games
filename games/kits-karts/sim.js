@@ -2,7 +2,7 @@
 //   stepRace(race, inputs, dt)   inputs = { [carId]: { up, down, left, right, fire } }
 // The world is 2D (x, y from the track designer) plus a height z.
 import { WORLD, SOLIDS, JUMP_L, WATER_RX, WATER_RY, BOOST_L } from '../race-track/track.js';
-import { TRACK_W, RAIL_H, LAND_H, locate, elevAt } from './course.js';
+import { TRACK_W, RAIL_H, LAND_H, BARRIER, locate, elevAt } from './course.js';
 import { statsOf } from './karts.js';
 
 export const LAPS = 3;
@@ -380,6 +380,24 @@ function updateCar(race, car, input, dt) {
   }
   car.ground = gz;
 
+  // barriers a little way off the road: you can go on the grass, but not get lost
+  if (car.z < 15) {
+    const lim = BARRIER - 11;
+    let L = locate(course, car.x, car.y, car.idx);
+    if (L.d > lim) L = locate(course, car.x, car.y, car.idx, true); // maybe near another bit of road
+    if (L.d > lim) {
+      const s = Math.sign(L.lat), push = L.d - lim;
+      const nx = L.nx * s, ny = L.ny * s;
+      car.x -= nx * push; car.y -= ny * push;
+      const vn = car.vx * nx + car.vy * ny;
+      if (vn > 0) {
+        const vx = car.vx - 1.4 * vn * nx, vy = car.vy - 1.4 * vn * ny;
+        const fx2 = Math.cos(car.a), fy2 = Math.sin(car.a);
+        car.vF = (vx * fx2 + vy * fy2) * 0.9; car.vR = -vx * fy2 + vy * fx2;
+        if (vn > 70) ev.push({ type: 'rail', id: car.id });
+      }
+    }
+  }
   // keep inside the world
   const m = 18;
   if (car.x < m) { car.x = m; car.vF *= 0.5; }

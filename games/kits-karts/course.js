@@ -11,6 +11,7 @@ export const JUMP_H = 26;
 export const LAND_H = 20;
 export const RAMP = 170;      // length of each ramp
 export const RAIL_H = 8;      // anything higher than this gets side rails
+export const BARRIER = TRACK_W / 2 + 40; // barriers this far from the middle of the road
 
 function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
 function segInter(a, b, c, d) {
@@ -143,4 +144,20 @@ export function distToRoad(course, x, y) {
     if (d < best) best = d;
   }
   return Math.sqrt(best);
+}
+
+// Where to paint direction arrows on the road: flat bits, spread round the loop.
+export function arrowSpots(course, items = []) {
+  const { n } = course, out = [];
+  const busy = new Set();
+  items.forEach(it => { if (it.idx >= 0) for (let o = -5; o <= 5; o++) busy.add(((it.idx + o) % n + n) % n); });
+  const count = Math.max(4, Math.round(n / 55));
+  for (let k = 0; k < count; k++) {
+    let i = Math.floor((k + 0.5) * n / count);
+    for (let t = 0; t < 12; t++) {
+      const j = (i + t) % n;
+      if (course.elev[j] === 0 && course.jumpOf[j] < 0 && !busy.has(j) && j > 6 && j < n - 4) { out.push(j); break; }
+    }
+  }
+  return out;
 }

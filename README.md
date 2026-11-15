@@ -43,6 +43,7 @@ Then open http://localhost:8000
 - Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
 - Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
 - Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).
+- Barriers a little way off the road (you can go on the grass, not get lost). Arrows on the road show the way.
 - Driving: ▲ go, ▼ brake. Hold ▼ while turning fast = drift; let go for a mini turbo (blue/orange sparks). Steer in the air = trick, turbo when you land. Karts bash each other (heavy karts win).
 - 🤖 robots: 0–6, speed 🐢 / 🐇 / 🚀. Laps 1/2/3/5. 
 - 2 players = split screen (P1 arrows + Enter, P2 WASD + Space). Solo: either keys. Gamepads work (A go, B brake, X fire). Touch: ◀ ▶ ▼ 💥, goes by itself.
