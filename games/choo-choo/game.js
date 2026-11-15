@@ -45,7 +45,7 @@ export function mount(stage) {
     <div class="cc-hand cc-tap">👆</div>
     <div class="cc-go"><div class="cc-ring"></div><span>👆</span></div>
     <div class="cc-bubble">CHOO CHOO!</div>
-    <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done Wilf!</div><div class="cc-name"></div></div>
+    <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done!</div><div class="cc-name"></div></div>
     <div class="cc-confetti"></div>`;
   root.appendChild(ui);
   const $ = q => ui.querySelector(q);
@@ -322,6 +322,7 @@ export function mount(stage) {
     phase = 'station';
     station = { leg, t: 0, first: false, did: {} };
     v = 0;
+    s = leg.S;
     sfx.toot();
     sfx.hiss();
     sidePuff();
@@ -336,7 +337,7 @@ export function mount(stage) {
         el.done.classList.add('show');
         sfx.yay();
         confetti();
-        say(`Well done Wilf! We made it to ${leg.name}!`);
+        say(`Well done! We made it to ${leg.name}!`);
         award('⭐', loco.group);
       });
       at(0.9, 'off', () => {
@@ -379,7 +380,8 @@ export function mount(stage) {
     if (st.t > (st.first ? 3.6 : 6.2)) {
       el.done.classList.remove('show');
       phase = 'drive';
-      nextStation = world.nextStationAfter(s);
+      while (world.legs.length <= station.leg.k + 1) world.genLeg();
+      nextStation = world.legs[station.leg.k + 1];
     }
   }
 
@@ -644,12 +646,14 @@ export function mount(stage) {
   }
 
   const stopLoop = startLoop(update, () => renderer.render(scene, camera));
-  window.__cc = () => ({ s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
+  window.__ccJump = to => { s = to; world.buildAll(s); };
+  window.__cc = () => ({ nextS: nextStation && nextStation.S, s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
 
   return () => {
     stopLoop();
     stopSpeech();
     delete window.__cc;
+    delete window.__ccJump;
     removeEventListener('resize', onResize);
     removeEventListener('keydown', onKey);
     removeEventListener('keyup', onKey);

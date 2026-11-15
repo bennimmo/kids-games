@@ -46,7 +46,7 @@ Then open http://localhost:8000
   - 🚧 barrier down, 🐄🐑🐧🦀 animals on the line (tap them; a 👆 shows where).
 - 🐦 birds fly over now and then. Tap to spot them.
 - Every sticker flies to the row at the bottom.
-- 🚉 Each stretch ends at a station: "Well done Wilf!", passengers (animals) hop off and on.
+- 🚉 Each stretch ends at a station: "Well done!", passengers (animals) hop off and on.
 - Lands change at each station: meadow → forest → snowy (snowing) → town → seaside. Every 3rd stretch is at night (headlight, glowing windows).
 - Keyboard: Space = go, W = whistle.
 - Files: `world.js` (track, land, stations), `scenery.js`, `models.js` (train, animals, vehicles), `events.js`, `audio.js` (sounds + speech), `game.js`.
