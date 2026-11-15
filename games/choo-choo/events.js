@@ -251,18 +251,25 @@ function animals(E, r, biome) {
 
 // ---------------------------------------------------------------- water tower: tap to fill up
 function water(E, r) {
-  E.stopGap = -6;             // drive past so the tender stops under the spout
+  E.stopGap = -6.4;           // drive past so the tender stops under the spout
   E.needsTap = true;
   const T = makeWaterTower();
   E.group.add(T.group);
   E.hintObj = T.tank;
   let state = 'wait', t = 0;
-  const go = () => { if (state !== 'wait') return; state = 'down'; t = 0; sfx.clunk(); E.hintObj = null; };
+  E.exactStop = true;          // the train creeps into place so the tender is under the spout
+  let queued = false, at = false;
+  const go = () => {
+    if (state !== 'wait') return;
+    if (!at) { queued = true; return; }   // tapped early: fill up once the train is in place
+    state = 'down'; t = 0; sfx.clunk(); E.hintObj = null;
+  };
   E.targets = [{ obj: T.tank, r: 140, tap: go }];
   E.update = (dt, c) => {
     speakOnce(E, c, 30, 'The train is thirsty! Tap the water tower!');
-    if (state === 'wait' && c.wait > 22) go();
-    if (state === 'wait') { E.hintObj = c.s > E.ev.s + 1 ? T.tank : null; return; }
+    at = c.at;
+    if (state === 'wait' && at && (queued || c.wait > 22)) go();
+    if (state === 'wait') { E.hintObj = at ? T.tank : null; return; }
     t += dt;
     if (state === 'down') {
       T.spout.rotation.z = -Math.PI / 2 + Math.min(1, t / 0.8) * (Math.PI / 2 + 0.12);

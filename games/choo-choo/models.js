@@ -526,13 +526,14 @@ export function makeSignal() {
   const g = new THREE.Group();
   g.add(bmesh(b => {
     b.part('box', '#eceff1', 2.4, 1.9, 0, 0.2, 3.8, 0.2);
-    b.part('box', '#212121', 2.4, 3.8, 0.05, 0.75, 1.5, 0.45);
-    b.part('box', '#212121', 2.4, 4.6, 0.15, 0.85, 0.1, 0.65);
+    b.part('box', '#212121', 2.4, 3.8, 0.05, 0.85, 1.6, 0.45);
+    b.part('box', '#212121', 2.4, 4.67, -0.15, 0.95, 0.1, 0.75);
     b.part('box', '#ffc107', 2.4, 0.1, 0, 0.8, 0.2, 0.8);
   }));
-  const red = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), new THREE.MeshBasicMaterial({ color: '#ff1744' }));
-  const green = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), new THREE.MeshBasicMaterial({ color: '#1b3d1f' }));
-  red.position.set(2.4, 4.15, 0.3); green.position.set(2.4, 3.45, 0.3);
+  // lights face the train (it comes from -z) and stick out so they show from above too
+  const red = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), new THREE.MeshBasicMaterial({ color: '#ff1744' }));
+  const green = new THREE.Mesh(new THREE.SphereGeometry(0.32, 14, 10), new THREE.MeshBasicMaterial({ color: '#1b3d1f' }));
+  red.position.set(2.4, 4.2, -0.2); green.position.set(2.4, 3.4, -0.2);
   g.add(red, green);
   return { group: g, red, green };
 }

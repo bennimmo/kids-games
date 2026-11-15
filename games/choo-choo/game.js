@@ -516,10 +516,11 @@ export function mount(stage) {
     const jBlock = !!(jNext && phase === 'drive' && stopAt === jNext.s0 - 3);
     junction(dt, jBlock);
     const dist = Math.max(0, stopAt - s);
+    // roll into the station (or the water tower) by itself, so it stops in exactly the right place
+    const creep = (nextStation && !blockE && nextStation.S - s < 30) || (blockE && blockE.exactStop && dist < 30);
     if (holding && phase === 'drive') v = Math.min(VMAX, v + ACC * dt);
+    else if (phase === 'drive' && creep) v = v > 1.8 ? Math.max(1.8, v - DEC * dt) : Math.min(1.8, v + ACC * dt);
     else v = Math.max(0, v - DEC * dt);
-    // roll into the station by itself
-    if (phase === 'drive' && nextStation && !blockE && nextStation.S - s < 30) v = Math.max(v, Math.min(1.8, v + ACC * dt));
     v = Math.min(v, Math.sqrt(2 * BRAKE * dist));
     const ds = Math.min(v * dt, dist);
     s += ds;
@@ -571,6 +572,7 @@ export function mount(stage) {
     for (let i = events.length - 1; i >= 0; i--) {
       const E = events[i];
       ctx.wait = E === waitE ? waitT : 0;
+      ctx.at = s >= E.ev.s - E.stopGap - 0.05;
       E.update(dt, ctx);
       if (s > E.ev.s + 45) { E.dispose(); events.splice(i, 1); }
     }
@@ -697,7 +699,7 @@ export function mount(stage) {
     return null;
   };
   window.__ccJump = to => { s = to; world.buildAll(s); };
-  window.__cc = () => ({ nextS: nextStation && nextStation.S, s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
+  window.__cc = () => ({ stop: waitE && waitE.ev.s - waitE.stopGap, nextS: nextStation && nextStation.S, s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
 
   return () => {
     stopLoop();
