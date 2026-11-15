@@ -11,8 +11,19 @@ const canFullscreen = !!(document.documentElement.requestFullscreen || document.
 let installPrompt = null;
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
 }
+
+// Installed apps (iPad, Windows) often just wake up instead of loading again.
+// Coming back after a while: check for an update, and reload if we're on the menu (never mid-game).
+const RELOAD_AFTER_MS = 10 * 60 * 1000;
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  if (!hiddenAt || Date.now() - hiddenAt < RELOAD_AFTER_MS || !navigator.onLine) return;
+  navigator.serviceWorker?.getRegistration().then(r => r && r.update()).catch(() => {});
+  if (!location.hash.replace(/^#\/?/, '')) location.reload();
+});
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   installPrompt = e;

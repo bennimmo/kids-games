@@ -16,7 +16,7 @@ import { createRace, stepRace, LAPS, lapsDone, standings } from './sim.js';
 import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb, STYLES, DECALS } from './render.js';
 
 const COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#fb8c00', '#8e24aa', '#ec407a', '#212121'];
-const EXTRAS = ['jump', 'water', 'tunnel'];
+const EXTRAS = ['jump', 'boost', 'water', 'mud', 'ice', 'tunnel', 'cone', 'tyres', 'tree', 'stand'];
 const STEP = 1 / 60;
 const MEDALS = ['🥇', '🥈', '🥉', '🏅'];
 
@@ -262,6 +262,7 @@ export function mount(stage) {
     });
     ui.appendChild(hud);
     ui.appendChild(el(`<div class="rt-lights"><i></i><i></i><i></i></div>`));
+    ui.appendChild(el(`<div class="rt-end">🏁 ⏳ <b></b></div>`));
     if (TOUCH && S.phase === 'race') touchUI();
   }
 
@@ -321,12 +322,19 @@ export function mount(stage) {
     S.race.cars.forEach(c => {
       const row = ui.querySelector(`.rt-row[data-id="${c.id}"]`);
       if (!row) return;
-      const done = lapsDone(c, S.track);
+      const done = lapsDone(c);
       row.querySelectorAll('i').forEach((d, i) => {
         d.className = i < done ? 'on' : (i === done && !c.finished ? 'now' : '');
       });
       row.querySelector('.rt-medal').textContent = c.finished ? MEDALS[places.indexOf(c)] || '🏅' : '';
     });
+    const end = $('.rt-end');
+    if (end) {
+      const r = S.race;
+      const show = r.phase === 'racing' && r.cars.some(c => c.finished) && !r.cars.every(c => c.finished);
+      end.classList.toggle('show', show);
+      if (show) end.querySelector('b').textContent = Math.max(1, Math.ceil(r.endTimer));
+    }
     const lights = $('.rt-lights');
     if (lights) {
       const r = S.race;
@@ -625,7 +633,8 @@ export function mount(stage) {
         r: n.raceId, t: n.room.now(),
         x: r1(c.x), y: r1(c.y), a: Math.round(c.a * 1000) / 1000, vx: Math.round(c.vx), vy: Math.round(c.vy),
         z: r1(c.z), air: c.air, up: c.up, on: c.onTrack, w: c.inWater, sk: Math.round(c.skid), sp: Math.round(c.speed),
-        idx: c.idx, prog: c.prog, lap: c.lap, fin: c.finished, ft: c.finished ? c.finishT : -1,
+        idx: c.idx, prog: c.prog, lap: c.lap, ld: c.lapsDone, fin: c.finished, ft: c.finished ? c.finishT : -1,
+        bt: c.boostT > 0 ? 1 : 0, md: c.inMud ? 1 : 0, ic: c.onIce ? 1 : 0,
       });
     }
   }
@@ -646,11 +655,13 @@ export function mount(stage) {
         c.y += (ty - c.y) * k;
         c.a += Math.atan2(Math.sin(s.a - c.a), Math.cos(s.a - c.a)) * k;
       }
-      if (s.fin && !c.finished) R.burst(c.x, c.y, '255,215,0', 30);
+      const justFinished = s.fin && !c.finished;
       Object.assign(c, {
         vx: s.vx, vy: s.vy, z: s.z, air: s.air, up: s.up, onTrack: s.on, inWater: s.w, skid: s.sk, speed: s.sp,
-        idx: s.idx, prog: s.prog, lap: s.lap, finished: s.fin, finishT: s.ft >= 0 ? s.ft : undefined,
+        idx: s.idx, prog: s.prog, lap: s.lap, lapsDone: s.ld || 0, finished: s.fin, finishT: s.ft >= 0 ? s.ft : undefined,
+        boostT: s.bt ? 0.5 : 0, inMud: !!s.md, onIce: !!s.ic,
       });
+      if (justFinished) { R.burst(c.x, c.y, '255,215,0', 30); finishToast(c); }
     }
   }
 
@@ -796,12 +807,36 @@ export function mount(stage) {
       if (e.type === 'beep') sound.tone(440, 0.25, 'square', 0.12);
       if (e.type === 'go') sound.tone(880, 0.5, 'square', 0.14);
       if (e.type === 'lap') { sound.tone(660, 0.12, 'triangle'); setTimeout(() => sound.tone(990, 0.18, 'triangle'), 110); }
-      if (e.type === 'finish') { sound.win(); R.burst(car.x, car.y, '255,215,0', 30); }
+      if (e.type === 'finish') { sound.win(); R.burst(car.x, car.y, '255,215,0', 30); finishToast(car); }
       if (e.type === 'jump') sound.tone(300, 0.3, 'sine', 0.2, 800);
       if (e.type === 'land') { sound.bump(); R.dust(car.x, car.y); }
       if (e.type === 'bump') sound.bump();
       if (e.type === 'splash') { sound.splash(); R.splash(car.x, car.y); }
+      if (e.type === 'boost') sound.whoosh();
+      if (e.type === 'mud') sound.squelch();
+      if (e.type === 'crash') { sound.bump(); R.dust(car.x, car.y); }
+      if (e.type === 'cone') sound.tok();
       if (e.type === 'done') S.doneAt = S.time;
+    }
+  }
+
+  // big medal pops up the moment a car crosses the line for the last time
+  function finishToast(car) {
+    const place = standings(S.race).indexOf(car);
+    const t = el(`<div class="rt-toast"><span>${MEDALS[place] || '🏅'}</span><canvas width="120" height="80"></canvas></div>`);
+    drawCarIcon(t.querySelector('canvas'), car);
+    t.style.marginTop = (place * 110) + 'px';
+    ui.appendChild(t);
+    setTimeout(() => t.remove(), 1800);
+  }
+
+  // the crowd cheers when a car zooms past a grandstand
+  const cheered = new Map();
+  function crowd() {
+    for (const it of S.items) {
+      if (it.type !== 'stand') continue;
+      if (S.time - (cheered.get(it) || -9) < 4) continue;
+      if (S.race.cars.some(c => c.speed > 120 && Math.hypot(c.x - it.x, c.y - it.y) < 150)) { cheered.set(it, S.time); sound.cheer(); }
     }
   }
 
@@ -916,8 +951,9 @@ export function mount(stage) {
         acc -= STEP;
       }
       if (S.net) { applyRemote(dt); sendCars(dt); }
+      if (S.race.phase === 'racing') crowd();
       S.race.cars.forEach((c, i) => engines[i] && engines[i].set(c.speed, S.phase === 'race'));
-      if (S.phase === 'race' && S.doneAt && S.time - S.doneAt > 1.2) {
+      if (S.phase === 'race' && S.doneAt && S.time - S.doneAt > 0.6) {
         S.phase = 'results';
         render();
       }
@@ -932,6 +968,7 @@ export function mount(stage) {
     R.frame({
       insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: TOUCH ? 40 : 8 },
       cars: S.race ? S.race.cars : previewCars(),
+      cones: S.race ? S.race.cones : undefined,
       live: !!S.race && !S.paused,
       dt: S.paused ? 0 : (S._dt || 0),
       stroke: S.stroke || gd.stroke,
