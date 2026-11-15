@@ -5,14 +5,14 @@
 //       host, meta: { name, ok/<pid>: <group>, no/<pid>, full/<pid> }   (written by me)
 //       players/<uid>_k: { name }                                       (a friend knocking)
 //   games/friends/rooms/<group>  the group ('c' + 16 random)
-//       players/<uid>_m: { name, sid }                                  (one per device)
+//       players/<uid>_m: { name, face, sid }                                (one per device)
 //       live/<uid>_m/<toUid>/<key>: WebRTC hand-shake messages
 // The link itself is WebRTC, straight between devices, ready for voice/video later
 // (peer.pc is the RTCPeerConnection; tracks friends add arrive as friend.stream).
-// Nothing is kept: entries go when you leave or lose connection. Only the name is shared.
+// Nothing is kept: entries go when you leave or lose connection. Only the name and picture are shared.
 
 import { firebaseCore } from './net.js';
-import { myName, cleanName } from './profile.js';
+import { myName, cleanName, myFace, cleanFace } from './profile.js';
 import { pauseAudio, resetAudio } from './sound.js';
 import { voiceOpts, onVoiceOpts } from './voice-opts.js';
 
@@ -58,7 +58,7 @@ const subs = new Set();
 const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
   inGroup: !!group, micStatus, muted,
-  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, status: p.status, stream: p.stream })) : [],
+  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream })) : [],
 });
 let emitQueued = false;
 function emit() {
@@ -294,7 +294,7 @@ async function joinGroup(id) {
     if (group !== g) return;
     D.onDisconnect(meR).remove();
     D.onDisconnect(liveR).remove();
-    D.set(meR, { name: myName(), sid }).catch(() => {});
+    D.set(meR, { name: myName(), face: myFace(), sid }).catch(() => {});
   };
   g.writeMe = writeMe;
   await D.remove(liveR).catch(() => {}); // old messages from before a reload
@@ -326,6 +326,7 @@ async function joinGroup(id) {
       if (p && p.sid !== m.sid) { p.close(); p = null; } // they reloaded
       if (!p) { p = makePeer(g, u, m.sid); g.peers.set(u, p); }
       p.name = cleanName(m.name) || '?';
+      p.face = cleanFace(m.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
     readSignals(g);

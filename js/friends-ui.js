@@ -85,7 +85,8 @@ function renderBubbles(s) {
       sound.pop();
     }
     el.classList.toggle('on', f.status === 'on');
-    el.querySelector('.fb-face b').textContent = [...f.name][0] || '?';
+    el.querySelector('.fb-face b').textContent = f.face || [...f.name][0] || '?';
+    el.classList.toggle('has-face', !!f.face);
     el.querySelector('.fb-name').textContent = f.name;
     const v = el.querySelector('video'), a = el.querySelector('audio');
     // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
@@ -193,7 +194,7 @@ function renderPanel(s) {
         ${out ? `<div class="fmsg">${OUT_MSG[out.status](out.name)}${out.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}
       </div>`}
       ${s.friends.length ? `<div class="fsec">
-        <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${nameHTML(f.name)}</span>`).join('')}</div>
+        <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${f.face ? f.face + ' ' : ''}${nameHTML(f.name)}</span>`).join('')}</div>
         <select class="fmic" aria-label="Microphone" hidden></select>
         <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">${icon('settings')}</button><button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button></div>
       </div>` : ''}

@@ -55,16 +55,25 @@ body {
 .grid {
   width: 100%;
   max-width: 1000px;
+  margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 24px;
 }
+.age { width: 100%; max-width: 1000px; margin-bottom: 30px; }
+.age-title { margin: 0 0 16px; display: flex; align-items: center; gap: 14px; font-size: 26px; }
+.age-title::before, .age-title::after { content: ""; flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,.45); }
+.age-title span {
+  padding: 6px 22px; border-radius: 999px; background: var(--a); color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,.15);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), inset 0 0 0 3px rgba(255,255,255,.35), 0 6px 14px -6px rgba(43,33,64,.5);
+}
 .tile {
   border: 0;
   border-radius: 32px;
-  padding: 22px 16px 20px;
-  width: 240px;
+  padding: 22px 14px 20px;
+  width: 220px;
   max-width: 100%;
   min-height: 230px;
   background:
@@ -171,6 +180,7 @@ html, body { overscroll-behavior: none; }
   width: 40px; height: 40px; border-radius: 50%; flex: none; display: grid; place-items: center;
   font-size: 24px; color: #fff; background: linear-gradient(180deg, #b388ff, #7c4dff);
 }
+.name-btn .name-ico.emo { background: #fff3c4; font-size: 28px; }
 .name-btn .name-pen { font-size: 26px; color: #7c4dff; display: grid; }
 .name-btn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name-btn.empty { animation: bob 2s ease-in-out infinite; }
@@ -180,6 +190,19 @@ html, body { overscroll-behavior: none; }
   width: 88px; height: 88px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center;
   font-size: 48px; color: #fff; background: linear-gradient(180deg, #b388ff, #7c4dff);
 }
+.name-face.emo { background: #fff3c4; font-size: 58px; line-height: 1; }
+.face-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 14px;
+  padding: 4px;
+}
+@media (max-height: 760px) { .face-grid { max-height: 30vh; overflow-y: auto; } }
+.face-grid button {
+  aspect-ratio: 1; border: 0; border-radius: 14px; padding: 0; background: #f4f0ff;
+  font-size: 28px; line-height: 1; cursor: pointer; display: grid; place-items: center;
+  transition: transform .1s;
+}
+.face-grid button:active { transform: scale(.9); }
+.face-grid button.on { background: #fff3c4; box-shadow: 0 0 0 3px #ffb300; transform: scale(1.08); }
 .name-input {
   width: 100%; box-sizing: border-box; font-size: 34px; font-weight: 600; font-family: inherit; text-align: center;
   padding: 12px; border: 4px solid #ffd54f; border-radius: 20px; outline: none; color: var(--ink);
@@ -263,6 +286,7 @@ html, body { overscroll-behavior: none; }
 }
 .fb:not(.on) .fb-face { animation: bob 1.2s ease-in-out infinite; }
 .fb-face b { color: #fff; font-size: 30px; }
+.fb.has-face .fb-face b { font-size: 34px; line-height: 1; }
 .fb-face video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
 .fb.video .fb-face video { display: block; }
 .fb-name {
@@ -297,6 +321,7 @@ html, body { overscroll-behavior: none; }
 @media (max-width: 560px) {
   .menu { padding-top: 80px; }
   .grid { gap: 14px; }
+  .age-title { font-size: 21px; }
   .tile { width: calc(50% - 7px); min-height: 180px; padding: 14px 8px; border-radius: 26px; gap: 10px; }
   .tile .icon { width: 104px; height: 104px; border-radius: 32px; }
   .tile .art { width: 92px; height: 92px; }
