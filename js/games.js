@@ -1,8 +1,7 @@
 // Age groups on the menu, in order. Each game picks one with `age`.
 export const AGES = [
-  { id: 'little', name: 'Ages 3–5', color: '#ffca28' },
-  { id: 'middle', name: 'Ages 5–7', color: '#66bb6a' },
-  { id: 'big', name: 'Ages 7+', color: '#42a5f5' },
+  { id: 'little', name: 'Little ones', color: '#ffca28' },
+  { id: 'big', name: 'Big kids', color: '#42a5f5' },
 ];
 
 // The list of games shown on the menu.
@@ -26,7 +25,7 @@ export const GAMES = [
   },
   {
     id: 'kits-karts',
-    age: 'middle',
+    age: 'big',
     name: "Kit's Karts",
     icon: '🏁',
     color: '#ff7043',
@@ -34,7 +33,7 @@ export const GAMES = [
   },
   {
     id: 'race-track',
-    age: 'middle',
+    age: 'big',
     name: 'Raffy Race',
     icon: '🏎️',
     color: '#ffd54f',
@@ -42,7 +41,7 @@ export const GAMES = [
   },
   {
     id: 'space-race',
-    age: 'middle',
+    age: 'big',
     name: 'Star Dash',
     icon: '🚀',
     color: '#b39ddb',
@@ -50,7 +49,7 @@ export const GAMES = [
   },
   {
     id: 'draw-a-road',
-    age: 'middle',
+    age: 'big',
     name: 'Monster Doodle',
     icon: '🛻',
     color: '#81c784',
@@ -58,7 +57,7 @@ export const GAMES = [
   },
   {
     id: 'beautiful-bells',
-    age: 'little',
+    age: 'big',
     name: 'Beautiful Bells',
     icon: '💄',
     color: '#f8a5d0',
@@ -82,7 +81,7 @@ export const GAMES = [
   },
   {
     id: 'paint',
-    age: 'little',
+    age: 'big',
     name: 'Paint Party',
     icon: '🎨',
     color: '#90caf9',
