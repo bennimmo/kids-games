@@ -3,7 +3,7 @@ import { gameArt } from './game-art.js';
 import { icon } from './engine/icons.js';
 import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
-import { myName, setMyName, nameHTML, NAME_MAX } from './engine/profile.js';
+import { myName, setMyName, nameHTML, NAME_MAX, myFace, setMyFace, FACES } from './engine/profile.js';
 import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
 import { nameChanged } from './engine/friends.js';
 
@@ -84,24 +84,36 @@ function wireAppButtons() {
 
 // ---------- my name (used in every online game) ----------
 function nameButton() {
-  const n = myName();
-  return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span class="name-ico">${icon('user')}</span>${n ? `<b>${nameHTML(n)}</b>` : `<b class="name-pen">${icon('edit')}</b>`}</button>`;
+  const n = myName(), f = myFace();
+  return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span class="name-ico${f ? ' emo' : ''}">${f || icon('user')}</span>${n ? `<b>${nameHTML(n)}</b>` : `<b class="name-pen">${icon('edit')}</b>`}</button>`;
 }
 
 function editName() {
   const o = document.createElement('div');
   o.className = 'app-help name-edit';
   o.innerHTML = `<form class="app-help-card name-card">
-      <div class="name-face">${icon('user')}</div>
+      <div class="name-face"></div>
       <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
+      <div class="face-grid">${FACES.map(f => `<button type="button" data-f="${f}">${f}</button>`).join('')}</div>
       <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">${icon('backspace')}</button><button type="submit" class="app-btn name-ok" aria-label="Done">${icon('check')}</button></div>
     </form>`;
   const input = o.querySelector('input');
-  const before = myName();
+  const before = myName(), faceBefore = myFace();
+  let face = faceBefore;
   input.value = before;
-  // Saved however the box is closed (✔️, Enter or tapping outside).
+  const showFace = () => {
+    const el = o.querySelector('.name-face');
+    el.innerHTML = face || icon('user');
+    el.classList.toggle('emo', !!face);
+    o.querySelectorAll('.face-grid button').forEach(b => b.classList.toggle('on', b.dataset.f === face));
+  };
+  showFace();
+  o.querySelectorAll('.face-grid button').forEach(b => b.addEventListener('click', () => {
+    sound.pop(); face = b.dataset.f; showFace();
+  }));
+  // Saved however the box is closed (tick, Enter or tapping outside).
   const close = () => {
-    const changed = setMyName(input.value) !== before;
+    const changed = (setMyName(input.value) !== before) | (setMyFace(face) !== faceBefore);
     o.remove();
     if (changed) nameChanged();
     showMenu();

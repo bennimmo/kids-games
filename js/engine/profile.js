@@ -16,3 +16,20 @@ export function setMyName(n) {
 }
 // Safe to put in innerHTML.
 export const nameHTML = n => cleanName(n).replace(/[&<>"']/g, '');
+
+// The player's picture (an emoji), picked in the name box. Only these are allowed.
+const FACE_KEY = 'kg-face';
+export const FACES = [
+  '😀', '😎', '🤩', '😜', '🥳', '🤠', '👸', '🤴', '🦸', '🧚', '🧜', '🥷',
+  '🐶', '🐱', '🦊', '🐼', '🐯', '🦁', '🐸', '🐵', '🦄', '🐲', '🦖', '🐙',
+  '🐧', '🦉', '🐝', '🦋', '👽', '🤖', '👻', '🎃', '⚽', '🌈', '⭐', '🍕',
+];
+export const cleanFace = f => (FACES.includes(f) ? f : '');
+export function myFace() {
+  try { return cleanFace(localStorage.getItem(FACE_KEY)); } catch (e) { return ''; }
+}
+export function setMyFace(f) {
+  const v = cleanFace(f);
+  try { v ? localStorage.setItem(FACE_KEY, v) : localStorage.removeItem(FACE_KEY); } catch (e) { /* private mode */ }
+  return v;
+}
