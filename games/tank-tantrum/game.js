@@ -7,7 +7,7 @@ import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
 import { CODE_LEN } from '../../js/engine/net.js';
-import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS } from './sim.js';
+import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
 import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS } from './render.js';
@@ -87,8 +87,7 @@ export function mount(stage) {
     acc = 0;
     renderer.setWorld(world);
     world.beginTurn();
-    userPan = false; overview = true; userZoom = 1;   // start zoomed out to see everyone
-    match.introUntil = time + 3;
+    userPan = false; overview = true; userZoom = 1;   // zoomed out: see everyone
     focusNow();
   }
   function startDemo() {
@@ -143,7 +142,7 @@ export function mount(stage) {
     elev = 0.6;
     match.ready = !(match.mode === 'local' && match.humans > 1 && match.ctrl[i] === 'me');
     userPan = false;
-    if (!isDemo() && time >= match.introUntil) overview = false;
+    overview = true; userZoom = 1;   // back to seeing everyone each turn
     closeBackpack();
     if (!match.ready) readyCard();
     else hideCard();
@@ -211,7 +210,6 @@ export function mount(stage) {
       match.turnSeen = w.turn;
       onTurnStart();
     }
-    if (match.introUntil && time >= match.introUntil) { match.introUntil = 0; if (!isDemo()) overview = false; }
     updateCamera(dt);
     updateHud();
   }
@@ -344,10 +342,28 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- camera
   function baseZoom() { return Math.min(1.4, Math.max(0.45, Math.max(view.width / 1400, view.height / 1000))); }
+  // Zooming is smooth from "whole map" (overview) up to close in.
+  function curZoom() { return overview ? fitZoom() : baseZoom() * userZoom; }
+  // (px, py) = the screen spot to zoom around (finger or mouse)
+  function setZoom(z, px = view.width / 2, py = view.height / 2) {
+    const fit = fitZoom();
+    z = Math.min(baseZoom() * 2.2, Math.max(fit, z));
+    if (z <= fit * 1.02) { overview = true; userZoom = 1; userPan = false; return; }
+    const wx = cam.x + (px - view.width / 2) / cam.z, wy = cam.y + (py - view.height / 2) / cam.z;
+    overview = false; userPan = true;
+    userZoom = z / baseZoom();
+    cam.z = z;
+    cam.x = wx - (px - view.width / 2) / z;
+    cam.y = wy - (py - view.height / 2) / z;
+    clampCam();
+  }
   function fitZoom() { return Math.min(view.width / W, view.height / (H - 100)); }
   function camTarget() {
     const w = replay ? replay.world : match.world;
-    if (overview) return { x: W / 2, y: H / 2, z: fitZoom() };
+    if (overview && !replay && w.phase !== 'over') {
+      const z = fitZoom();   // whole map, with the sea line just above the buttons
+      return { x: W / 2, y: WATER_Y + 30 - (view.height / 2 - 110) / z, z };
+    }
     const z = baseZoom() * userZoom;
     if (w.projectiles.length) {
       const p = w.projectiles[0];
@@ -364,7 +380,7 @@ export function mount(stage) {
     const hw = view.width / 2 / cam.z, hh = view.height / 2 / cam.z;
     const pad = overview ? 0 : 320;   // a bit of sea past each end, so edge tanks can be in the middle
     cam.x = W + pad * 2 < hw * 2 ? W / 2 : Math.min(W + pad - hw, Math.max(hw - pad, cam.x));
-    const top = -500 + hh, bottom = H + (overview ? 0 : 200) - hh;
+    const top = -500 + hh, bottom = H + (overview ? 400 : 200) - hh;
     cam.y = bottom < top ? (top + bottom) / 2 : Math.min(bottom, Math.max(top, cam.y));
   }
   function updateCamera(dt) {
@@ -415,7 +431,7 @@ export function mount(stage) {
     if (pointers.size === 2) {
       aiming = null; aim = null;
       const [a, b] = [...pointers.values()];
-      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: userZoom };
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: curZoom() };
       return;
     }
     if (myTurn() && !WEAPON[match.sel[match.world.active]].noAim) {
@@ -435,13 +451,13 @@ export function mount(stage) {
     p.x = e.clientX; p.y = e.clientY;
     if (pinch && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
-      userZoom = Math.min(2.2, Math.max(0.5, pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d));
-      overview = false;
+      const r = canvas.getBoundingClientRect();
+      setZoom(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
       return;
     }
     if (aiming === e.pointerId) { if (myTurn()) setAimFromPointer(e); return; }
     if (Math.abs(dx) + Math.abs(dy) > 0) {
-      userPan = true; overview = false;
+      userPan = true;
       cam.x -= dx / cam.z; cam.y -= dy / cam.z;
       clampCam();
     }
@@ -462,8 +478,8 @@ export function mount(stage) {
   const onWheel = e => {
     if (screen !== 'game') return;
     e.preventDefault();
-    userZoom = Math.min(2.2, Math.max(0.5, userZoom * (e.deltaY > 0 ? 0.9 : 1.1)));
-    overview = false;
+    const r = canvas.getBoundingClientRect();
+    setZoom(curZoom() * (e.deltaY > 0 ? 0.9 : 1.1), e.clientX - r.left, e.clientY - r.top);
   };
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
@@ -588,7 +604,7 @@ export function mount(stage) {
     });
     ui.querySelector('.tt-weapon').addEventListener('click', () => { sound.pop(); openBackpack(); });
     hud.fire.addEventListener('click', () => { if (myTurn()) shootFromAim(); });
-    ui.querySelector('.tt-mapbtn').addEventListener('click', () => { sound.pop(); overview = !overview; userPan = false; });
+    ui.querySelector('.tt-mapbtn').addEventListener('click', () => { sound.pop(); overview = !overview; userZoom = 1; userPan = false; });
     ui.querySelector('.tt-quit').addEventListener('click', () => { sound.pop(); quitCard(); });
   }
   const hud = {};

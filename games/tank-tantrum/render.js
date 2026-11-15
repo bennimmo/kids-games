@@ -349,14 +349,15 @@ export function createRenderer() {
     }
     ctx.save();
     ctx.translate(x, y + dy * z);
-    ctx.scale(z * k * TS, z * k * TS);
+    const big = Math.min(2, Math.max(1, 0.6 / z));   // easier to spot when zoomed out
+    ctx.scale(z * k * TS * big, z * k * TS * big);
     if (spin) { ctx.translate(0, -10); ctx.rotate(spin); ctx.translate(0, 10); }
     ctx.rotate(tilt);
     drawTank(ctx, t.look, ax, ay, time, t.cloud > 0);
     ctx.restore();
 
     // name + health
-    const ny = y - (dance ? 110 : 66 * k) * z + dy * z;
+    const ny = y - (dance ? 110 : 66 * k) * z * big + dy * z;
     const bw = 44;
     ctx.fillStyle = 'rgba(0,0,0,.45)';
     ctx.fillRect(x - bw / 2 - 2, ny - 2, bw + 4, 9);
@@ -374,7 +375,7 @@ export function createRenderer() {
       ctx.beginPath(); ctx.moveTo(x - 8, by); ctx.lineTo(x + 8, by); ctx.lineTo(x, by + 9); ctx.fill();
     }
     if (t.cloud > 0) {
-      const cy = y - 100 * z * k;
+      const cy = y - 100 * z * k * big;
       ctx.font = emojiFont(30 * z); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🌧️', x, cy);
       ctx.strokeStyle = 'rgba(120,180,255,.8)'; ctx.lineWidth = 2;
