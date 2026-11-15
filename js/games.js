@@ -9,6 +9,13 @@ export const GAMES = [
     load: () => import('../games/choo-choo/game.js'),
   },
   {
+    id: 'kits-karts',
+    name: "Kit's Karts",
+    icon: '🏁',
+    color: '#ff7043',
+    load: () => import('../games/kits-karts/game.js'),
+  },
+  {
     id: 'race-track',
     name: 'Raffy Race',
     icon: '🏎️',

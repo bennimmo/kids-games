@@ -1,0 +1,148 @@
+/* Kit's Karts */
+.kk { position: absolute; inset: 0; overflow: hidden; background: #1a1f2e; font-family: "Fredoka", system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; touch-action: none; }
+.kk button { font-family: inherit; cursor: pointer; border: 0; color: inherit; -webkit-tap-highlight-color: transparent; }
+.kk-3d { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.kk.racing .kk-3d { display: block; }
+.kk-ed { position: absolute; inset: 0; }
+.kk.racing .kk-ed { display: none; }
+.kk-hud, .kk-ui { position: absolute; inset: 0; pointer-events: none; }
+.kk-ui > *, .kk-hud .kk-pad, .kk-hud .kk-tb { pointer-events: auto; }
+.kk.flash::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,200,.55); pointer-events: none; }
+
+.kk-btn { width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,.92); color: #222 !important; font-size: 26px; box-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.kk-btn:active, .kk-go:active, .kk-big-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+
+/* ---- build screen */
+.kk-top { position: absolute; left: 96px; right: 8px; top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kk-themes { display: flex; gap: 6px; padding: 6px; border-radius: 30px; background: rgba(0,0,0,.35); overflow-x: auto; max-width: calc(100% - 180px); scrollbar-width: none; }
+.kk-theme { flex: 0 0 auto; width: 50px; height: 50px; border-radius: 50%; font-size: 28px; background: rgba(255,255,255,.18); border: 3px solid transparent !important; }
+.kk-theme.on { background: #fff; border-color: #ffd600 !important; transform: scale(1.08); }
+.kk-tools { display: flex; gap: 8px; }
+
+.kk-bar { position: absolute; left: 8px; right: 8px; bottom: 8px; height: 112px; display: flex; gap: 8px; align-items: stretch; }
+.kk-panel { background: rgba(0,0,0,.38); border-radius: 22px; padding: 8px; display: flex; gap: 8px; align-items: center; }
+.kk-players { flex: 0 0 auto; }
+.kk-player { position: relative; width: 120px; height: 96px; border-radius: 18px; background: rgba(255,255,255,.95); border: 4px solid var(--pc, #ccc) !important; display: flex; align-items: center; justify-content: center; color: #222 !important; cursor: pointer; font-size: 30px; }
+.kk-player b { position: absolute; left: 6px; top: 2px; font-size: 16px; color: var(--pc, #666); }
+.kk-player i { position: absolute; right: 6px; bottom: 2px; font-style: normal; font-size: 18px; }
+.kk-player .kk-kimg { width: 108px; height: 72px; object-fit: contain; }
+.kk-add { border-style: dashed !important; border-color: #9e9e9e !important; background: rgba(255,255,255,.5); flex-direction: column; }
+.kk-add b { position: static; color: #555; }
+.kk-x { position: absolute; right: -10px; top: -10px; width: 30px; height: 30px; border-radius: 50%; background: #e53935; color: #fff !important; font-size: 14px; }
+.kk-bots { display: flex; flex-direction: column; gap: 6px; }
+.kk-botrow { display: flex; gap: 6px; align-items: center; }
+.kk-mini { min-width: 40px; height: 40px; border-radius: 20px; background: rgba(255,255,255,.9); color: #222 !important; font-size: 20px; padding: 0 6px; }
+.kk-mini b { font-size: 16px; margin-left: 2px; }
+.kk-bcount { font-size: 24px; min-width: 52px; text-align: center; }
+.kk-bcount b { font-size: 20px; margin-left: 2px; }
+.kk-palette { flex: 1 1 auto; overflow-x: auto; scrollbar-width: none; }
+.kk-palette.off { opacity: .35; pointer-events: none; }
+.kk-extra { flex: 0 0 auto; width: 66px; height: 66px; border-radius: 18px; background: rgba(255,255,255,.9); display: flex; align-items: center; justify-content: center; font-size: 36px; cursor: grab; touch-action: none; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+.kk-go { flex: 0 0 auto; width: 112px; border-radius: 26px; font-size: 54px; background: linear-gradient(180deg, #66bb6a, #2e7d32); box-shadow: 0 6px 0 #1b5e20; }
+.kk-go.off { opacity: .35; pointer-events: none; }
+.kk-bin { position: absolute; left: 50%; top: 90px; transform: translateX(-50%) scale(.6); width: 80px; height: 80px; border-radius: 50%; background: rgba(229,57,53,.85); font-size: 40px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: .15s; pointer-events: none; }
+.kk-bin.show { opacity: 1; transform: translateX(-50%) scale(1); }
+.kk-bin.hot { transform: translateX(-50%) scale(1.25); background: #e53935; }
+
+/* ---- overlays */
+.kk-overlay { position: absolute; inset: 0; background: rgba(10,14,30,.55); display: flex; align-items: center; justify-content: center; padding: 12px; overflow-y: auto; }
+.kk-card { position: relative; background: rgba(255,255,255,.96); color: #222; border-radius: 26px; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,.5); text-align: center; max-width: 720px; width: 100%; }
+.kk-actions { display: flex; gap: 14px; justify-content: center; margin-top: 12px; }
+.kk-big-btn { width: 88px; height: 88px; border-radius: 26px; font-size: 44px; background: #ffd54f; box-shadow: 0 6px 0 #c49000; }
+.kk-saved-card { max-width: 900px; }
+.kk-saved-card .kk-back { position: absolute; left: 12px; top: 12px; }
+.kk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 60px; }
+.kk-empty { font-size: 50px; grid-column: 1 / -1; padding: 30px; }
+.kk-saved-item { position: relative; border-radius: 16px; overflow: hidden; cursor: pointer; border: 4px solid #e0e0e0; }
+.kk-saved-item.fav { border-color: #ffd600; }
+.kk-saved-item canvas { width: 100%; display: block; }
+.kk-star, .kk-del, .kk-del-yes { position: absolute; top: 6px; width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.9); font-size: 18px; }
+.kk-star { right: 50px; opacity: .45; }
+.fav .kk-star { opacity: 1; }
+.kk-del { right: 6px; }
+.kk-del-yes { right: 6px; top: 50px; background: #e53935; display: none; }
+.asking .kk-del-yes { display: block; }
+
+/* ---- garage */
+.kk-garage { display: flex; gap: 14px; background: #fff; color: #222; border-radius: 28px; padding: 16px; border: 5px solid var(--pc); max-width: 880px; width: 100%; max-height: 100%; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.kk-gleft { flex: 0 0 300px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.kk-gname { font-size: 26px; font-weight: 700; color: var(--pc); }
+.kk-gview { width: 300px; height: 200px; border-radius: 20px; background: radial-gradient(circle at 50% 30%, #fff, #cfd8e3); overflow: hidden; }
+.kk-preview { width: 300px !important; height: 200px !important; display: block; }
+.kk-stats { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+.kk-stat { display: flex; align-items: center; gap: 8px; font-size: 20px; }
+.kk-stat em { font-style: normal; font-size: 15px; width: 70px; color: #555; }
+.kk-stat i { display: flex; gap: 3px; flex: 1; }
+.kk-stat b { flex: 1; height: 12px; border-radius: 6px; background: #e0e0e0; }
+.kk-stat b.on { background: linear-gradient(90deg, #ffca28, #ff7043); }
+.kk-gright { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.kk-tabs { display: flex; gap: 8px; }
+.kk-tab { flex: 1; height: 54px; border-radius: 16px; font-size: 28px; background: #eceff1; }
+.kk-tab.on { background: var(--pc); box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+.kk-opts { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; min-height: 180px; max-height: 340px; }
+.kk-orow { display: flex; align-items: center; gap: 8px; }
+.kk-olabel { font-size: 24px; width: 34px; flex: 0 0 auto; }
+.kk-ochoices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kk-sw { width: 38px; height: 38px; border-radius: 50%; border: 3px solid rgba(0,0,0,.15) !important; }
+.kk-sw.on { border: 4px solid #222 !important; transform: scale(1.12); }
+.kk-ob { min-width: 52px; height: 52px; border-radius: 14px; background: #f1f3f6; font-size: 28px; border: 3px solid transparent !important; color: #222 !important; padding: 0 4px; }
+.kk-ob.on { border-color: var(--pc) !important; background: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.15); }
+.kk-obig { width: 112px; height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2px; }
+.kk-obig .kk-kimg { width: 104px; height: 68px; object-fit: contain; }
+.kk-obig small { font-size: 13px; line-height: 1; }
+.kk-flame { width: 52px; border-radius: 50%; }
+.kk-num { font-size: 28px; min-width: 44px; text-align: center; }
+.kk-note { font-size: 40px; padding: 20px; }
+.kk-ok { align-self: flex-end; width: 80px; height: 64px; border-radius: 20px; font-size: 34px; background: #66bb6a; box-shadow: 0 5px 0 #2e7d32; }
+
+/* ---- race HUD */
+.kk-view { position: absolute; overflow: hidden; pointer-events: none; }
+.kk-item { position: absolute; left: 96px; top: 12px; width: 78px; height: 78px; border-radius: 20px; background: rgba(0,0,0,.45); border: 4px solid rgba(255,255,255,.7); display: flex; align-items: center; justify-content: center; font-size: 46px; }
+.kk-item.ready { border-color: #ffd600; box-shadow: 0 0 18px #ffd600; animation: kk-pulse .8s infinite; }
+.kk-item sup { font-size: 18px; font-weight: 700; }
+.kk-place { position: absolute; right: 16px; top: 4px; font-size: 64px; font-weight: 700; color: #fff; text-shadow: 0 0 6px var(--pc), 0 4px 0 rgba(0,0,0,.4); line-height: 1; }
+.kk-place small { font-size: 26px; }
+.kk-lap { position: absolute; right: 18px; top: 74px; font-size: 24px; font-weight: 700; text-shadow: 0 2px 4px #000; }
+.kk-who { position: absolute; left: 186px; top: 16px; padding: 2px 12px; border-radius: 12px; background: var(--pc); font-weight: 700; font-size: 20px; }
+.kk-msg { position: absolute; left: 50%; top: 28%; transform: translate(-50%, 0) scale(.6); font-size: clamp(26px, 6vmin, 46px); font-weight: 700; white-space: nowrap; text-shadow: 0 3px 0 rgba(0,0,0,.4), 0 0 14px var(--pc); opacity: 0; transition: .15s; }
+.kk-msg.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.kk-big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: clamp(60px, 18vmin, 160px); font-weight: 700; text-shadow: 0 6px 0 rgba(0,0,0,.35); line-height: 1; }
+.kk-big small { font-size: .35em; }
+.kk-map { position: absolute; right: 12px; bottom: 12px; width: 180px; height: 112px; border-radius: 14px; background: rgba(0,0,0,.25); pointer-events: none; }
+.kk-map.mid { left: 50%; right: auto; transform: translateX(-50%); width: 150px; height: 94px; }
+.kk-racetop { position: absolute; left: 25px; top: 96px; }
+.kk-racetop .kk-btn { width: 46px; height: 46px; font-size: 20px; opacity: .85; }
+.kk-divider { position: absolute; background: #111; }
+.kk-pad { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: space-between; padding: 0 14px; pointer-events: none; }
+.kk-pad div { display: flex; gap: 12px; align-items: flex-end; }
+.kk-tb { pointer-events: auto; touch-action: none; width: 84px; height: 84px; border-radius: 50%; background: rgba(0,0,0,.35); border: 4px solid var(--pc) !important; font-size: 34px; }
+.kk-tb.on { background: var(--pc); }
+.kk-tb-fire { width: 96px; height: 96px; font-size: 42px; }
+.kk-tb-s { width: 64px; height: 64px; font-size: 26px; }
+.kk-view:has(.kk-pad) ~ .kk-map { bottom: 124px; }
+
+.kk-results ol { list-style: none; padding: 0; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; max-width: 380px; }
+.kk-results li { display: flex; align-items: center; gap: 10px; background: #f3f5f8; border-radius: 14px; padding: 2px 10px; border: 3px solid transparent; font-size: 20px; }
+.kk-results li.me { border-color: var(--pc); background: #fff; }
+.kk-results .kk-kimg { width: 72px; height: 48px; object-fit: contain; }
+.kk-medal { font-size: 28px; min-width: 44px; }
+.kk-trophy { font-size: 60px; line-height: 1; margin-bottom: 8px; }
+
+@keyframes kk-pulse { 50% { transform: scale(1.08); } }
+
+@media (max-width: 760px), (max-height: 560px) {
+  .kk-bar { height: 92px; }
+  .kk-player { width: 92px; height: 76px; }
+  .kk-player .kk-kimg { width: 84px; height: 56px; }
+  .kk-extra { width: 54px; height: 54px; font-size: 30px; }
+  .kk-go { width: 80px; font-size: 40px; }
+  .kk-theme { width: 42px; height: 42px; font-size: 24px; }
+  .kk-btn { width: 46px; height: 46px; font-size: 22px; }
+  .kk-garage { flex-direction: column; overflow-y: auto; }
+  .kk-gleft { flex: 0 0 auto; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  .kk-opts { max-height: none; }
+  .kk-place { font-size: 46px; }
+  .kk-item { width: 62px; height: 62px; font-size: 36px; }
+  .kk-tb { width: 70px; height: 70px; font-size: 28px; }
+  .kk-tb-fire { width: 80px; height: 80px; }
+}
