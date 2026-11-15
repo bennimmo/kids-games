@@ -94,9 +94,16 @@ function editName() {
       <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">⌫</button><button type="submit" class="app-btn name-ok" aria-label="Done">✔️</button></div>
     </form>`;
   const input = o.querySelector('input');
-  input.value = myName();
-  const close = () => { o.remove(); showMenu(); };
-  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); setMyName(input.value); nameChanged(); sound.pop(); close(); });
+  const before = myName();
+  input.value = before;
+  // Saved however the box is closed (✔️, Enter or tapping outside).
+  const close = () => {
+    const changed = setMyName(input.value) !== before;
+    o.remove();
+    if (changed) nameChanged();
+    showMenu();
+  };
+  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); sound.pop(); close(); });
   o.querySelector('.name-clear').addEventListener('click', () => { input.value = ''; input.focus(); });
   o.addEventListener('click', e => { if (e.target === o) close(); });
   document.body.appendChild(o);
