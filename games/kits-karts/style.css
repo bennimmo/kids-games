@@ -71,6 +71,7 @@
 .kk-preview { width: 300px !important; height: 200px !important; display: block; }
 .kk-stats { width: 100%; display: flex; flex-direction: column; gap: 4px; }
 .kk-stat { display: flex; align-items: center; gap: 8px; font-size: 20px; }
+.kk-stat em { font-style: normal; font-size: 15px; width: 70px; color: #555; }
 .kk-stat i { display: flex; gap: 3px; flex: 1; }
 .kk-stat b { flex: 1; height: 12px; border-radius: 6px; background: #e0e0e0; }
 .kk-stat b.on { background: linear-gradient(90deg, #ffca28, #ff7043); }

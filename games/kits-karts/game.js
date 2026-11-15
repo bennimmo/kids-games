@@ -272,7 +272,7 @@ export function mount(stage) {
       </div></div></div>`);
     if (preview) { box.querySelector('.kk-gview').appendChild(preview.canvas); preview.show(L); }
     const st = statsOf(L);
-    box.querySelector('.kk-stats').innerHTML = ['⚡', '🚀', '🌀', '🏋️', '🌲'].map((ic, k) => `<div class="kk-stat"><span>${ic}</span><i>${Array.from({ length: 6 }, (_, j) => `<b class="${j < Math.round(st[k]) ? 'on' : ''}"></b>`).join('')}</i></div>`).join('');
+    box.querySelector('.kk-stats').innerHTML = [['⚡', 'Speed'], ['🚀', 'Pick-up'], ['🌀', 'Turning'], ['🏋️', 'Weight'], ['🌲', 'Off-road']].map(([ic, name], k) => `<div class="kk-stat"><span>${ic}</span><em>${name}</em><i>${Array.from({ length: 6 }, (_, j) => `<b class="${j < Math.round(st[k]) ? 'on' : ''}"></b>`).join('')}</i></div>`).join('');
     box.querySelectorAll('.kk-tab').forEach(b => click(b, () => { S.gTab = b.dataset.tab; render(); }));
     const opts = box.querySelector('.kk-opts');
     const set = (k, v) => { p.look = cleanLook({ ...p.look, [k]: v }, S.garage.i); savePrefs(); render(); };
