@@ -174,10 +174,12 @@ function stepFixed(s, dt, opts) {
   const auth = clamp(v / (P.vr * 0.9), 0, 1) ** 1.3;                 // controls work better with speed
   let pi = inp.pitch, ri = inp.roll, yi = inp.yaw;
   const bank = Math.atan2(left.y, up.y), pitchA = Math.asin(clamp(fwd.y, -1, 1));
+  // easy mode: loops and rolls only high up (safe), otherwise normal limits
+  const stunts = P.aerobatic && s.agl > 300;
   if (opts.easy && !s.onGround) {
     // wings level when you let go, and limit the bank
     if (Math.abs(ri) < 0.05) ri = clamp(-bank * 1.6, -0.6, 0.6);
-    else if (Math.abs(bank) > 58 * D && Math.sign(ri) === Math.sign(bank)) ri = clamp((58 * D * Math.sign(bank) - bank) * 2, -1, 1);
+    else if (!stunts && Math.abs(bank) > 58 * D && Math.sign(ri) === Math.sign(bank)) ri = clamp((58 * D * Math.sign(bank) - bank) * 2, -1, 1);
     // hold height when you let go
     const gamma = v > 1 ? Math.asin(clamp(s.vel.y / v, -1, 1)) : 0;
     // just after take-off it climbs by itself to a safe height
@@ -186,8 +188,8 @@ function stepFixed(s, dt, opts) {
     const settle = s.gearDown && s.agl < 12 && s.throttle < 0.4 && s.vel.y < 0 ? clamp(-1 / Math.max(v, 1), -0.05, 0) : null;
     const tg = settle !== null ? settle : want;
     if (Math.abs(pi) < 0.05 || (settle !== null && pi < 0)) pi = clamp((tg - gamma) * 3 - s.omega.x * 0.3, -0.5, 0.5);
-    if (pitchA > 35 * D && pi > 0) pi *= 0.2;
-    if (pitchA < -35 * D && pi < 0) pi *= 0.2;
+    if (!stunts && pitchA > 35 * D && pi > 0) pi *= 0.2;     // the jet can loop (high up), the others can't
+    if (!stunts && pitchA < -35 * D && pi < 0) pi *= 0.2;
     // no stalling: limit the angle of attack
     if (aoa > stallA * 0.75 && pi > 0) pi *= clamp(1 - (aoa - stallA * 0.75) / (stallA * 0.2), -0.6, 1);
     // turns are coordinated by the tail
@@ -202,7 +204,7 @@ function stepFixed(s, dt, opts) {
   // easy mode: trim for a level turn (more lift when banked)
   const nTrim = opts.easy && !s.onGround ? 1 / Math.max(Math.cos(bank), 0.5) : 1;
   const trimAoa = clamp(nTrim * P.mass * G / Math.max(qd * P.wing, 1) / P.cla - (P.cl0 + flapsCL) / P.cla, -4 * D, stallA * 0.85);
-  target.x += -(aoa - (s.onGround ? aoa : trimAoa)) * 1.4 * Math.min(qn, 1.5);
+  target.x += -(aoa - (s.onGround ? aoa : trimAoa)) * 1.4 * Math.min(qn, 1.5) * (P.agile || 1);
   target.y -= beta * 1.2 * Math.min(qn, 1.5);
   // stalled: nose drops, a wing may drop (not in easy mode)
   if (s.stall) {

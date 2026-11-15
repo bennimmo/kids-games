@@ -12,7 +12,7 @@ export const PLANES = {
   cub: {
     name: 'Sky Cub', icon: '🛩️', stars: 1, desc: 'Small and easy',
     kind: 'plane', mass: 1100, wing: 16.2, cla: 5.0, cl0: 0.32, clmax: 1.55, stall: 16 * D, cd0: 0.03, k: 0.055,
-    thrust: 3600, vmaxProp: 88, jet: false, rates: [85, 34, 22], vr: 27, vref: 33, vno: 75,
+    thrust: 3600, vmaxProp: 88, jet: false, rates: [90, 40, 24], vr: 27, vref: 33, vno: 75,
     gear: 'fixed', gearH: 1.25, groundPitch: 0.5 * D, tailStrike: 13 * D, wheelbase: 2.4,
     flaps: [0, 0.22, 0.42, 0.62], flapDrag: [0, 0.006, 0.016, 0.03], maxG: 4.4,
     eye: [0.32, 0.72, 0.65], camDist: 14, length: 8.3, span: 11, panel: 'analog', engine: 'prop', color: 0xe53935,
@@ -35,8 +35,8 @@ export const PLANES = {
   },
   zoom: {
     name: 'Zoom Jet', icon: '🚀', stars: 3, desc: 'Super fast, loops',
-    kind: 'plane', mass: 12000, wing: 38, cla: 4.0, cl0: 0.05, clmax: 1.7, stall: 26 * D, cd0: 0.02, k: 0.11,
-    thrust: 125000, ab: 1.55, jet: true, rates: [240, 32, 18], vr: 72, vref: 72, vno: 400,
+    kind: 'plane', mass: 12000, wing: 38, cla: 4.6, cl0: 0.05, clmax: 1.7, stall: 26 * D, cd0: 0.02, k: 0.11,
+    thrust: 125000, ab: 1.55, jet: true, rates: [260, 55, 22], agile: 0.55, aerobatic: true, vr: 72, vref: 72, vno: 400,
     gear: 'retract', gearH: 1.85, groundPitch: 0, tailStrike: 14 * D, wheelbase: 5.2, hook: true,
     flaps: [0, 0.2, 0.4], flapDrag: [0, 0.01, 0.025], maxG: 9,
     eye: [0, 1.05, 4.1], camDist: 24, length: 15.5, span: 10, panel: 'fighter', engine: 'fighter', color: 0x607d8b,
