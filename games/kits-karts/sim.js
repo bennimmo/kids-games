@@ -63,7 +63,7 @@ export function boxesOf(course, items) {
 function params(look, theme) {
   const [sp, ac, tu, we, of] = statsOf(look);
   return {
-    max: 300 + sp * 18, acc: 250 + ac * 55, turn: 2.2 + tu * 0.26, mass: 0.7 + we * 0.2,
+    max: 235 + sp * 14, acc: 190 + ac * 40, turn: 1.9 + tu * 0.18, mass: 0.7 + we * 0.2,
     off: Math.min(0.95, (theme.offroad || 0.5) * (0.7 + of * 0.12)), hover: look.body === 'hover',
   };
 }
@@ -222,7 +222,7 @@ function updateCar(race, car, input, dt) {
   car.onRoad = here.onRoad;
 
   // ---- what are we driving on?
-  let maxF = P.max, drag = 0.35, grip = 7, turn = P.turn;
+  let maxF = P.max, drag = 0.35, grip = 10, turn = P.turn;
   let surface = here.onRoad ? 'road' : 'off';
   if (!here.onRoad && !car.air) { maxF *= P.off; drag = 1.0; grip = 5.5; }
   if (race.theme.slippy && here.onRoad) grip *= race.theme.slippy;
@@ -248,8 +248,8 @@ function updateCar(race, car, input, dt) {
   if (car.starT > 0) maxF *= 1.18;
   if (car.boostT > 0) {
     car.boostT -= dt;
-    maxF = Math.max(maxF, P.max * 1.45);
-    if (car.vF > 0) car.vF += 700 * dt;
+    maxF = Math.max(maxF, P.max * 1.35);
+    if (car.vF > 0) car.vF += 450 * dt;
   }
 
   // ---- controls
@@ -300,8 +300,10 @@ function updateCar(race, car, input, dt) {
     if (car.vF > maxF) car.vF = maxF + (car.vF - maxF) * Math.exp(-3 * dt);
     car.vF *= Math.exp(-drag * dt);
     if (!gas && !brake) car.vF *= Math.exp(-0.8 * dt);
-    const sf = Math.min(1, Math.abs(car.vF) / 80);
-    car.a += steer * turn * sf * (car.vF < 0 ? -1 : 1) * dt;
+    // steering eases in (no twitchy snaps) and is a bit gentler at top speed
+    car.steerIn = (car.steerIn || 0) + Math.max(-dt * 6, Math.min(dt * 6, steer - (car.steerIn || 0)));
+    const sf = Math.min(1, Math.abs(car.vF) / 80) * (1 - Math.min(0.25, Math.max(0, (Math.abs(car.vF) - 180) / 500)));
+    car.a += car.steerIn * turn * sf * (car.vF < 0 ? -1 : 1) * dt;
     car.vR *= Math.exp(-grip * dt);
     if (car.drifting) car.vR += -car.driftDir * car.vF * 0.35 * dt * 3;
   }
