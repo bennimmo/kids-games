@@ -1,6 +1,6 @@
 // Sky Pilot: the 3D ground (chunks with 3 levels of detail) and the sea.
 import * as THREE from '../../js/vendor/three.module.min.js';
-import { GRID, HALF, CELL, heights, regionWeights, N, AIRPORTS, TOWNS, runwayLocal, apronSide, LAKE } from './island.js';
+import { GRID, HALF, CELL, heights, regionWeights, N, AIRPORTS, TOWNS, VILLAGES, townMask, runwayLocal, apronSide, LAKE } from './island.js';
 import { clamp, smooth, lerp, hash2, makeNoise } from './noise.js';
 
 const CHUNKS = 12;                 // chunks across
@@ -50,6 +50,13 @@ function groundColor(x, z, h, ny, out) {
   if (beach > 0) mix3(c, SAND, beach * (1 - wm), c);
   // under the sea: sand getting darker
   if (h < 0.6) mix3(SAND, WET, smooth(0, -30, h), c);
+  // towns and hamlets: gardens, yards and paths (a bit browner/greyer)
+  for (const t of TOWNS) {
+    if (Math.abs(x - t.x) > t.w * 1.2 || Math.abs(z - t.z) > t.w * 1.2) continue;
+    const m = townMask(t, x, z);
+    if (m < 1.1) mix3(c, t.kind === 'city' ? [0.55, 0.55, 0.5] : t.kind === 'adobe' || t.kind === 'resort' ? [0.82, 0.72, 0.55] : [0.5, 0.52, 0.36], smooth(1.1, 0.6, m) * (t.kind === 'city' ? 0.6 : 0.4), c);
+  }
+  for (const vv of VILLAGES) { const d = Math.hypot(x - vv.x, z - vv.z); if (d < vv.r * 1.3) mix3(c, [0.52, 0.5, 0.36], smooth(vv.r * 1.3, vv.r * 0.4, d) * 0.35, c); }
   // fine noise so it isn't flat
   const k = 0.92 + v2 * 0.08;
   out[0] = c[0] * k; out[1] = c[1] * k; out[2] = c[2] * k;

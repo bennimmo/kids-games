@@ -793,12 +793,13 @@ export function createScenery(scene, sky, quality, dpr) {
   };
   const TCH = 3000, treeChunks = [];
   const nearAirport = (x, z) => AIRPORTS.some(ap => { const l = runwayLocal(ap, x, z); return Math.abs(l.along) < ap.len / 2 + 450 && l.side > -ap.wid / 2 - 160 && l.side < apronSide(ap) + 60; });
-  const inTown = (x, z) => TOWNS.some(t => { const c = Math.cos(t.rot), s = Math.sin(t.rot), dx = x - t.x, dz = z - t.z; return Math.abs(dx * c - dz * s) < t.w / 2 + 40 && Math.abs(dx * s + dz * c) < t.d / 2 + 40; });
+  const inTown = (x, z) => TOWNS.some(t => Math.abs(x - t.x) < t.w * 1.3 && Math.abs(z - t.z) < t.w * 1.3 && townMask(t, x, z) < 1.02) || VILLAGES.some(v => Math.hypot(v.x - x, v.z - z) < v.r * 1.1);
+  const onRoute = (x, z) => ROADS.some(r => r.path.some((p, i) => i % 2 === 0 && Math.abs(p[0] - x) < 22 && Math.abs(p[2] - z) < 22));
   const roadNear = (x, z) => ROADS.some(r => r.path && r.path.some((p, i) => i % 3 === 0 && Math.abs(p[0] - x) < 25 && Math.abs(p[2] - z) < 25));
   const dens = quality.trees;
   for (let cz = -HALF; cz < HALF; cz += TCH) for (let cx = -HALF; cx < HALF; cx += TCH) {
-    const lists = { pine: [], leaf: [], palm: [], cactus: [] };
-    const tries = Math.round(2600 * dens);
+    const lists = { pine: [], leaf: [], palm: [], cactus: [], bush: [], rock: [], cow: [], sheep: [] };
+    const tries = Math.round(4200 * dens);
     for (let i = 0; i < tries; i++) {
       const x = cx + R() * TCH, z = cz + R() * TCH;
       const h = terrainHeight(x, z);
@@ -813,9 +814,25 @@ export function createScenery(scene, sky, quality, dpr) {
       else if (wm > 0.5) { if (h < 1150 && f > 0.42 && R() < 0.55) type = 'pine'; }
       else if (ww > 0.5) { if (f > 0.4 && R() < 0.85) type = R() < 0.55 ? 'pine' : 'leaf'; else if (R() < 0.05) type = 'leaf'; }
       else { if (f > 0.52 && R() < 0.5) type = 'leaf'; else if (R() < 0.03) type = 'leaf'; }
+      // bushes and rocks fill the gaps; cows and sheep on the flat green fields
+      if (!type) {
+        const flat = nrm[1] > 0.985;
+        const rr = R();
+        if ((wm > 0.5 || wd > 0.5 || nrm[1] < 0.9) && rr < 0.12) type = 'rock';
+        else if (wd < 0.5 && wm < 0.5 && h > 6 && rr < 0.1) type = 'bush';
+        else if (ww > 0.5 && flat && h < 260 && f < 0.4 && rr < 0.05) type = R() < 0.5 ? 'cow' : 'sheep';
+        else if (wd < 0.5 && wm < 0.5 && flat && h < 120 && f < 0.45 && rr < 0.015) type = 'cow';
+      }
       if (!type) continue;
-      if (nearAirport(x, z) || inTown(x, z) || Math.hypot(x - LAKE.x, z - LAKE.z) < 200) continue;
-      lists[type].push([x, h - 0.4, z, 0.7 + R() * 0.7, R() * 6.28]);
+      if (nearAirport(x, z) || inTown(x, z) || Math.hypot(x - LAKE.x, z - LAKE.z) < 200 || onRoute(x, z)) continue;
+      if (type === 'cow' || type === 'sheep') {
+        // a little herd
+        const n = 3 + R.int(6);
+        for (let k = 0; k < n; k++) { const ax = x + (R() - 0.5) * 40, az = z + (R() - 0.5) * 40; lists[type].push([ax, terrainHeight(ax, az), az, 0.9 + R() * 0.2, R() * 6.28]); }
+        continue;
+      }
+      const big = type === 'rock' ? 0.5 + R() * (wm > 0.5 ? 2.5 : 1.2) : 0.75 + R() * 0.75;
+      lists[type].push([x, h - (type === 'rock' ? 0.3 * big : 0.4), z, big, R() * 6.28]);
     }
     const group = new THREE.Group(); group.visible = false; root.add(group);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new V3(), pv = new V3(), col = new THREE.Color();
@@ -834,6 +851,33 @@ export function createScenery(scene, sky, quality, dpr) {
       group.add(im);
     }
     treeChunks.push({ group, x: cx + TCH / 2, z: cz + TCH / 2 });
+  }
+
+  // beach umbrellas near the seaside towns, boats tied up by the harbour and Fishport
+  {
+    const umb = merge2([new THREE.ConeGeometry(2.2, 0.9, 8, 1, true).translate(0, 2.6, 0), new THREE.CylinderGeometry(0.05, 0.05, 2.6, 5).translate(0, 1.3, 0)]);
+    const spots = [];
+    for (const t of [TOWNS[0], TOWNS[4], TOWNS[5]]) for (let i = 0; i < 400 && spots.length < (t === TOWNS[0] ? 70 : spots.length + 45); i++) {
+      const a = R() * Math.PI * 2, r = 400 + R() * 1800, x = t.x + Math.cos(a) * r, z = t.z + Math.sin(a) * r, h = terrainHeight(x, z);
+      if (h > 0.8 && h < 3.2 && terrainNormal(x, z)[1] > 0.97) spots.push([x, h, z]);
+    }
+    const um = new THREE.InstancedMesh(umb, new THREE.MeshStandardMaterial({ roughness: 0.7, side: THREE.DoubleSide }), Math.max(1, spots.length));
+    const m4 = new THREE.Matrix4(), col = new THREE.Color(), uc = [0xe53935, 0x1e88e5, 0xffb300, 0x43a047, 0xffffff, 0xff7043];
+    spots.forEach(([x, h, z], i) => { um.setMatrixAt(i, m4.makeTranslation(x, h, z)); um.setColorAt(i, col.set(uc[i % uc.length])); });
+    um.count = spots.length; um.castShadow = true; root.add(um);
+    // moored boats
+    const boatG = merge2([new THREE.BoxGeometry(2.4, 1, 7).translate(0, 0.3, 0), new THREE.BoxGeometry(1.8, 1, 2.4).translate(0, 1.2, -0.6)]);
+    const moor = [];
+    for (const [cx, cz] of [[HARBOUR.x + 80, HARBOUR.z - 160], [TOWNS[5].x - 700, TOWNS[5].z], [TOWNS[4].x + 600, TOWNS[4].z + 300]]) {
+      for (let i = 0; i < 120 && moor.length < 60; i++) {
+        const x = cx + (R() - 0.5) * 600, z = cz + (R() - 0.5) * 600, h = terrainHeight(x, z);
+        if (h < -2 && h > -14 && !moor.some(b => Math.hypot(b[0] - x, b[1] - z) < 14)) moor.push([x, z, R() * 6.28]);
+      }
+    }
+    const bm = new THREE.InstancedMesh(boatG, new THREE.MeshStandardMaterial({ roughness: 0.6 }), Math.max(1, moor.length));
+    const q = new THREE.Quaternion(), one = new V3(1, 1, 1);
+    moor.forEach(([x, z, r], i) => { q.setFromAxisAngle(new V3(0, 1, 0), r); bm.setMatrixAt(i, m4.compose(new V3(x, 0, z), q, one)); bm.setColorAt(i, col.set(uc[(i + 2) % uc.length])); });
+    bm.count = moor.length; bm.castShadow = true; root.add(bm);
   }
 
   const allLights = lights;
@@ -875,6 +919,16 @@ export function createScenery(scene, sky, quality, dpr) {
   return { root, update, beforeView, papis };
 }
 
+function merge2(gs) {
+  const list = gs.map(g => (g.index ? g.toNonIndexed() : g));
+  const out = new THREE.BufferGeometry();
+  for (const k of ['position', 'normal']) {
+    const tot = list.reduce((s, g) => s + g.attributes[k].array.length, 0), arr = new Float32Array(tot);
+    let o = 0; for (const g of list) { arr.set(g.attributes[k].array, o); o += g.attributes[k].array.length; }
+    out.setAttribute(k, new THREE.BufferAttribute(arr, 3));
+  }
+  return out;
+}
 // ---------------------------------------------------------------- tree shapes (vertex coloured)
 function makeTreeGeos() {
   const colorize = (g, c) => {
@@ -907,5 +961,17 @@ function makeTreeGeos() {
   const palm = merge(palmParts);
   const cactus = merge([colorize(new THREE.CylinderGeometry(0.55, 0.6, 6, 8).translate(0, 3, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.35, 0.35, 2, 8).rotateZ(Math.PI / 2).translate(0.9, 2.6, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.33, 0.33, 2.2, 8).translate(1.8, 3.5, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8).translate(-1.4, 4, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8).rotateZ(Math.PI / 2).translate(-0.8, 3.3, 0), [0.25, 0.5, 0.25])]);
   for (const g of [pine, leaf, palm, cactus]) g.computeVertexNormals();
-  return { pine, leaf, palm, cactus };
+  const bush = merge([blob(1.6, 0, 1.1, 0, [0.28, 0.45, 0.18]), blob(1.2, 1.1, 0.8, 0.4, [0.3, 0.5, 0.2]), blob(1.1, -0.9, 0.7, -0.3, [0.25, 0.42, 0.16])]);
+  const rockG = new THREE.DodecahedronGeometry(2.2, 0); { const p = rockG.attributes.position; for (let i = 0; i < p.count; i++) { const s = 0.75 + Math.abs(Math.sin(p.getX(i) * 3.1 + p.getZ(i) * 1.7)) * 0.45; p.setXYZ(i, p.getX(i) * s * 1.2, p.getY(i) * s * 0.65, p.getZ(i) * s); } }
+  const rock = merge([colorize(rockG.translate(0, 0.9, 0), [0.55, 0.52, 0.48])]);
+  const animal = (bodyC, headC, wool) => {
+    const parts = [colorize(new THREE.BoxGeometry(0.8, 0.75, 1.7).translate(0, 1.0, 0), bodyC), colorize(new THREE.BoxGeometry(0.45, 0.45, 0.55).translate(0, 1.25, 1.05), headC)];
+    for (const x of [-0.28, 0.28]) for (const z of [-0.6, 0.6]) parts.push(colorize(new THREE.BoxGeometry(0.16, 0.65, 0.16).translate(x, 0.32, z), headC));
+    if (wool) parts[0] = colorize(new THREE.IcosahedronGeometry(0.75, 1).scale(0.75, 0.6, 1.15).translate(0, 1.0, 0), bodyC);
+    return merge(parts);
+  };
+  const cow = animal([0.95, 0.95, 0.92], [0.2, 0.18, 0.16], false);
+  const sheep = animal([0.95, 0.94, 0.9], [0.15, 0.14, 0.13], true);
+  for (const g of [bush, rock, cow, sheep]) g.computeVertexNormals();
+  return { pine, leaf, palm, cactus, bush, rock, cow, sheep };
 }

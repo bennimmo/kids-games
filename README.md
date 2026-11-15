@@ -55,7 +55,7 @@ Then open http://localhost:8000
 - One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
 - 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
 - Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
-- Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
+- Life: boats with wakes, moored boats, beach umbrellas, cows and sheep in the fields, rocks and bushes, cars + 2 trains, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
 - Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
 - Graphics: soft valley shadows + ridge highlights on the ground, bumpy ground detail, turquoise shallows + beach foam, clouds lit on the sunny side with silver linings, sun glare, swaying trees, brighter nights.
 - Map: hill shading, height lines, sea depth, towns with streets, roads, railway, runways, carrier, names and landmark icons (🗼 🎡 ⛵ 🏥 🔺 📡 🌬️ 🦆), other pilots with names. Under it: nearest airport (arrow + distance) and time/weather icons. Tap it (or M) for the whole island.
