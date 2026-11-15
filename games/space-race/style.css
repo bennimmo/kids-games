@@ -27,6 +27,8 @@
 .sd-pad button { pointer-events: auto; touch-action: none; width: 76px; height: 76px; border-radius: 50%; border: 3px solid var(--pc) !important; background: rgba(10,8,30,.5); font-size: 30px; }
 .sd-pad button.on { background: var(--pc); }
 .sd-pad ~ .sd-speed, .sd-view:has(.sd-pad) .sd-speed { bottom: 100px; }
+.sd-tilt { position: absolute; right: 14px; top: 70px; width: 56px; height: 56px; border-radius: 50%; pointer-events: auto; touch-action: none; background: rgba(10,8,30,.6); border: 3px solid var(--pc) !important; font-size: 28px; }
+.sd-tilting .sd-pad > div:first-child { visibility: hidden; } /* tilt steers, so no ◀ ▶ */
 .sd-divider { position: absolute; background: #000; box-shadow: 0 0 12px #7b6cff; }
 
 /* ---- overlays */

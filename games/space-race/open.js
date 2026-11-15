@@ -90,7 +90,9 @@ export function createOpen({ scene, seed, dpr }) {
 
   function simulate(sh, dt, racing) {
     const inp = sh.input;
-    const yIn = racing ? (inp.l ? 1 : 0) - (inp.r ? 1 : 0) : 0, pIn = racing ? (inp.u ? 1 : 0) - (inp.d ? 1 : 0) : 0;
+    // buttons, or tilt (sx/sy)
+    const yIn = racing ? ((inp.l ? 1 : 0) - (inp.r ? 1 : 0)) || -(inp.sx || 0) : 0;
+    const pIn = racing ? ((inp.u ? 1 : 0) - (inp.d ? 1 : 0)) || (inp.sy || 0) : 0;
     sh.yawV += (yIn * 1.55 - sh.yawV) * Math.min(1, dt * 6);
     sh.pitchV += (pIn * 1.15 - sh.pitchV) * Math.min(1, dt * 6);
     sh.yaw += sh.yawV * dt; sh.pitch = clamp(sh.pitch + sh.pitchV * dt, -1.1, 1.1);
