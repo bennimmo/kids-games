@@ -13,6 +13,7 @@ import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings, withAutoBoxes, boxesFromItems, PICKUPS } from './sim.js';
+import { myName, cleanName } from '../../js/engine/profile.js';
 import { aiInput } from './ai.js';
 import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb, STYLES, DECALS } from './render.js';
 
@@ -32,6 +33,11 @@ const CONTROLS = {
 const KEY_LABELS = { arrows: ['▲', '◀', '▼', '▶'], wasd: ['W', 'A', 'S', 'D'] };
 const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
 const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼', fire: '💥' };
+// phones: small screen, so the camera follows your car and there's no 2-player mode
+const PHONE = () => TOUCH && Math.min(innerWidth, innerHeight) < 520;
+// how you steer on a touch screen: 👆 finger on the track, 📱 tilt, 🎮 buttons
+const CTRL_ICON = { finger: '👆', tilt: '📱', buttons: '🎮' };
+const CTRL_KEY = 'rt-ctrl';
 const PLAYERS_KEY = 'raffy-race-players-v1';
 const GAME = 'raffy-race';
 const SEND_EVERY = 1 / 15;
@@ -109,10 +115,12 @@ export function mount(stage) {
   // the computer car joins when you play alone (not online)
   function cpuPlayer() {
     const used = S.players.map(p => p.color);
-    return { id: 'cpu', cpu: true, color: COLORS.find(c => !used.includes(c)) || '#757575', style: 'truck', decal: 'flames' };
+    return { id: 'cpu', cpu: true, name: '🤖', color: COLORS.find(c => !used.includes(c)) || '#757575', style: 'truck', decal: 'flames' };
   }
   const cpuPlaying = () => !S.net && S.players.length === 1 && S.cpuOn;
-  const racers = () => (S.net ? roster() : cpuPlaying() ? [...S.players, cpuPlayer()] : S.players);
+  // my name (from the main menu) goes on the first car; with a robot to race, everyone gets a tag
+  const named = () => S.players.map((p, i) => ({ ...p, name: i === 0 ? myName() : '' }));
+  const racers = () => (S.net ? roster() : cpuPlaying() ? [...named(), cpuPlayer()] : named());
   function setCpu(on) {
     S.cpuOn = on;
     try { localStorage.setItem(CPU_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
@@ -128,6 +136,8 @@ export function mount(stage) {
   function render() {
     ui.innerHTML = '';
     touches.clear();
+    finger = null;
+    if (PHONE() && S.players.length > 1 && !S.race) { S.players.length = 1; S.customFor = null; savePlayers(S.players); syncMyPlayers(); }
     if (S.phase === 'build') buildUI();
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
@@ -140,6 +150,11 @@ export function mount(stage) {
     if (S.net && S.net.status === 'waiting' && S.phase !== 'build' && S.phase !== 'lobby') ui.appendChild(el(`<div class="rt-netwait">📶⏳</div>`));
     if (S.busy) ui.appendChild(el(`<div class="rt-overlay"><div class="rt-wait">⏳</div></div>`));
     if (S.time < S.sad) ui.appendChild(el(`<div class="rt-overlay rt-sad"><div class="rt-wait">😢</div></div>`));
+    if (!S.rotateOk) { // only shows on a phone held upright (CSS); tap to carry on anyway
+      const r = el(`<div class="rt-rotate"><span>📱</span></div>`);
+      r.addEventListener('click', () => { S.rotateOk = true; r.remove(); });
+      ui.appendChild(r);
+    }
   }
 
   function buildUI() {
@@ -180,7 +195,7 @@ export function mount(stage) {
       click(bot, () => setCpu(true));
       pl.appendChild(bot);
     }
-    if (S.players.length < 2) {
+    if (S.players.length < 2 && !PHONE()) {
       const add = el(`<button class="rt-player rt-add"><canvas width="120" height="72"></canvas><div class="rt-plus">➕</div></button>`);
       drawCarIcon(add.querySelector('canvas'), { color: '#bdbdbd', style: 'truck' });
       click(add, () => {
@@ -309,14 +324,86 @@ export function mount(stage) {
     };
     const wrap = el(`<div class="rt-touch"></div>`);
     if (S.players.length === 1) {
-      wrap.appendChild(pad(S.players[0], ['left', 'right'], 'rt-pad-l'));
-      wrap.appendChild(pad(S.players[0], ['fire', 'down', 'up'], 'rt-pad-r'));
+      const mode = ctrlMode();
+      const left = pad(S.players[0], mode === 'buttons' ? ['left', 'right'] : [], 'rt-pad-l');
+      const mb = el(`<button class="rt-mode ${mode === 'tilt' && !tilt.listening ? 'ask' : ''}" aria-label="How to steer">${CTRL_ICON[mode]}</button>`);
+      mb.addEventListener('click', () => {
+        if (mode === 'tilt' && !tilt.listening) { startTilt().then(() => mb.classList.toggle('ask', !tilt.listening)); return; }
+        const order = Object.keys(CTRL_ICON);
+        setCtrl(order[(order.indexOf(mode) + 1) % order.length]);
+      });
+      left.prepend(mb);
+      wrap.appendChild(left);
+      wrap.appendChild(pad(S.players[0], mode === 'finger' ? ['fire'] : ['fire', 'down', 'up'], 'rt-pad-r'));
+      if (mode === 'finger' && !S.fingerHint) { S.fingerHint = true; wrap.appendChild(el(`<div class="rt-finger-hint">👆</div>`)); }
+      if (mode === 'tilt') startTilt();
     } else {
       wrap.appendChild(pad(S.players[0], ['left', 'right', 'fire', 'down', 'up'], 'rt-pad-l rt-pad-4'));
       wrap.appendChild(pad(S.players[1], ['left', 'right', 'fire', 'down', 'up'], 'rt-pad-r rt-pad-4'));
     }
     ui.appendChild(wrap);
   }
+
+  // ---------- steering mode: finger / tilt / buttons ----------
+  let finger = null; // { id, x, y } screen point the car drives towards
+  let tilt = { on: false, val: 0, zero: null };
+  function ctrlMode() {
+    if (S.players.length > 1) return 'buttons';
+    let m = null;
+    try { m = localStorage.getItem(CTRL_KEY); } catch (e) { /* private mode */ }
+    return CTRL_ICON[m] ? m : PHONE() ? 'finger' : 'buttons';
+  }
+  function setCtrl(m) {
+    try { localStorage.setItem(CTRL_KEY, m); } catch (e) { /* private mode */ }
+    sound.pop();
+    tilt.zero = null;
+    render();
+  }
+  const onTilt = e => {
+    if (e.beta == null) return;
+    const ang = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
+    const v = ang === 90 ? e.beta : (ang === -90 || ang === 270) ? -e.beta : ang === 180 ? -e.gamma : e.gamma;
+    if (tilt.zero === null) tilt.zero = Math.abs(ang) === 90 || ang === 270 ? 0 : v; // landscape: flat = straight
+    tilt.val = v - tilt.zero;
+    tilt.on = true;
+  };
+  async function startTilt() {
+    if (tilt.listening) return;
+    try {
+      // iPhone/iPad ask first (needs a tap: the 📱 button is that tap)
+      if (window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) {
+        const r = await DeviceOrientationEvent.requestPermission();
+        if (r !== 'granted') { setCtrl('buttons'); return; }
+      }
+    } catch (e) { /* not from a tap yet: the 📱 button asks again */ return; }
+    tilt.listening = true;
+    window.addEventListener('deviceorientation', onTilt);
+    const b = ui.querySelector('.rt-mode'); if (b) b.classList.remove('ask');
+  }
+  // turn towards a world point: returns { steer -1..1, up, down }
+  function steerTo(car, tx, ty) {
+    const want = Math.atan2(ty - car.y, tx - car.x);
+    let d = want - car.a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const dist = Math.hypot(tx - car.x, ty - car.y);
+    return { steer: Math.max(-1, Math.min(1, d * 2.2)), up: dist > 35, down: false };
+  }
+  function myCar(p) {
+    if (!S.race) return null;
+    const id = S.net ? pidOf(p) : p.id;
+    return S.race.cars.find(c => c.id === id);
+  }
+  view.canvas.addEventListener('pointerdown', e => {
+    if (S.phase !== 'race' || ctrlMode() !== 'finger') return;
+    finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    const h = ui.querySelector('.rt-finger-hint'); if (h) h.remove();
+  });
+  const onFingerMove = e => { if (finger && finger.id === e.pointerId) { finger.x = e.clientX; finger.y = e.clientY; } };
+  const onFingerUp = e => { if (finger && finger.id === e.pointerId) finger = null; };
+  window.addEventListener('pointermove', onFingerMove);
+  window.addEventListener('pointerup', onFingerUp);
+  window.addEventListener('pointercancel', onFingerUp);
 
   function markTouches() {
     const on = [...touches.values()];
@@ -392,7 +479,7 @@ export function mount(stage) {
         : '<button class="rt-big rt-again2">🔁</button><button class="rt-big rt-draw2">✏️</button>'}
       </div></div></div>`);
     list.forEach((c, i) => {
-      const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas></div>`);
+      const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas>${c.name ? `<b class="rt-name">${c.name}</b>` : ''}</div>`);
       drawCarIcon(row.querySelector('canvas'), c);
       box.querySelector('.rt-podium').appendChild(row);
     });
@@ -516,7 +603,7 @@ export function mount(stage) {
         // two friends picked the same colour: the later one gets a free colour (same on every device)
         const color = used.has(p.color) ? (COLORS.find(c => !used.has(c)) || p.color) : p.color;
         used.add(color);
-        return { id, color, style: p.style, decal: p.decal };
+        return { id, color, style: p.style, decal: p.decal, name: cleanName(p.name) };
       });
   }
 
@@ -526,7 +613,7 @@ export function mount(stage) {
     S.players.forEach((p, i) => {
       const id = pidOf(p);
       now.add(id);
-      S.net.room.setPlayer(id, { color: p.color, style: p.style || 'truck', decal: p.decal || 'none', joined: S.net.joined + i });
+      S.net.room.setPlayer(id, { color: p.color, style: p.style || 'truck', decal: p.decal || 'none', name: i === 0 ? myName() : '', joined: S.net.joined + i });
     });
     S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
     S.net.synced = now;
@@ -720,10 +807,10 @@ export function mount(stage) {
   }
 
   function picsHTML(code) {
-    return `<div class="rt-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+    return `<div class="rt-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
   }
   function carsHTML() {
-    return `<div class="rt-room-cars">${roster().map(() => '<canvas width="100" height="70"></canvas>').join('')}</div>`;
+    return `<div class="rt-room-cars">${roster().map(p => `<figure><canvas width="100" height="70"></canvas>${p.name ? `<b class="rt-name">${p.name}</b>` : ''}</figure>`).join('')}</div>`;
   }
   function fillCars(node) {
     const list = roster();
@@ -783,8 +870,8 @@ export function mount(stage) {
   function onlineUI() {
     const box = el(`<div class="rt-overlay"><div class="rt-card">
       <div class="rt-actions">
-        <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🌍</span></button>
-        <button class="rt-choice rt-join"><div class="rt-blank rt-gallery">🔑</div><span>🌍</span></button>
+        <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
+        <button class="rt-choice rt-join"><div class="rt-blank rt-gallery rt-pics3">🐶🍎🚀</div><span>🔑</span></button>
       </div>
       <button class="rt-btn rt-back">↩️</button>
     </div></div>`);
@@ -912,6 +999,16 @@ export function mount(stage) {
       }
     }
     for (const t of touches.values()) if (inputs[t.p]) inputs[t.p][t.k] = true;
+    if (S.players.length === 1 && TOUCH) {
+      const p = S.players[0], inp = inputs[p.id], car = myCar(p), mode = ctrlMode();
+      if (car && mode === 'finger' && finger) {
+        const w = R.toWorld(finger.x, finger.y);
+        Object.assign(inp, steerTo(car, w.x, w.y));
+      } else if (mode === 'tilt' && tilt.on && !inp.left && !inp.right) {
+        const t = tilt.val, dead = 4, full = 22;
+        inp.steer = Math.abs(t) < dead ? 0 : Math.sign(t) * Math.min(1, (Math.abs(t) - dead) / (full - dead));
+      }
+    }
     return inputs;
   }
 
@@ -923,6 +1020,23 @@ export function mount(stage) {
     const out = {};
     for (const p of S.players) out[pidOf(p)] = inputs[p.id];
     return out;
+  }
+
+  // ---------- phones: the camera zooms in and follows my car ----------
+  function followCam() {
+    if (!PHONE() || !S.race || S.phase !== 'race') { S.cam = null; return null; }
+    const mine = S.players.map(myCar).filter(Boolean);
+    if (!mine.length) return null;
+    const x = mine.reduce((a, c) => a + c.x, 0) / mine.length;
+    const y = mine.reduce((a, c) => a + c.y, 0) / mine.length;
+    const car = mine[0];
+    // look a little ahead of the car so you can see what's coming
+    const ax = x + (car.vx || 0) * 0.35, ay = y + (car.vy || 0) * 0.35;
+    if (!S.cam) S.cam = { x: ax, y: ay };
+    const k = Math.min(1, (S._dt || 0.016) * 4);
+    S.cam.x += (ax - S.cam.x) * k;
+    S.cam.y += (ay - S.cam.y) * k;
+    return { x: S.cam.x, y: S.cam.y, span: 620 };
   }
 
   // ---------- drawing the track with the mouse / finger ----------
@@ -1026,8 +1140,10 @@ export function mount(stage) {
     const building = S.phase === 'build';
     if (S.sad && S.time >= S.sad) { S.sad = 0; render(); }
     const gd = guestDraft();
+    const cam = followCam();
     R.frame({
-      insets: building ? { top: 8, bottom: 130 } : { top: 70, bottom: TOUCH ? 40 : 8 },
+      insets: cam ? { top: 0, bottom: 0 } : building ? (PHONE() ? { top: 4, bottom: 84 } : { top: 8, bottom: 130 }) : { top: 70, bottom: TOUCH ? 40 : 8 },
+      cam,
       cars: S.race ? S.race.cars : previewCars(),
       cones: S.race ? S.race.cones : undefined,
       boxes: S.race ? S.race.boxes : (S.track ? boxesFromItems(withAutoBoxes(S.track, S.items)) : []),
@@ -1057,6 +1173,10 @@ export function mount(stage) {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
+    window.removeEventListener('pointermove', onFingerMove);
+    window.removeEventListener('pointerup', onFingerUp);
+    window.removeEventListener('pointercancel', onFingerUp);
+    window.removeEventListener('deviceorientation', onTilt);
     window.removeEventListener('pointermove', onTouchMove);
     window.removeEventListener('pointerup', onTouchEnd);
     window.removeEventListener('pointercancel', onTouchEnd);

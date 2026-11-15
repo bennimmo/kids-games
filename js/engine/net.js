@@ -287,3 +287,47 @@ export async function joinRoom(game, code) {
   }
   return fbJoin(game, code);
 }
+
+// ------------------------------------------------------------ public sky (everyone, no host)
+// One shared area per game that anyone can fly into. Each device writes only its own
+// live/<uid>_<n> entries (removed when it disconnects) and reads everyone else's.
+// Returns { uid, now(), setLive(pid, data), onLive(cb), leave() }.
+export async function joinPublic(game, area = 'public') {
+  if (useLocal) {
+    const room = localRoom(game, area, false);
+    return { uid: room.uid, now: room.now, setLive: room.setLive, onLive: room.onLive, leave: room.leave };
+  }
+  const fb = await firebase();
+  const { D, db, uid } = fb;
+  const base = `games/${game}/rooms/${area}/live`;
+  const mine = new Set(), unsubs = [];
+  let left = false;
+  // put our entries back after a reconnect
+  const last = new Map();
+  unsubs.push(D.onValue(D.ref(db, '.info/connected'), s => {
+    if (left || !s.val()) return;
+    for (const [pid, data] of last) { D.onDisconnect(D.ref(db, `${base}/${pid}`)).remove(); D.set(D.ref(db, `${base}/${pid}`), data).catch(() => {}); }
+  }));
+  return {
+    uid, now: fb.now,
+    setLive(pid, data) {
+      if (left) return Promise.resolve();
+      const ref = D.ref(db, `${base}/${pid}`);
+      if (!mine.has(pid)) { mine.add(pid); D.onDisconnect(ref).remove(); }
+      last.set(pid, data);
+      return data ? D.set(ref, data).catch(() => {}) : D.remove(ref).catch(() => {});
+    },
+    onLive(cb) { const u = D.onValue(D.ref(db, base), s => cb(s.val() || {})); unsubs.push(u); return u; },
+    async leave() {
+      left = true;
+      unsubs.forEach(u => u());
+      await Promise.all([...mine].map(pid => { const ref = D.ref(db, `${base}/${pid}`); D.onDisconnect(ref).cancel(); return D.remove(ref); })).catch(() => {});
+    },
+  };
+}
+
+// Server clock (ms) once Firebase is up; falls back to this device's clock.
+export async function serverNow() {
+  if (useLocal) return () => Date.now();
+  try { const fb = await firebase(); return fb.now; } catch (e) { return () => Date.now(); }
+}

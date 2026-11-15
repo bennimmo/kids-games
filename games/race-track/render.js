@@ -860,6 +860,19 @@ function headBeams(g, c, s) {
   g.restore();
 }
 
+function nameTag(g, c) {
+  const y = c.y - (c.z || 0) * 0.3 - 40;
+  g.save();
+  g.font = '600 20px Fredoka, sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const w = g.measureText(c.name).width + 16;
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  g.beginPath(); g.roundRect(c.x - w / 2, y - 14, w, 28, 14); g.fill();
+  g.fillStyle = '#fff';
+  g.fillText(c.name, c.x, y + 1);
+  g.restore();
+}
+
 function drawRaceCar(g, c) {
   const z = c.z || 0;
   const s = 1 + z / 90;
@@ -911,11 +924,22 @@ export function createRenderer(view) {
     wet.clear();
   }
 
-  function computeFit(ins) {
+  // cam (phones): { x, y, span } = look at x,y and show about `span` world units of the shorter side
+  function computeFit(ins, cam) {
     const W = view.width, H = view.height - ins.top - ins.bottom;
     fit.s = Math.min(W / WORLD.w, H / WORLD.h);
     fit.ox = (W - WORLD.w * fit.s) / 2;
     fit.oy = ins.top + (H - WORLD.h * fit.s) / 2;
+    if (!cam) return;
+    const s = Math.max(fit.s, Math.min(W, H) / cam.span);
+    if (s <= fit.s * 1.05) return;
+    const place = (size, world, c, off) => {
+      if (world * s <= size) return off + (size - world * s) / 2; // fits: centre it
+      return off + size / 2 - c * s; // keep my car in the middle (even near the edge)
+    };
+    fit.s = s;
+    fit.ox = place(W, WORLD.w, cam.x, 0);
+    fit.oy = place(H, WORLD.h, cam.y, ins.top);
   }
 
   function toWorld(cx, cy) {
@@ -931,8 +955,22 @@ export function createRenderer(view) {
 
   const add = p => parts.push(Object.assign({ z: 0, vz: 0, grav: 0, grow: 0, a: 1 }, p, { max: p.life }));
 
+  // skid marks fade away after a few seconds so the track stays tidy
+  let fadeT = 0;
+  function fadeSkids(sg, dt) {
+    fadeT += dt;
+    if (fadeT < 0.4) return;
+    fadeT = 0;
+    sg.save();
+    sg.globalCompositeOperation = 'destination-out';
+    sg.fillStyle = 'rgba(0,0,0,.12)';
+    sg.fillRect(0, 0, WORLD.w, WORLD.h);
+    sg.restore();
+  }
+
   function effects(cars, dt) {
     const sg = skid.getContext('2d');
+    fadeSkids(sg, dt);
     sg.lineCap = 'round';
     for (const c of cars) {
       const fx = Math.cos(c.a), fy = Math.sin(c.a);
@@ -1089,7 +1127,7 @@ export function createRenderer(view) {
   function frame(o) {
     const g = view.ctx;
     const dt = o.dt;
-    computeFit(o.insets);
+    computeFit(o.insets, o.cam);
     g.fillStyle = '#3f5f2c';
     g.fillRect(0, 0, view.width, view.height);
     g.save();
@@ -1140,6 +1178,8 @@ export function createRenderer(view) {
       if (o.live && Math.random() < 0.6) add({ x: sh.x, y: sh.y - 6, vx: -sh.vx * 0.05, vy: -sh.vy * 0.05, life: 0.4, r: 4, grow: 10, color: '230,230,230', a: 0.5 });
     });
     cars.filter(c => c.spinT > 0).forEach(c => drawSpinStars(g, c, o.time));
+    // name tags: online, or me vs the robot
+    if (cars.some(c => c.remote || c.cpu)) cars.forEach(c => c.name && nameTag(g, c));
     g.globalAlpha = 0.35; // cars inside a tunnel: see-through
     cars.filter(c => hidden(c)).forEach(c => drawCar(g, c.x, c.y, c.a, c));
     g.globalAlpha = 1;

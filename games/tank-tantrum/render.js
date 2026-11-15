@@ -7,7 +7,7 @@ import { createGround } from './ground.js';
 export const TANK_COLORS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5', '#8e24aa', '#ec407a', '#6d4c41', '#546e7a', '#212121', '#ffffff'];
 export const HATS = ['', '🎩', '👑', '🧢', '🤠', '🎓', '⛑️', '🎀', '🪖', '🎉'];
 export const FLAGS = ['', '🏴‍☠️', '⭐', '❤️', '⚡', '🌈', '🐉', '🦄', '💀', '⚽', '🍕', '🐸'];
-const NAMES = ['Boomer', 'Rusty', 'Tanky', 'Blaster', 'Zapper', 'Bonkers', 'Wobbles', 'Kaboom'];
+export const NAMES = ['Boomer', 'Rusty', 'Tanky', 'Blaster', 'Zapper', 'Bonkers', 'Wobbles', 'Kaboom'];
 
 export function randomLook(i = Math.floor(Math.random() * 8)) {
   return {

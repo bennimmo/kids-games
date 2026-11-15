@@ -1,7 +1,7 @@
 // Paint Party – a simple paint program (like the old Paint on Windows).
 // Tools down the left, colours and sizes along the bottom, actions on the right.
 // Every drawing saves itself in this browser (🖼️ to see them). 📥 downloads a PNG.
-// 👫 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
+// 🌍 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
 import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
 import { W, H, COLORS, STAMPS, BRUSH, STAMP, SHAPES, MAX_NUMS, byOrder, drawOp, createPainter } from './ops.js';
@@ -40,7 +40,7 @@ export function mount(stage) {
       <button data-act="clear" aria-label="Clear">🗑️</button>
       <button data-act="download" aria-label="Download">📥</button>
       <button data-act="gallery" aria-label="My drawings">🖼️</button>
-      <button data-act="friends" aria-label="Draw with friends">👫</button>
+      <button data-act="friends" aria-label="Draw with friends">🌍</button>
     </div>
     <div class="pt-palette"></div>`;
   stage.appendChild(root);
@@ -254,7 +254,7 @@ export function mount(stage) {
       if (closed) return;
       octx.clearRect(0, 0, W, H);
       if (net) {
-        for (const { op, emoji } of net.cursors()) {
+        for (const { op, emoji, name } of net.cursors()) {
           if (op.k !== 'fill' && op.k !== 'clear') drawOp(octx, op);
           const p = op.p;
           if (p.length >= 2) {
@@ -262,6 +262,13 @@ export function mount(stage) {
             octx.textAlign = 'center';
             octx.textBaseline = 'middle';
             octx.fillText(emoji, p[p.length - 2] + 34, p[p.length - 1] - 34);
+            if (name) {
+              octx.font = '600 26px Fredoka, sans-serif';
+              octx.lineWidth = 6; octx.strokeStyle = '#fff'; octx.lineJoin = 'round';
+              octx.strokeText(name, p[p.length - 2] + 34, p[p.length - 1] + 4);
+              octx.fillStyle = '#333';
+              octx.fillText(name, p[p.length - 2] + 34, p[p.length - 1] + 4);
+            }
           }
         }
       }
@@ -345,7 +352,7 @@ export function mount(stage) {
       <div class="pt-room">
         <span class="pt-code"><b>🔑</b>${net.pics.map(p => `<span>${p}</span>`).join('')}</span>
         <span class="pt-sep"></span>
-        <span class="pt-people">${net.players().map(p => `<span class="${p.me ? 'me' : ''}">${p.emoji}</span>`).join('')}</span>
+        <span class="pt-people">${net.players().map(p => `<span class="${p.me ? 'me' : ''}">${p.emoji}${p.name ? `<small>${p.name}</small>` : ''}</span>`).join('')}</span>
         <button class="pt-leave" aria-label="Leave">🚪</button>
       </div>` : '';
     if (html === lastTop) return;

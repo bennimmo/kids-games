@@ -83,7 +83,7 @@ export function mount(stage) {
     if (n) await n.leave();
   }
   const codeHtml = () => net ? net.pics.map(p => `<span>${p}</span>`).join('') : '';
-  const friendDots = () => net ? net.friends().map(f => `<span title="${f.name}">${f.emoji}</span>`).join('') : '';
+  const friendDots = () => net ? net.friends().map(f => `<span title="${f.who || f.name}">${f.emoji}</span>`).join('') : '';
 
   // ---------- Play with friends: make or join a room ----------
   function friendsScreen() {
@@ -177,7 +177,7 @@ export function mount(stage) {
             <span class="bb-roombar-f">${friendDots()}</span>
             <button class="bb-leave">Leave 🚪</button>
           </div>` : `
-          <button class="bb-friends-btn">👭 Play with friends</button>`}
+          <button class="bb-friends-btn">🌍 Play with friends</button>`}
         <p class="bb-sub">Pick your girl!</p>
         <div class="bb-girls">
           ${GIRLS.map(g => `
@@ -428,7 +428,7 @@ export function mount(stage) {
       const changed = lastFriendLook[f.id] !== undefined && lastFriendLook[f.id] !== key;
       friends.forEach(x => { lastFriendLook[x.id] = JSON.stringify(x.look); });
       friendEl.innerHTML = `
-        <div class="bb-friend-name">${f.emoji} ${f.name}</div>
+        <div class="bb-friend-name">${f.emoji} ${f.who ? `${f.who} · ` : ''}${f.name}</div>
         <div class="bb-friend-girl">${renderGirl(f.look, { still: true, viewBox: viewBox() })}</div>
         ${friends.length > 1 ? `<div class="bb-friend-thumbs">${friends.map(x => `
           <button class="${x.id === focusId ? 'on' : ''}" data-friend="${x.id}" aria-label="${x.name}">

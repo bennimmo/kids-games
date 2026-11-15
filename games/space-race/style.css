@@ -72,6 +72,8 @@
 .sd-ships { display: flex; gap: 12px; justify-content: center; font-size: 44px; }
 .sd-ships span { position: relative; width: 72px; height: 72px; border-radius: 50%; border: 4px solid var(--pc, #555); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); }
 .sd-ships span b { position: absolute; bottom: -10px; right: -10px; font-size: 26px; }
+.sd-ships .sd-name { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 600; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.sd-lobby .sd-ships { margin-bottom: 22px; }
 .sd-ships .sd-empty { border-style: dashed; animation: sd-pulse 1s infinite; }
 
 @media (max-width: 520px), (max-height: 520px) {
@@ -84,3 +86,4 @@
   .sd-place { font-size: 40px; }
 }
 @media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } .sd-wait, .sd-netwait, .sd-ships .sd-empty { animation: none; } }
+.sd-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }

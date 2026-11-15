@@ -57,7 +57,7 @@ export function createRace(track, players) {
     const p = track.pts[i];
     const side = (k % 2 === 0 ? -1 : 1) * 21;
     return {
-      id: pl.id, color: pl.color, style: pl.style || 'truck', decal: pl.decal || 'none',
+      id: pl.id, name: pl.name || '', color: pl.color, style: pl.style || 'truck', decal: pl.decal || 'none',
       x: p.x - Math.sin(p.a) * side, y: p.y + Math.cos(p.a) * side, a: p.a,
       vx: 0, vy: 0, idx: i, prog: -back, lap: 1, lapsDone: 0, started: false, seen: 0, near: true,
       boostT: 0, onBoost: false, inMud: false, onIce: false,
@@ -154,7 +154,7 @@ function updateCar(car, inputIn, track, items, dt, ev) {
     if (vF > maxF) vF = maxF + (vF - maxF) * Math.exp(-4 * dt); // slow down, don't stop
     vF *= Math.exp(-drag * dt);
     if (!input.up && !input.down) vF *= Math.exp(-0.9 * dt);
-    const steer = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+    const steer = typeof input.steer === 'number' ? Math.max(-1, Math.min(1, input.steer)) : (input.left ? -1 : 0) + (input.right ? 1 : 0);
     const speedFactor = Math.min(1, Math.abs(vF) / 90);
     car.a += steer * TURN * speedFactor * (vF < 0 ? -1 : 1) * dt;
     vR *= Math.exp(-grip * dt); // partial grip = skidding

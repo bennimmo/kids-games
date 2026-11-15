@@ -5,6 +5,7 @@
 //
 // A world is built from a seed, so online every device builds the same track.
 // Online each device flies its own ship and sends where it is ~15 times a second.
+import { myName, cleanName } from '../../js/engine/profile.js';
 import { THREE, isSharedGeo } from './art.js';
 import { createTube } from './tube.js';
 import { createOpen } from './open.js';
@@ -376,7 +377,7 @@ export function mount(stage) {
   // ---------------------------------------------------------------- screens
   const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
   const click = (node, fn) => node && node.addEventListener('click', e => { e.preventDefault(); fn(e); });
-  const picsHTML = code => `<div class="sd-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+  const picsHTML = code => `<div class="sd-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
 
   function render() {
     ui.innerHTML = '';
@@ -431,9 +432,10 @@ export function mount(stage) {
     const R = race;
     const order = [...R.finish, ...R.ships.filter(s => !R.finish.includes(s)).sort((a, b) => R.world.progress(b) - R.world.progress(a))];
     const names = sh => {
-      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `🤖 ${LEVELS[S.level].icon}` : '🙂 You';
+      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `🤖 ${LEVELS[S.level].icon}` : `🙂 ${myName() || 'You'}`;
       if (R.mode === 'two') return `🙂 Player ${sh.slot + 1}`;
-      return sh.ctrl === 'solo' ? '🙂 You' : '🌍 Friend';
+      const who = S.net && cleanName(S.net.players[sh.pid] && S.net.players[sh.pid].name);
+      return sh.ctrl === 'solo' ? `🙂 ${who || 'You'}` : `🌍 ${who || 'Friend'}`;
     };
     const host = !S.net || S.net.isHost;
     const box = el(`<div class="sd-overlay"><div class="sd-card sd-results">
@@ -460,7 +462,7 @@ export function mount(stage) {
     const box = el(`<div class="sd-overlay"><div class="sd-card">
       <h2>🌍 Race a friend</h2>
       <div class="sd-row sd-play">
-        <button class="sd-go sd-host"><span>🚀</span>Make a room</button>
+        <button class="sd-go sd-host"><span>🏠</span>Make a room</button>
         <button class="sd-go sd-join"><span>🔑</span>Join a room</button>
       </div>
       ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}
@@ -497,7 +499,7 @@ export function mount(stage) {
       .filter(([, p]) => p && typeof p.joined === 'number')
       .sort((a, b) => a[1].joined - b[1].joined || (a[0] < b[0] ? -1 : 1))
       .slice(0, MAX_ONLINE)
-      .map(([id, p]) => ({ id, joined: p.joined }));
+      .map(([id, p]) => ({ id, joined: p.joined, name: cleanName(p.name) }));
   }
 
   function lobbyUI() {
@@ -506,7 +508,7 @@ export function mount(stage) {
     if (!n.isHost) S.style = style;
     const box = el(`<div class="sd-overlay"><div class="sd-card sd-lobby">
       ${picsHTML(n.code)}
-      <div class="sd-ships">${list.map((p, i) => `<span style="--pc:${CSS_COLORS[i]}">🚀${p.id === n.pid ? '<b>🙂</b>' : ''}</span>`).join('')}${list.length < 2 ? '<span class="sd-empty">⏳</span>' : ''}</div>
+      <div class="sd-ships">${list.map((p, i) => `<span style="--pc:${CSS_COLORS[i]}">🚀${p.id === n.pid ? '<b>🙂</b>' : ''}${p.name ? `<small class="sd-name">${p.name}</small>` : ''}</span>`).join('')}${list.length < 2 ? '<span class="sd-empty">⏳</span>' : ''}</div>
       <div class="sd-row">${styleButtons(n.isHost)}</div>
       <div class="sd-row">
         ${n.isHost ? `<button class="sd-btn sd-start ${list.length < 2 ? 'off' : ''}" aria-label="Start">▶</button>` : '<span class="sd-wait">⏳</span>'}
@@ -522,7 +524,7 @@ export function mount(stage) {
   function goOnline(room) {
     S.net = { room, isHost: room.isHost, code: room.code, pid: room.uid + '_p1', meta: null, players: {}, live: {}, raceId: 0, unsubs: [], status: 'ok', seen: {} };
     keepAwake(true);
-    room.setPlayer(S.net.pid, { joined: room.now() });
+    room.setPlayer(S.net.pid, { joined: room.now(), name: myName() });
     S.net.unsubs.push(room.onMeta(onMeta));
     S.net.unsubs.push(room.onPlayers(p => { if (!S.net) return; S.net.players = p; if (S.phase === 'lobby') render(); }));
     S.net.unsubs.push(room.onLive(l => { if (S.net) S.net.live = l; }));
