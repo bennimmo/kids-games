@@ -177,7 +177,7 @@ function stepFixed(s, dt, opts) {
   if (opts.easy && !s.onGround) {
     // wings level when you let go, and limit the bank
     if (Math.abs(ri) < 0.05) ri = clamp(-bank * 1.6, -0.6, 0.6);
-    else if (Math.abs(bank) > 45 * D && Math.sign(ri) === Math.sign(bank)) ri = clamp((45 * D * Math.sign(bank) - bank) * 2, -1, 1);
+    else if (Math.abs(bank) > 58 * D && Math.sign(ri) === Math.sign(bank)) ri = clamp((58 * D * Math.sign(bank) - bank) * 2, -1, 1);
     // hold height when you let go
     const gamma = v > 1 ? Math.asin(clamp(s.vel.y / v, -1, 1)) : 0;
     // just after take-off it climbs by itself to a safe height
@@ -195,11 +195,12 @@ function stepFixed(s, dt, opts) {
   }
   const [rr, pr, yr] = P.rates;
   // targets in rad/s. omega.x = pitch up rate, omega.z = roll right rate, omega.y = yaw right rate
-  const target = new V(pi * pr * D * auth, yi * yr * D * auth, ri * rr * D * auth);
+  const easyRoll = opts.easy ? 1.4 : 1;
+  const target = new V(pi * pr * D * auth, yi * yr * D * auth, ri * rr * D * auth * easyRoll);
   // stability: the nose wants to follow the airflow
   const qn = clamp(qd / (0.5 * 1.225 * P.vr * P.vr), 0, 4);
   // easy mode: trim for a level turn (more lift when banked)
-  const nTrim = opts.easy && !s.onGround ? 1 / Math.max(Math.cos(bank), 0.55) : 1;
+  const nTrim = opts.easy && !s.onGround ? 1 / Math.max(Math.cos(bank), 0.5) : 1;
   const trimAoa = clamp(nTrim * P.mass * G / Math.max(qd * P.wing, 1) / P.cla - (P.cl0 + flapsCL) / P.cla, -4 * D, stallA * 0.85);
   target.x += -(aoa - (s.onGround ? aoa : trimAoa)) * 1.4 * Math.min(qn, 1.5);
   target.y -= beta * 1.2 * Math.min(qn, 1.5);
@@ -224,6 +225,12 @@ function stepFixed(s, dt, opts) {
     tq.setFromAxisAngle(FWD, s.omega.z * dt); q.multiply(tq);
     q.normalize();
     s.vel.addScaledVector(F, dt / P.mass);
+    // easy mode: a little extra turn when banked, so turning feels quick
+    if (opts.easy && !s.stall) {
+      const extra = clamp(bank, -1, 1) * 0.16 * dt;
+      tq.setFromAxisAngle(UPV, -extra);
+      s.vel.applyQuaternion(tq); q.premultiply(tq);
+    }
     s.pos.addScaledVector(s.vel, dt);
     airContact(s, opts);
   } else {

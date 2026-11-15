@@ -76,8 +76,12 @@ export function mount(stage) {
   // ---------------------------------------------------------------- prefs
   const prefs = loadPrefs();
   function loadPrefs() {
-    const d = { easy: true, noDie: true, invert: false, shared: true, sound: true, start: 'main', tilt: true, guide: true, pl: [{ type: 'cub', color: 0 }, { type: 'cub', color: 1 }], view: ['chase', 'chase'] };
-    try { return { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; } catch (e) { return d; }
+    const d = { v2: true, easy: true, noDie: true, invert: true, shared: true, sound: true, start: 'main', tilt: true, guide: true, pl: [{ type: 'cub', color: 0 }, { type: 'cub', color: 1 }], view: ['chase', 'chase'] };
+    try {
+      const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) };
+      if (!p.v2) { p.invert = true; p.v2 = true; }   // pilot style (↑ = nose down) is now the default
+      return p;
+    } catch (e) { return d; }
   }
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
@@ -300,11 +304,11 @@ export function mount(stage) {
       return { x, z, y, hdg: ap.hdg, air: true, speed: P.kind === 'heli' ? 25 : P.vref * 1.45 };
     }
     if (choice === 'carrier') {
-      const c = CARRIER, [x, z] = runwayPoint({ x: c.x, z: c.z, hdg: c.hdg }, -c.len / 2 + 40 + slot * 60, slot ? 15 : 0);
+      const k = slot % 3, c = CARRIER, [x, z] = runwayPoint({ x: c.x, z: c.z, hdg: c.hdg }, -c.len / 2 + 40 + k * 50, k ? 15 : 0);
       return { x, z, y: c.deck, hdg: c.hdg };
     }
     if (choice === 'harbour') return { x: HARBOUR.x + slot * 50, z: HARBOUR.z + slot * 30, y: 0, hdg: HARBOUR.hdg };
-    if (choice === 'helipad' && HELIPADS[0]) { const h = HELIPADS[0]; return { x: h.x + slot * 8, z: h.z, y: h.y, hdg: h.hdg }; }
+    if (choice === 'helipad' && HELIPADS[0]) { const h = HELIPADS[0]; return { x: h.x + (slot % 3 - 1) * 22, z: h.z + (slot % 3 ? 15 : 0), y: h.y, hdg: h.hdg }; }
     const ap = AIRPORTS.find(a => a.id === choice) || AIRPORTS[0];
     const [x, z] = runwayPoint(ap, -ap.len / 2 + 70 + slot * 170, 0);
     return { x, z, hdg: ap.hdg };
@@ -378,7 +382,8 @@ export function mount(stage) {
       const starts = startsFor(pl.type);
       const choice = starts.find(x => x.id === prefs.start) ? prefs.start : starts[0].id;
       const p = makePlayer(i, pl.type, pl.color);
-      p.spot = spotFor(choice, i, pl.type);
+      p.choice = choice;
+      p.spot = freeSpot(choice, pl.type);
       placePlane(p.s, p.spot);
       players.push(p);
     }
@@ -391,7 +396,17 @@ export function mount(stage) {
     render();
   }
 
+  // pick a start spot nobody else is sitting on (shared sky: planes don't bump into each other)
+  function freeSpot(choice, type) {
+    for (let k = 0; k < 6; k++) {
+      const sp = spotFor(choice, k, type);
+      const busy = [...remotes.values()].some(r => Math.hypot(r.pos.x - sp.x, r.pos.z - sp.z) < 45 && Math.abs(r.pos.y - (sp.y ?? r.pos.y)) < 60);
+      if (!busy) return sp;
+    }
+    return spotFor(choice, Math.floor(Math.random() * 4), type);
+  }
   function respawn(p) {
+    p.spot = freeSpot(p.choice, p.type);
     placePlane(p.s, p.spot);
     p.camInit = false;
     flash(p, '🛫');
@@ -432,7 +447,7 @@ export function mount(stage) {
     } else if (p.view === 'orbit') {
       const d = P.camDist * 1.2 * p.look.dist;
       const a = p.look.oyaw, b = clamp(p.look.opitch, -0.2, 1.4);
-      p.look.oyaw += dt * 0.08;
+      p.look.oyaw += dt * 0.08 * (PARAMS.has("spfreeze") ? 0 : 1);
       cam.position.set(pos.x + Math.sin(a) * Math.cos(b) * d, pos.y + Math.sin(b) * d, pos.z + Math.cos(a) * Math.cos(b) * d);
       const gh = Math.max(surfaceAt(cam.position.x, cam.position.z).h, 0) + 2;
       if (cam.position.y < gh) cam.position.y = gh;
@@ -857,6 +872,7 @@ export function mount(stage) {
         const model = buildPlane(d.ty, color);
         scene.add(model.group);
         const tag = nameTag(displayName(d.n, d.ty), color); scene.add(tag);
+        if (!remotes.has(pid) && remotes.size < 8 && players[0]) flash(players[0], '👋 ' + displayName(d.n, d.ty));
         r = { model, tag, type: d.ty, color, name: cleanName(d.n), pos: new THREE.Vector3(...d.p), vel: new THREE.Vector3(), quat: new THREE.Quaternion(...d.q), tq: new THREE.Quaternion(...d.q), t: 0, d, smokeT: 0 };
         remotes.set(pid, r);
       }
@@ -870,6 +886,12 @@ export function mount(stage) {
       }
     }
     for (const [pid, r] of remotes) if (!seen.has(pid)) { disposeRemote(r); remotes.delete(pid); }
+    // still parked inside someone else's plane? move along to a free spot (random wait so two people don't both move)
+    for (const p of players) {
+      const s = p.s;
+      if (!s.onGround || s.speed > 0.5 || s.throttle > 0.05 || Math.random() > dt * 0.7) continue;
+      if ([...remotes.values()].some(r => Math.hypot(r.pos.x - s.pos.x, r.pos.z - s.pos.z) < 30 && Math.abs(r.pos.y - s.pos.y) < 15)) respawn(p);
+    }
   }
   function updateRemotes(dt) {
     for (const r of remotes.values()) {

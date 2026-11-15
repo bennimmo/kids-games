@@ -136,6 +136,10 @@ function windowTexture(color) {
   g.fillStyle = '#' + new THREE.Color(color).getHexString(); g.fillRect(0, 88, 1024, 16);
   g.fillStyle = '#1b2633';
   for (let x = 30; x < 1000; x += 18) { g.beginPath(); g.roundRect(x, 50, 9, 14, 4); g.fill(); }
+  // cockpit windscreen (near the nose end of the strip)
+  g.fillStyle = '#1b2633';
+  g.beginPath(); g.moveTo(16, 22); g.lineTo(44, 18); g.lineTo(46, 36); g.lineTo(18, 40); g.fill();
+  g.beginPath(); g.moveTo(48, 18); g.lineTo(64, 20); g.lineTo(64, 36); g.lineTo(50, 36); g.fill();
   g.fillRect(70, 40, 18, 46); g.fillRect(900, 40, 18, 46); // doors
   g.fillStyle = '#f4f6f8'; g.fillRect(72, 42, 14, 42); g.fillRect(902, 42, 14, 42);
   g.strokeStyle = '#9aa'; g.lineWidth = 2; g.strokeRect(70, 40, 18, 46); g.strokeRect(900, 40, 18, 46);
@@ -247,7 +251,6 @@ export function buildPlane(type, color = PLANES[type].color) {
     body.add(mesh(fus, fm));
     body.add(mesh(lathe([[2.02, 12], [2.02, -8], [1.92, -11]], 32, 0.55, 1.01), M.grey, 0, -0.95, 0)); // grey belly
     // cockpit windows
-    const cw = mesh(new THREE.SphereGeometry(1.95, 24, 8, -0.95, 1.9, 1.05, 0.35), M.glass, 0, 0.05, 15.6); cw.rotation.x = 0; cw.scale.set(1, 1.05, 1.5); body.add(cw);
     // swept wing, low, with dihedral
     const wsec = [{ p: [17, 0.4, -5.6], c: 1.6, t: 0.1 }, { p: [6, -0.75, 0.6], c: 4.6, t: 0.12 }, { p: [1.8, -1.15, 3.2], c: 7.2, t: 0.14 }, { p: [-1.8, -1.15, 3.2], c: 7.2, t: 0.14 }, { p: [-6, -0.75, 0.6], c: 4.6, t: 0.12 }, { p: [-17, 0.4, -5.6], c: 1.6, t: 0.1 }];
     outer.add(mesh(loft(wsec), M.grey));
@@ -271,7 +274,7 @@ export function buildPlane(type, color = PLANES[type].color) {
     }
     // tail
     body.add(mesh(loft([{ p: [0, 1.6, -11.8], c: 6.0, t: 0.1 }, { p: [0, 8.3, -16.8], c: 2.6, t: 0.1 }], true), C));
-    parts.rudder = pivot(outer, 0, 2.0, -17.4); parts.rudder.add(mesh(new THREE.BoxGeometry(0.15, 5.8, 1.1), C, 0, 3.0, -0.5)); parts.rudder.rotation.x = -0.5;
+    parts.rudder = pivot(outer, 0, 1.9, -17.3); parts.rudder.add(mesh(new THREE.BoxGeometry(0.14, 6.0, 1.0), C, 0, 3.0, -0.45)); parts.rudder.rotation.x = -0.235;
     outer.add(mesh(loft([{ p: [6.2, 1.4, -16.0], c: 1.6, t: 0.09 }, { p: [0, 1.0, -13.0], c: 3.8, t: 0.1 }, { p: [-6.2, 1.4, -16.0], c: 1.6, t: 0.09 }]), M.grey));
     parts.elev = pivot(outer, 0, 1.1, -16.9); parts.elev.add(mesh(new THREE.BoxGeometry(10, 0.1, 0.9), M.grey, 0, 0, -0.4));
     // retractable gear
@@ -306,7 +309,7 @@ export function buildPlane(type, color = PLANES[type].color) {
     parts.elev = pivot(outer, 0, 0, -5.6);
     parts.elev.add(mesh(loft([{ p: [3.0, 0, -1.3], c: 1.0, t: 0.05 }, { p: [0.8, 0, 0.4], c: 2.6, t: 0.05 }, { p: [-0.8, 0, 0.4], c: 2.6, t: 0.05 }, { p: [-3.0, 0, -1.3], c: 1.0, t: 0.05 }]), C));
     body.add(mesh(loft([{ p: [0, 0.8, -2.6], c: 4.2, t: 0.06 }, { p: [0, 4.2, -6.4], c: 1.4, t: 0.06 }], true), C));
-    parts.rudder = pivot(outer, 0, 1.0, -6.6); parts.rudder.add(mesh(new THREE.BoxGeometry(0.08, 2.6, 0.7), accent, 0, 1.4, -0.3)); parts.rudder.rotation.x = -0.6;
+    parts.rudder = pivot(outer, 0, 1.0, -6.45); parts.rudder.add(mesh(new THREE.BoxGeometry(0.07, 2.8, 0.6), accent, 0, 1.5, -0.28)); parts.rudder.rotation.x = -0.29;
     // nozzle + afterburner
     body.add(mesh(cyl(0.68, 0.6, 1.0, 20), M.dark, 0, 0, -7.6));
     const flame = new THREE.Group(); flame.position.set(0, 0, -8.1); body.add(flame);

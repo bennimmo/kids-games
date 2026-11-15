@@ -46,11 +46,11 @@ Then open http://localhost:8000
 - Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
 - Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
 - Views 🎥: chase, 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet), 🔄 orbit, 📸 fly-by. Drag to look, wheel/pinch to zoom.
-- 🐣 Easy: wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
+- 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
-- Keys: W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
+- Keys (pilot style by default: ↑ = nose down, flip it in ⏸): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
 - Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
-- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Turn off with 🌍 in the menu.
+- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Start spots avoid planes already parked there; 👋 shows when someone arrives. Turn off with 🌍 in the menu.
 - 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).
 - Missions: ready for later (`missions.js` explains the hooks). The 🎯 menu button appears once `MISSIONS` has some.
 - Test params: `?sptime=<seconds>` fixes the time of day (0–900), `?spq=low|mid|high` quality, `?spdebug` adds `window.__sp()`.

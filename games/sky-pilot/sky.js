@@ -226,7 +226,7 @@ export function createSky(scene, renderer, quality) {
     sp.set([s * Math.cos(t) * 50000, z * 50000, s * Math.sin(t) * 50000], i * 3);
   }
   const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, depthTest: false, fog: false });
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
   const stars = new THREE.Points(sg, starMat); stars.frustumCulled = false; stars.renderOrder = -9;
   group.add(stars);
 

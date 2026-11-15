@@ -279,7 +279,7 @@ export function createScenery(scene, sky, quality, dpr) {
     const tex = runwayTexture(ap);
     const rg = new THREE.PlaneGeometry(ap.wid, ap.len); rg.rotateX(-Math.PI / 2); rg.rotateY(-ap.hdg);
     const rw = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
-    rw.position.set(ap.x, ap.elev + 0.15, ap.z); rw.receiveShadow = true;
+    rw.position.set(ap.x, ap.elev + 0.3, ap.z); rw.receiveShadow = true;
     root.add(rw);
     // shoulders
     if (ap.surface !== 'grass') pad(ap, -ap.len / 2 - 60, ap.len / 2 + 60, -ap.wid / 2 - 8, ap.wid / 2 + 8, flatMat(0x6d6e66, { polygonOffset: true, polygonOffsetFactor: -2 }), 0.1);
