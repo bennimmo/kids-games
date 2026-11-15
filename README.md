@@ -91,7 +91,9 @@ Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).
 - 🎬 Replay when a tank is knocked out, and a victory dance.
 - `?ttdebug` puts `window.__tt()` in the console.
-- Files: `sim.js` (world + rules), `weapons.js`, `ai.js`, `render.js`, `online.js`, `game.js` (screens + controls).
+- Ground art (`ground.js`): rock layers, roots, pebbles, and buried dinosaur skeletons, fossils and silly things per map. Looks only, made from the map seed so friends see the same.
+- Each game starts zoomed out for 3 s to show everyone.
+- Files: `sim.js` (world + rules), `weapons.js`, `ai.js`, `render.js`, `ground.js`, `online.js`, `game.js` (screens + controls).
 
 ### 🎨 Paint Party (`games/paint/`)
 A simple paint program, like old Windows Paint.

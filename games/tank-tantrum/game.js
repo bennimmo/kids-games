@@ -87,7 +87,8 @@ export function mount(stage) {
     acc = 0;
     renderer.setWorld(world);
     world.beginTurn();
-    userPan = false; overview = false; userZoom = 1;
+    userPan = false; overview = true; userZoom = 1;   // start zoomed out to see everyone
+    match.introUntil = time + 3;
     focusNow();
   }
   function startDemo() {
@@ -142,7 +143,7 @@ export function mount(stage) {
     elev = 0.6;
     match.ready = !(match.mode === 'local' && match.humans > 1 && match.ctrl[i] === 'me');
     userPan = false;
-    if (!isDemo()) overview = false;
+    if (!isDemo() && time >= match.introUntil) overview = false;
     closeBackpack();
     if (!match.ready) readyCard();
     else hideCard();
@@ -210,6 +211,7 @@ export function mount(stage) {
       match.turnSeen = w.turn;
       onTurnStart();
     }
+    if (match.introUntil && time >= match.introUntil) { match.introUntil = 0; if (!isDemo()) overview = false; }
     updateCamera(dt);
     updateHud();
   }
@@ -341,7 +343,7 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- camera
-  function baseZoom() { return Math.min(1.6, Math.max(0.5, Math.max(view.width / 1100, view.height / 820))); }
+  function baseZoom() { return Math.min(1.4, Math.max(0.45, Math.max(view.width / 1400, view.height / 1000))); }
   function fitZoom() { return Math.min(view.width / W, view.height / (H - 100)); }
   function camTarget() {
     const w = replay ? replay.world : match.world;

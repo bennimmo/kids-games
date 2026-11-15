@@ -32,6 +32,7 @@ export class World {
   // opts: { seed, map, tanks: [ { name, color, hat, flag } ] }
   constructor(opts) {
     this.seed = (opts.seed >>> 0) || 1;
+    this.artSeed = this.seed;   // for the pictures in the ground (looks only)
     this.map = MAPS[opts.map] ? opts.map : 'grass';
     this.g = MAPS[this.map].g;
     this.mask = new Uint8Array(COLS * ROWS);
