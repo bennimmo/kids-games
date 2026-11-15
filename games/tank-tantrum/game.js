@@ -6,6 +6,7 @@
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { CODE_LEN } from '../../js/engine/net.js';
 import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
@@ -574,13 +575,13 @@ export function mount(stage) {
         </div>
         <div class="tt-side">
           <button class="tt-round tt-mapbtn" aria-label="See the whole map">🗺️</button>
-          <button class="tt-round tt-quit" aria-label="Stop game">⏹️</button>
+          <button class="tt-round tt-quit" aria-label="Stop game">${icon('stop')}</button>
         </div>
         <div class="tt-room"></div>
         <div class="tt-drive">
-          <button data-dir="-1" aria-label="Drive left">◀</button>
+          <button data-dir="-1" aria-label="Drive left">${icon('left')}</button>
           <div class="tt-fuel"><i></i><span>⛽</span></div>
-          <button data-dir="1" aria-label="Drive right">▶</button>
+          <button data-dir="1" aria-label="Drive right">${icon('right')}</button>
         </div>
         <div class="tt-arms">
           <button class="tt-fire" aria-label="Fire">🔥</button>
@@ -665,7 +666,7 @@ export function mount(stage) {
     const bp = ui.querySelector('.tt-bp');
     const i = match.world.active, t = activeTank();
     bp.innerHTML = `<div class="tt-bp-card">
-        <button class="tt-x" aria-label="Close">✖</button>
+        <button class="tt-x" aria-label="Close">${icon('close')}</button>
         <h2>🎒 Backpack</h2>
         <div class="tt-bp-grid">${WEAPONS.map(wp => {
           const n = t.ammo[wp.id];
@@ -719,9 +720,9 @@ export function mount(stage) {
     if (match.mode === 'online') {
       const next = `<p class="tt-msg tt-next">Next game in <b>${NEXT_GAME}</b>… 🔁</p>`;
       buttons = net && net.isHost
-        ? `${next}<div class="tt-row"><button class="tt-btn" data-a="again">▶ Play now</button><button class="tt-btn alt" data-a="lobby">👥 Room</button></div>`
-        : `${next}<button class="tt-small" data-a="leave">🚪 Leave room</button>`;
-    } else buttons = `<button class="tt-btn" data-a="again">🔁 Play again</button><button class="tt-btn alt" data-a="menu">🏠 Menu</button>`;
+        ? `${next}<div class="tt-row"><button class="tt-btn" data-a="again">${icon('play')} Play now</button><button class="tt-btn alt" data-a="lobby">${icon('people')} Room</button></div>`
+        : `${next}<button class="tt-small" data-a="leave">${icon('leave')} Leave room</button>`;
+    } else buttons = `<button class="tt-btn" data-a="again">${icon('retry')} Play again</button><button class="tt-btn alt" data-a="menu">${icon('home')} Menu</button>`;
     setTimeout(() => {
       if (closed || !match || match.world !== w || screen !== 'game') return;
       const wrap = card(`${t ? '<canvas class="tt-big-tank"></canvas>' : ''}<h2>${title}</h2>${match.mode === 'online' ? buttons : `<div class="tt-row">${buttons}</div>`}`);
@@ -743,9 +744,9 @@ export function mount(stage) {
     if (online) {   // the host can take everyone back to the room; friends can leave
       const host = net && net.isHost;
       const wrap = card(`<h2>${host ? 'Stop this game?' : 'Leave the room?'}</h2><div class="tt-row">
-        <button class="tt-btn" data-a="no">▶ Keep playing</button>
-        ${host ? '<button class="tt-btn alt" data-a="room">👥 Everyone back to room</button>' : ''}
-        <button class="tt-btn alt" data-a="leave">🚪 Leave room</button></div>`);
+        <button class="tt-btn" data-a="no">${icon('play')} Keep playing</button>
+        ${host ? `<button class="tt-btn alt" data-a="room">${icon('people')} Everyone back to room</button>` : ''}
+        <button class="tt-btn alt" data-a="leave">${icon('leave')} Leave room</button></div>`);
       wrap.querySelector('[data-a="no"]').addEventListener('click', () => { sound.pop(); hideCard(); });
       const room = wrap.querySelector('[data-a="room"]');
       if (room) room.addEventListener('click', () => { sound.pop(); net.setLobby({ phase: 'lobby' }); });
@@ -753,8 +754,8 @@ export function mount(stage) {
       return;
     }
     const wrap = card(`<h2>Stop the game?</h2><div class="tt-row">
-      <button class="tt-btn" data-a="no">▶ Keep playing</button>
-      <button class="tt-btn alt" data-a="yes">⏹️ Stop</button></div>`);
+      <button class="tt-btn" data-a="no">${icon('play')} Keep playing</button>
+      <button class="tt-btn alt" data-a="yes">${icon('stop')} Stop</button></div>`);
     wrap.querySelector('[data-a="no"]').addEventListener('click', () => { sound.pop(); hideCard(); if (!match.ready) readyCard(); });
     wrap.querySelector('[data-a="yes"]').addEventListener('click', () => {
       sound.pop();
@@ -786,7 +787,7 @@ export function mount(stage) {
         <button class="tt-big" data-a="local"><span class="i">📱</span><span>Play here</span><small>Pass it round, or vs 🤖</small></button>
         <button class="tt-big" data-a="online"><span class="i">🌍</span><span>Play online</span><small>With friends</small></button>
       </div>
-      <button class="tt-mytank" data-a="tank"><canvas></canvas><span>My tank: <b>${esc(myLook.name)}</b> ✏️</span></button>`);
+      <button class="tt-mytank" data-a="tank"><canvas></canvas><span>My tank: <b>${esc(myLook.name)}</b> ${icon('edit')}</span></button>`);
     tankIcon(p.querySelector('.tt-mytank canvas'), myLook, 64);
     p.querySelector('[data-a="local"]').addEventListener('click', () => { sound.pop(); show('local'); });
     p.querySelector('[data-a="online"]').addEventListener('click', () => { sound.pop(); show('online'); });
@@ -794,7 +795,7 @@ export function mount(stage) {
   }
 
   function windPicker(on) {
-    return `<button class="tt-wind-btn ${on ? 'on' : ''}" data-wind>🌬️ Wind: <b>${on ? 'ON' : 'OFF'}</b></button>`;
+    return `<button class="tt-wind-btn ${on ? 'on' : ''}" data-wind>${icon('wind')} Wind: <b>${on ? 'ON' : 'OFF'}</b></button>`;
   }
   function mapPicker(cur) {
     return `<div class="tt-maps">${[...MAP_IDS, 'random'].map(id => `<button class="tt-map ${cur === id ? 'on' : ''}" data-map="${id}">
@@ -810,7 +811,7 @@ export function mount(stage) {
         const look = i === 0 ? myLook : sl.look;
         const off = sl.type === 'off';
         return `<div class="tt-slot ${off ? 'off' : ''}">
-          <button class="tt-slot-tank" data-edit="${i}" ${off ? 'disabled' : ''}><canvas></canvas><b>${off ? '—' : esc(look.name)}</b>${off ? '' : '<small>✏️</small>'}</button>
+          <button class="tt-slot-tank" data-edit="${i}" ${off ? 'disabled' : ''}><canvas></canvas><b>${off ? '—' : esc(look.name)}</b>${off ? '' : `<small>${icon('edit')}</small>`}</button>
           <button class="tt-slot-type" data-type="${i}" ${i === 0 ? 'disabled' : ''}>${SLOT_LABEL[sl.type]}</button>
         </div>`;
       }).join('')}</div>
@@ -818,8 +819,8 @@ export function mount(stage) {
       ${mapPicker(s.map)}
       ${windPicker(s.wind)}
       <div class="tt-row">
-        <button class="tt-btn alt" data-a="back">⬅ Back</button>
-        <button class="tt-btn" data-a="go" ${count < 2 ? 'disabled' : ''}>▶ Start!</button>
+        <button class="tt-btn alt" data-a="back">${icon('back')} Back</button>
+        <button class="tt-btn" data-a="go" ${count < 2 ? 'disabled' : ''}>${icon('play')} Start!</button>
       </div>`);
     p.querySelectorAll('.tt-slot').forEach((el, i) => {
       const look = i === 0 ? myLook : s.slots[i].look;
@@ -857,7 +858,7 @@ export function mount(stage) {
       <div class="tt-swatches">${TANK_COLORS.map(c => `<button class="tt-sw" data-c="${c}" style="--c:${c}" aria-label="Colour"></button>`).join('')}</div>
       <div class="tt-picks" data-k="hat">${HATS.map(h => `<button data-v="${h}">${h || '🚫'}</button>`).join('')}</div>
       <div class="tt-picks" data-k="flag">${FLAGS.map(f => `<button data-v="${f}">${f ? '🚩' + f : '🚫'}</button>`).join('')}</div>
-      <button class="tt-btn" data-a="done">✔ Done</button>
+      <button class="tt-btn ok" data-a="done">${icon('check')} Done</button>
     </div>`;
     ui.appendChild(wrap);
     const prev = wrap.querySelector('.tt-preview');
@@ -887,7 +888,7 @@ export function mount(stage) {
         <button class="tt-big" data-a="join"><span class="i">🔑</span><span>Join a room</span></button>
       </div>
       <p class="tt-msg"></p>
-      <button class="tt-btn alt" data-a="back">⬅ Back</button>`);
+      <button class="tt-btn alt" data-a="back">${icon('back')} Back</button>`);
     const msg = p.querySelector('.tt-msg');
     p.querySelector('[data-a="back"]').addEventListener('click', () => { sound.pop(); show('title'); });
     p.querySelector('[data-a="join"]').addEventListener('click', () => { sound.pop(); joinScreen(); });
@@ -908,7 +909,7 @@ export function mount(stage) {
       <h2>Tap your friend's pictures</h2>
       <div class="tt-codeslots">${'<span></span>'.repeat(CODE_LEN)}</div>
       <div class="tt-keypad">${CODE_PICS.map((pic, i) => `<button data-k="${i.toString(16)}">${pic}</button>`).join('')}</div>
-      <div class="tt-row"><button class="tt-btn alt" data-a="back">⬅ Back</button><button class="tt-btn alt" data-a="rub">⌫</button></div>
+      <div class="tt-row"><button class="tt-btn alt" data-a="back">${icon('back')} Back</button><button class="tt-btn alt" data-a="rub" aria-label="Delete">${icon('backspace')}</button></div>
       <p class="tt-msg"></p>`);
     const slots = [...p.querySelectorAll('.tt-codeslots span')];
     const msg = p.querySelector('.tt-msg');
@@ -953,7 +954,7 @@ export function mount(stage) {
     m.className = 'tt-modal leave';
     const host = net && net.isHost;
     m.innerHTML = `<div class="tt-edit"><h2>${host ? 'Close the room for everyone?' : 'Leave the room?'}</h2>
-      <div class="tt-row"><button class="tt-btn" data-a="stay">👍 Stay</button><button class="tt-btn alt" data-a="go">🚪 Leave</button></div></div>`;
+      <div class="tt-row"><button class="tt-btn" data-a="stay">👍 Stay</button><button class="tt-btn alt" data-a="go">${icon('leave')} Leave</button></div></div>`;
     ui.appendChild(m);
     m.querySelector('[data-a="stay"]').addEventListener('click', () => { sound.pop(); m.remove(); });
     m.querySelector('[data-a="go"]').addEventListener('click', async () => {
@@ -1004,25 +1005,25 @@ export function mount(stage) {
       <p class="tt-sub">${net.isHost ? 'Show friends these pictures 👆' : 'You are in!'}</p>
       <div class="tt-players">
         ${players.map(pl => `<div class="tt-pl ${pl.me ? 'me' : ''}"><canvas data-look='${esc(JSON.stringify(pl.look))}'></canvas><b>${esc(pl.look.name)}</b></div>`).join('')}
-        ${bots.map((b, i) => `<div class="tt-pl bot"><canvas data-look='${esc(JSON.stringify(sanitizeLook(b.look)))}'></canvas><b>${esc(sanitizeLook(b.look).name)} 🤖</b>${net.isHost ? `<button class="tt-rm" data-rm="${i}" aria-label="Remove">✖</button>` : ''}</div>`).join('')}
+        ${bots.map((b, i) => `<div class="tt-pl bot"><canvas data-look='${esc(JSON.stringify(sanitizeLook(b.look)))}'></canvas><b>${esc(sanitizeLook(b.look).name)} 🤖</b>${net.isHost ? `<button class="tt-rm" data-rm="${i}" aria-label="Remove">${icon('close')}</button>` : ''}</div>`).join('')}
       </div>
       ${net.isHost ? `
         <div class="tt-row">
-          <button class="tt-btn alt" data-bot="easy" ${total >= MAX_TANKS ? 'disabled' : ''}>➕🤖 Easy</button>
-          <button class="tt-btn alt" data-bot="tricky" ${total >= MAX_TANKS ? 'disabled' : ''}>➕🤖 Tricky</button>
+          <button class="tt-btn alt" data-bot="easy" ${total >= MAX_TANKS ? 'disabled' : ''}>${icon('plus')}🤖 Easy</button>
+          <button class="tt-btn alt" data-bot="tricky" ${total >= MAX_TANKS ? 'disabled' : ''}>${icon('plus')}🤖 Tricky</button>
         </div>
         <h3>Map</h3>${mapPicker(map)}
         ${windPicker(meta.wind === true)}
         <div class="tt-row">
           <button class="tt-btn alt" data-a="tank">🎨 My tank</button>
-          <button class="tt-btn alt" data-a="leave">🚪 Leave</button>
-          <button class="tt-btn" data-a="go" ${total < 2 ? 'disabled' : ''}>▶ Start!</button>
+          <button class="tt-btn alt" data-a="leave">${icon('leave')} Leave</button>
+          <button class="tt-btn" data-a="go" ${total < 2 ? 'disabled' : ''}>${icon('play')} Start!</button>
         </div>
         ${total < 2 ? '<p class="tt-msg">Wait for a friend, or add a 🤖</p>' : ''}` : `
         <p class="tt-msg">${playing ? 'A game is going on. You can play in the next one! ⏳' : 'Waiting for the host to start… ⏳'}</p>
         <div class="tt-row">
           <button class="tt-btn alt" data-a="tank">🎨 My tank</button>
-          <button class="tt-btn alt" data-a="leave">🚪 Leave</button>
+          <button class="tt-btn alt" data-a="leave">${icon('leave')} Leave</button>
         </div>`}`;
     if (html === lastLobbyHtml && ui.querySelector('.tt-panel')) return;
     lastLobbyHtml = html;

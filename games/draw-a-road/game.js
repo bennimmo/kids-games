@@ -2,6 +2,7 @@
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { LEVELS } from './levels.js';
 import { createSim, strokeLength, STEP, WORLD_W, WORLD_H, CAR } from './sim.js';
 
@@ -76,7 +77,7 @@ export function mount(stage) {
             return `<button class="dar-lv ${open ? '' : 'locked'}" data-i="${i}" ${open ? '' : 'disabled'}>
               <span class="num">${open ? i + 1 : '🔒'}</span>
               <span class="nm">${lv.name}</span>
-              <span class="st">${[1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">★</b>`).join('')}</span>
+              <span class="st">${[1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">${icon('star')}</b>`).join('')}</span>
             </button>`;
           }).join('')}
         </div>
@@ -107,10 +108,10 @@ export function mount(stage) {
           <div class="stars"></div>
         </div>
         <div class="dar-btns">
-          <button class="dar-btn levels" aria-label="Levels">☰</button>
-          <button class="dar-btn undo" aria-label="Undo">↶</button>
-          <button class="dar-btn clear" aria-label="Rub out">🧽</button>
-          <button class="dar-btn go" aria-label="Go">▶</button>
+          <button class="dar-btn levels" aria-label="Levels">${icon('menu')}</button>
+          <button class="dar-btn undo" aria-label="Undo">${icon('undo')}</button>
+          <button class="dar-btn clear" aria-label="Rub out">${icon('eraser')}</button>
+          <button class="dar-btn go" aria-label="Go">${icon('play')}</button>
         </div>
       </div>
       <div class="dar-toast"></div>`;
@@ -129,9 +130,9 @@ export function mount(stage) {
     fill.style.width = (left / level.ink * 100) + '%';
     fill.style.background = left < level.ink * 0.2 ? '#ef5350' : '';
     const st = starsFor(inkUsed());
-    ui.querySelector('.dar-ink .stars').innerHTML = [1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">★</b>`).join('');
+    ui.querySelector('.dar-ink .stars').innerHTML = [1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">${icon('star')}</b>`).join('');
     const drive = mode === 'drive';
-    ui.querySelector('.go').textContent = drive ? '■' : '▶';
+    ui.querySelector('.go').innerHTML = icon(drive ? 'stop' : 'play');
     ui.querySelector('.go').classList.toggle('stop', drive);
     ui.querySelector('.undo').disabled = drive || !strokes.length;
     ui.querySelector('.clear').disabled = drive || !strokes.length;
@@ -165,12 +166,12 @@ export function mount(stage) {
     pop.innerHTML = `
       <div class="card">
         <h3>${got === 3 ? 'Amazing!' : got === 2 ? 'Great job!' : 'You did it!'}</h3>
-        <div class="big-stars">${[1, 2, 3].map(n => `<b class="${n <= got ? 'on' : ''}" style="animation-delay:${n * 0.25}s">★</b>`).join('')}</div>
+        <div class="big-stars">${[1, 2, 3].map(n => `<b class="${n <= got ? 'on' : ''}" style="animation-delay:${n * 0.25}s">${icon('star')}</b>`).join('')}</div>
         <p>${got < 3 ? 'Use less crayon for more stars ✏️' : 'All the stars! ⭐'}</p>
         <div class="row">
-          <button class="dar-btn again" aria-label="Again">↻</button>
-          <button class="dar-btn levels" aria-label="Levels">☰</button>
-          ${last ? '' : '<button class="dar-btn next" aria-label="Next">▶</button>'}
+          <button class="dar-btn again" aria-label="Again">${icon('retry')}</button>
+          <button class="dar-btn levels" aria-label="Levels">${icon('menu')}</button>
+          ${last ? '' : `<button class="dar-btn next" aria-label="Next">${icon('next')}</button>`}
         </div>
       </div>`;
     ui.appendChild(pop);

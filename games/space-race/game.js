@@ -11,6 +11,7 @@ import { createTube } from './tube.js';
 import { createOpen } from './open.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 
 const GAME = 'star-dash';
 const PREFS_KEY = 'star-dash-v1';
@@ -191,8 +192,8 @@ export function mount(stage) {
         <div class="sd-prog">${race.ships.map(s => `<i style="background:${CSS_COLORS[s.slot]}"></i>`).join('')}</div>
         <div class="sd-speed"><i></i></div>
         <div class="sd-big"></div><div class="sd-msg"></div>
-        ${TOUCH ? `<div class="sd-pad"><div><button data-k="l">◀</button><button data-k="r">▶</button></div>
-          <div><button data-k="d">▼</button><button data-k="u">▲</button></div></div>` : ''}
+        ${TOUCH ? `<div class="sd-pad"><div><button data-k="l" aria-label="Left">${icon('left')}</button><button data-k="r" aria-label="Right">${icon('right')}</button></div>
+          <div><button data-k="d" aria-label="Down">${icon('down')}</button><button data-k="u" aria-label="Up">${icon('up')}</button></div></div>` : ''}
         ${TOUCH && race.views.length === 1 ? '<button class="sd-tilt" aria-label="Tilt to steer"></button>' : ''}`;
       hudEl.appendChild(el);
       el.querySelectorAll('.sd-pad button').forEach(b => {
@@ -423,7 +424,7 @@ export function mount(stage) {
   }
 
   function raceUI() {
-    const b = el('<button class="sd-btn sd-quit" aria-label="Stop race">✖</button>');
+    const b = el(`<button class="sd-btn sd-quit" aria-label="Stop race">${icon('close')}</button>`);
     click(b, () => { sound.pop(); if (S.net) toLobby(); else { S.phase = 'menu'; demo(); render(); } });
     ui.appendChild(b);
   }
@@ -442,8 +443,8 @@ export function mount(stage) {
       <h2>🏁 Race over!</h2>
       <ol>${order.map((sh, i) => `<li style="--pc:${CSS_COLORS[sh.slot]}"><span>${MEDALS[i]}</span><i></i>${names(sh)}</li>`).join('')}</ol>
       <div class="sd-row">
-        ${host ? '<button class="sd-btn sd-again" aria-label="Race again">🔁</button>' : '<span class="sd-wait">⏳</span>'}
-        <button class="sd-btn sd-back" aria-label="Back">↩️</button>
+        ${host ? `<button class="sd-btn sd-again" aria-label="Race again">${icon('retry')}</button>` : '<span class="sd-wait">⏳</span>'}
+        <button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button>
       </div>
     </div></div>`);
     click(box.querySelector('.sd-again'), again);
@@ -466,7 +467,7 @@ export function mount(stage) {
         <button class="sd-go sd-join"><span>🔑</span>Join a room</button>
       </div>
       ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}
-      <button class="sd-btn sd-back" aria-label="Back">↩️</button>
+      <button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button>
     </div></div>`);
     click(box.querySelector('.sd-host'), () => { if (!S.busy) hostRoom(); });
     click(box.querySelector('.sd-join'), () => { if (S.busy) return; sound.pop(); S.joinCode = ''; S.phase = 'join'; render(); });
@@ -480,7 +481,7 @@ export function mount(stage) {
       <div class="sd-code sd-slots">${slots}</div>
       ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}
       <div class="sd-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="sd-row"><button class="sd-btn sd-del" aria-label="Delete">⌫</button><button class="sd-btn sd-back" aria-label="Back">↩️</button></div>
+      <div class="sd-row"><button class="sd-btn sd-del" aria-label="Delete">${icon('backspace')}</button><button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button></div>
     </div></div>`);
     box.querySelectorAll('.sd-keypad button').forEach(b => click(b, () => {
       if (S.busy || S.joinCode.length >= CODE_LEN) return;
@@ -511,8 +512,8 @@ export function mount(stage) {
       <div class="sd-ships">${list.map((p, i) => `<span style="--pc:${CSS_COLORS[i]}">🚀${p.id === n.pid ? '<b>🙂</b>' : ''}${p.name ? `<small class="sd-name">${p.name}</small>` : ''}</span>`).join('')}${list.length < 2 ? '<span class="sd-empty">⏳</span>' : ''}</div>
       <div class="sd-row">${styleButtons(n.isHost)}</div>
       <div class="sd-row">
-        ${n.isHost ? `<button class="sd-btn sd-start ${list.length < 2 ? 'off' : ''}" aria-label="Start">▶</button>` : '<span class="sd-wait">⏳</span>'}
-        <button class="sd-btn sd-leave" aria-label="Leave">🚪</button>
+        ${n.isHost ? `<button class="sd-btn sd-start ${list.length < 2 ? 'off' : ''}" aria-label="Start">${icon('play')}</button>` : '<span class="sd-wait">⏳</span>'}
+        <button class="sd-btn sd-leave" aria-label="Leave">${icon('leave')}</button>
       </div>
     </div></div>`);
     if (n.isHost) wireStyles(box, () => { n.room.setMeta({ style: S.style }); demo(); render(); });
