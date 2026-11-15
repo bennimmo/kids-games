@@ -48,7 +48,7 @@ Then open http://localhost:8000
 - Views (just two): 🎥 behind the plane and 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet). Drag to look, wheel/pinch to zoom, double-tap to reset.
 - 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
-- Keys (pilot style by default: ↑ = nose down, flip it in ⏸): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
+- Keys (always pilot style: ↑ = nose down, ↓ = nose up): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
 - Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
 - 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Start spots avoid planes already parked there; 👋 shows when someone arrives. Tap the 🌍 chip (or T) for a list of pilots: tap one to jump in just behind them with the same speed, angle, wheels and flaps (parked = park next to them). Turn off with 🌍 in the menu.
 - 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).

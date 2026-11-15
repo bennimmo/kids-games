@@ -76,10 +76,9 @@ export function mount(stage) {
   // ---------------------------------------------------------------- prefs
   const prefs = loadPrefs();
   function loadPrefs() {
-    const d = { v2: true, easy: true, noDie: true, invert: true, shared: true, sound: true, start: 'main', tilt: true, guide: true, pl: [{ type: 'cub', color: 0 }, { type: 'cub', color: 1 }], view: ['chase', 'chase'] };
+    const d = { easy: true, noDie: true, shared: true, sound: true, start: 'main', tilt: true, guide: true, pl: [{ type: 'cub', color: 0 }, { type: 'cub', color: 1 }], view: ['chase', 'chase'] };
     try {
       const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) };
-      if (!p.v2) { p.invert = true; p.v2 = true; }   // pilot style (↑ = nose down) is now the default
       return p;
     } catch (e) { return d; }
   }
@@ -249,7 +248,7 @@ export function mount(stage) {
     const has = code => keys.has(code);
     const any = (name) => has(K[name]) || (solo && has(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(has));
     const hit = (name) => pressed.includes(K[name]) || (solo && pressed.includes(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(c => pressed.includes(c)));
-    const inv = prefs.invert ? -1 : 1;
+    const inv = -1;   // always pilot style: ↑ / stick forward = nose down, ↓ / pull back = nose up
     let tp = ((any('up') ? 1 : 0) - (any('down') ? 1 : 0)) * inv;
     let tr = (any('right') ? 1 : 0) - (any('left') ? 1 : 0);
     let ty = (any('yawR') ? 1 : 0) - (any('yawL') ? 1 : 0);
@@ -817,7 +816,7 @@ export function mount(stage) {
     let hint = '';
     if (s.onGround && s.speed < 2 && s.throttle < 0.05 && P.kind !== 'heli') hint = TOUCH ? '⚡ Slide power up to go!' : '⚡ Power up: R or Shift';
     else if (s.onGround && P.kind === 'heli' && s.throttle < 0.55) hint = TOUCH ? '⚡ Slide power up to lift off!' : '⚡ Lift: R or Shift';
-    else if (s.onGround && s.speed > P.vr * 0.9 && !prefs.easy && P.kind !== 'heli') hint = TOUCH ? '⬇️ Pull back to take off' : (prefs.invert ? '⬇️ Pull back (S / ↓) to take off' : '⬆️ Pull up (W / ↑) to take off');
+    else if (s.onGround && s.speed > P.vr * 0.9 && !prefs.easy && P.kind !== 'heli') hint = TOUCH ? '⬇️ Pull back to take off' : '⬇️ Pull back (S / ↓) to take off';
     h.hint.textContent = hint; h.hint.classList.toggle('show', !!hint);
     drawMap(p);
     if (p.touch) {
@@ -1274,7 +1273,6 @@ export function mount(stage) {
         <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
         ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
         ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
-        ${toggle('invert', '✈️', '🙂', prefs.invert ? '↑ = nose down' : '↑ = nose up')}
         ${toggle('guide', '🟢', '⚪', 'Hoops')}
         ${toggle('sound', '🔊', '🔇', 'Sound')}
       </div>
