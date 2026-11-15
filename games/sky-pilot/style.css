@@ -140,3 +140,17 @@
   .sp-tbtns button { width: 50px; height: 50px; font-size: 22px; }
   .sp-stick { width: 130px; height: 130px; }
 }
+
+/* fly-with-a-friend list (tap the 🌍 chip) */
+.sp-chips .sp-c-net { pointer-events: auto; font-size: 18px; padding: 3px 12px; border-radius: 12px; background: rgba(30,100,200,.75); border: 2px solid rgba(255,255,255,.7) !important; animation: sp-glow 2s ease-in-out infinite; }
+@keyframes sp-glow { 50% { box-shadow: 0 0 12px rgba(120,200,255,.9); } }
+.sp-pilots { position: absolute; left: 12px; top: 150px; display: none; flex-direction: column; gap: 6px; max-height: calc(100% - 170px); overflow-y: auto; pointer-events: auto; z-index: 5; }
+.sp-corner .sp-pilots { left: 96px; }
+.sp-pilots.show { display: flex; }
+.sp-pilots button { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 14px; background: rgba(8,20,40,.8); border: 2px solid var(--rc) !important; font-size: 17px; text-align: left; min-width: 220px; }
+.sp-pilots button span { font-size: 24px; }
+.sp-pilots button b { flex: 1; }
+.sp-pilots button small { opacity: .8; }
+.sp-pilots button i { font-style: normal; }
+.sp-pilots p { margin: 0; padding: 8px 14px; border-radius: 14px; background: rgba(8,20,40,.8); font-size: 22px; }
+@media (max-height: 560px) { .sp-pilots { top: 110px; max-height: calc(100% - 120px); } .sp-pilots button { padding: 4px 10px; min-width: 180px; } }

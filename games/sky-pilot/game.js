@@ -412,6 +412,63 @@ export function mount(stage) {
     flash(p, '🛫');
   }
 
+  // ---------------------------------------------------------------- fly with a friend: jump in right behind them
+  const pilotList = () => {
+    const me = players[0];
+    return [...remotes.entries()].map(([pid, r]) => ({ pid, r, d: me ? r.pos.distanceTo(me.s.pos) : 0 })).sort((a, b) => a.d - b.d);
+  };
+  function togglePilots(p) {
+    sound.pop();
+    const box = p.hud.v.querySelector('.sp-pilots');
+    if (box.classList.contains('show')) { box.classList.remove('show'); return; }
+    const list = pilotList();
+    box.innerHTML = list.length
+      ? list.slice(0, 12).map(x => `<button data-pid="${x.pid}" style="--rc:#${new THREE.Color(x.r.color).getHexString()}"><span>${PLANES[x.r.type].icon}</span><b>${(x.r.name || "Pilot").replace(/[<>&"]/g, "")}</b><small>${x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1) + ' km'}</small><i>✈️➡️</i></button>`).join('')
+      : '<p>🌍 ⏳</p>';
+    box.querySelectorAll('button').forEach(b => click(b, () => { const r = remotes.get(b.dataset.pid); box.classList.remove('show'); if (r) teleportTo(p, r); }));
+    box.classList.add('show');
+  }
+  function teleportNext(p) {
+    const list = pilotList();
+    if (!list.length) { flash(p, '🌍 Nobody else flying'); return; }
+    p.tpIndex = ((p.tpIndex ?? -1) + 1) % list.length;
+    teleportTo(p, list[p.tpIndex].r);
+  }
+  function teleportTo(p, r) {
+    const s = p.s, P = s.P, d = r.d || {};
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(r.tq), side = new THREE.Vector3(-fwd.z, 0, fwd.x).normalize();
+    const g = surfaceAt(r.pos.x, r.pos.z);
+    const theirP = PLANES[r.type];
+    const parked = r.vel.length() < 3 && r.pos.y - g.h < theirP.gearH + 2;
+    const gap = Math.max(P.span, theirP.span) * 1.2 + 12;
+    s.crashed = 0; s.events.length = 0; s.hookCaught = false; s.catapult = 0;
+    if (parked) {
+      // they're on the ground: park next to them, same way round
+      const hdg = Math.atan2(fwd.x, -fwd.z);
+      const x = r.pos.x + side.x * gap, z = r.pos.z + side.z * gap;
+      placePlane(s, { x, z, y: surfaceAt(x, z).h, hdg });
+    } else {
+      // just behind and a little to the side, same speed, same angles
+      // use where they are now (predicted), not where their model has smoothed to
+      s.pos.copy(r.target || r.pos).addScaledVector(fwd, -gap * 1.6).addScaledVector(side, gap * 0.6);
+      s.pos.y += 4;
+      const gh = surfaceAt(s.pos.x, s.pos.z).h;
+      if (s.pos.y < gh + P.gearH + 3) s.pos.y = gh + P.gearH + 3;
+      s.quat.copy(r.tq);
+      s.vel.copy(r.vel);
+      s.omega.set(0, 0, 0);
+      s.onGround = false; s.airTime = 30;
+      const th = clamp(d.th ?? 0.6, 0, 1);
+      s.throttle = s.input.throttle = th; s.rpm = th;
+      if (P.gear === 'retract') { s.gearDown = (d.g ?? 1) > 0.5; s.gear = s.gearDown ? 1 : 0; }
+      s.flaps = clamp(Math.round(d.f || 0), 0, P.flaps.length - 1); s.flapPos = s.flaps;
+    }
+    p.camInit = false; p.flyby = null;
+    p.spot = p.spot || { x: s.pos.x, z: s.pos.z, hdg: 0 };
+    flash(p, '✈️ Flying with ' + displayName(r.name, r.type) + '!');
+    sound.whoosh();
+  }
+
   // ---------------------------------------------------------------- cameras
   const tv = new THREE.Vector3(), tv2 = new THREE.Vector3(), tq = new THREE.Quaternion(), te = new THREE.Euler();
   function updateCamera(p, dt) {
@@ -640,8 +697,9 @@ export function mount(stage) {
         <div class="sp-tl">
           <div class="sp-read"><span>💨</span><b class="sp-spd">0</b><small>kt</small></div>
           <div class="sp-read"><span>⛰️</span><b class="sp-alt">0</b><small>ft</small><i class="sp-vsi"></i></div>
-          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><i class="sp-c-net"></i></div>
+          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><button class="sp-c-net"></button></div>
         </div>
+        <div class="sp-pilots"></div>
         <div class="sp-place"></div>
         <div class="sp-msg"></div>
         <div class="sp-warn"></div>
@@ -659,6 +717,7 @@ export function mount(stage) {
       const q = s => v.querySelector(s);
       p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
       click(q('.sp-cam'), () => cycleView(p));
+      click(q('.sp-c-net'), () => togglePilots(p));
       click(q('.sp-pause'), () => pause(true));
       click(q('.sp-map'), () => { p.mapBig = !p.mapBig; v.classList.toggle('sp-bigmap', p.mapBig); });
       if (p.touch) wireTouch(p, v);
@@ -981,6 +1040,7 @@ export function mount(stage) {
       }
       if (pressed.includes('Escape')) pause(true);
       if (pressed.includes('Backspace')) for (const p of players) respawn(p);
+      if (pressed.includes('KeyT')) for (const p of players) teleportNext(p);
       if (pressed.includes('KeyM')) for (const p of players) { p.mapBig = !p.mapBig; p.hud.v.classList.toggle('sp-bigmap', p.mapBig); }
       // physics (fixed steps)
       acc += dt;
@@ -1135,6 +1195,7 @@ export function mount(stage) {
         <tr><td>🎥 Camera</td><td>C</td></tr>
         <tr><td>💨 Smoke</td><td>X</td></tr>
       </table>
+      <p>🌍 Tap the 🌍 button (or T) to jump in right behind another pilot and fly together.</p>
       <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
       <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
       <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>

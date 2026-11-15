@@ -50,7 +50,7 @@ Then open http://localhost:8000
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
 - Keys (pilot style by default: ↑ = nose down, flip it in ⏸): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
 - Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
-- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Start spots avoid planes already parked there; 👋 shows when someone arrives. Turn off with 🌍 in the menu.
+- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Start spots avoid planes already parked there; 👋 shows when someone arrives. Tap the 🌍 chip (or T) for a list of pilots: tap one to jump in just behind them with the same speed, angle, wheels and flaps (parked = park next to them). Turn off with 🌍 in the menu.
 - 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).
 - Missions: ready for later (`missions.js` explains the hooks). The 🎯 menu button appears once `MISSIONS` has some.
 - Test params: `?sptime=<seconds>` fixes the time of day (0–900), `?spq=low|mid|high` quality, `?spdebug` adds `window.__sp()`.
