@@ -5,6 +5,7 @@
 // Every girl you make is saved in this browser (last 20) so you can carry on later.
 import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
 import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD, FACE_VIEW, BODY_VIEW } from './draw.js';
 import { createStore, newLook, newKey, presetStrokes } from './look.js';
@@ -91,7 +92,7 @@ export function mount(stage) {
     screen = 'friends';
     root.innerHTML = `
       <div class="bb-mp">
-        <button class="bb-back" aria-label="Back">⬅️</button>
+        <button class="bb-back" aria-label="Back">${icon('back')}</button>
         <h1 class="bb-title">Play with friends</h1>
         <div class="bb-mp-choices">
           <button class="bb-big" data-mp="make"><span class="i">🏠</span><span>Make a room</span></button>
@@ -121,13 +122,13 @@ export function mount(stage) {
     let code = '';
     root.innerHTML = `
       <div class="bb-mp">
-        <button class="bb-back" aria-label="Back">⬅️</button>
+        <button class="bb-back" aria-label="Back">${icon('back')}</button>
         <h1 class="bb-title">Tap your friend's pictures</h1>
         <div class="bb-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
         <div class="bb-keypad">
           ${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}
         </div>
-        <button class="bb-rub" aria-label="Rub out">⌫</button>
+        <button class="bb-rub" aria-label="Rub out">${icon('backspace')}</button>
         <p class="bb-mp-msg"></p>
       </div>`;
     const slots = [...root.querySelectorAll('.bb-slots span')];
@@ -175,9 +176,9 @@ export function mount(stage) {
             <span class="bb-code bb-code-key"><b>🔑</b>${codeHtml()}</span>
             <span class="bb-sep"></span>
             <span class="bb-roombar-f">${friendDots()}</span>
-            <button class="bb-leave">Leave 🚪</button>
+            <button class="bb-leave">${icon('leave')}Leave</button>
           </div>` : `
-          <button class="bb-friends-btn">🌍 Play with friends</button>`}
+          <button class="bb-friends-btn">${icon('globe')}Play with friends</button>`}
         <p class="bb-sub">Pick your girl!</p>
         <div class="bb-girls">
           ${GIRLS.map(g => `
@@ -195,7 +196,7 @@ export function mount(stage) {
                   <div class="bb-card-pic">${renderGirl(s.look, { viewBox: '20 10 360 460', lite: true })}</div>
                   <span>${s.look.name}</span>
                 </button>
-                <button class="bb-del" data-del="${s.id}" aria-label="Delete">🗑️</button>
+                <button class="bb-del" data-del="${s.id}" aria-label="Delete">${icon('trash')}</button>
               </div>`).join('')}
           </div>` : ''}
       </div>`;
@@ -221,7 +222,7 @@ export function mount(stage) {
       if (!b.classList.contains('sure')) {
         b.classList.add('sure');
         b.textContent = 'Sure?';
-        later(() => { if (b.isConnected) { b.classList.remove('sure'); b.textContent = '🗑️'; } }, 2500);
+        later(() => { if (b.isConnected) { b.classList.remove('sure'); b.innerHTML = icon('trash'); } }, 2500);
         return;
       }
       sound.bump();
@@ -238,7 +239,7 @@ export function mount(stage) {
       const look = store.get();
       root.innerHTML = `
         <div class="bb-setup">
-          <button class="bb-back" aria-label="Back">⬅️</button>
+          <button class="bb-back" aria-label="Back">${icon('back')}</button>
           <div class="bb-setup-pic">
             <h1 class="bb-title">${look.name}</h1>
             <div class="bb-setup-girl">${renderGirl(look)}</div>
@@ -292,9 +293,9 @@ export function mount(stage) {
         <div class="bb-stage">
           <h1 class="bb-title bb-title-small">Beautiful Bells</h1>
           <div class="bb-tools">
-            <button data-tool="undo" aria-label="Undo">↩️</button>
-            <button data-tool="wipe" aria-label="Wipe off">🧽</button>
-            <button data-tool="random" aria-label="Surprise me">🎲</button>
+            <button data-tool="undo" aria-label="Undo">${icon('undo')}</button>
+            <button data-tool="wipe" aria-label="Wipe off">${icon('eraser')}</button>
+            <button data-tool="random" aria-label="Surprise me">${icon('dice')}</button>
             <button data-tool="setup" aria-label="Hair and eyes">👧</button>
             <button data-tool="girls" aria-label="My girls">👭</button>
           </div>
@@ -304,9 +305,9 @@ export function mount(stage) {
           </div>
           <div class="bb-held" hidden>
             <div class="bb-held-pic"></div>
-            <button class="bb-held-x" aria-label="Put down">✖</button>
+            <button class="bb-held-x" aria-label="Put down">${icon('close')}</button>
           </div>
-          <button class="bb-photo" aria-label="Save picture">📸<span>Save</span></button>
+          <button class="bb-photo" aria-label="Save picture">${icon('camera')}<span>Save</span></button>
           ${net ? '<button class="bb-showoff" aria-label="Show off">🎉<span>Show off</span></button>' : ''}
           <div class="bb-toast" hidden></div>
         </div>
