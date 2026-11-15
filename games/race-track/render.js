@@ -521,6 +521,74 @@ export function drawCone(g, k) {
   g.restore();
 }
 
+// ---- item boxes, rockets, bananas ----
+export function drawBox(g, b, time) {
+  if (b.cool > 0) {
+    if (b.cool < 0.5) { g.fillStyle = 'rgba(255,255,255,.5)'; g.beginPath(); g.arc(b.x, b.y, 12 * (1 - b.cool * 2), 0, 7); g.fill(); }
+    return;
+  }
+  const bob = Math.sin(time * 3 + b.x) * 2;
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  g.beginPath(); g.ellipse(b.x + 5, b.y + 7, 15, 9, 0, 0, 7); g.fill();
+  g.translate(b.x, b.y - 4 + bob);
+  g.rotate(time * 1.5 + b.x * 0.01);
+  const gr = g.createLinearGradient(-11, -11, 11, 11);
+  const h = (time * 120 + b.x) % 360;
+  gr.addColorStop(0, `hsl(${h},90%,65%)`); gr.addColorStop(0.5, `hsl(${(h + 120) % 360},90%,65%)`); gr.addColorStop(1, `hsl(${(h + 240) % 360},90%,65%)`);
+  g.fillStyle = 'rgba(255,255,255,.55)';
+  rr(g, -14, -14, 28, 28, 6); g.fill();
+  g.strokeStyle = gr; g.lineWidth = 5; g.stroke();
+  g.rotate(-(time * 1.5 + b.x * 0.01));
+  g.fillStyle = '#fff'; g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 2.5;
+  g.font = 'bold 21px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.strokeText('?', 0, 1); g.fillText('?', 0, 1);
+  g.restore();
+}
+
+function drawRocket(g, s) {
+  const a = Math.atan2(s.vy, s.vx);
+  g.save();
+  g.translate(s.x, s.y);
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  g.beginPath(); g.ellipse(5, 8, 12, 7, a, 0, 7); g.fill();
+  g.translate(0, -6);
+  g.rotate(a);
+  g.fillStyle = '#fafafa'; rr(g, -14, -6, 8, 12, 2); g.fill(); // cuff
+  const gg = g.createRadialGradient(0, -3, 2, 1, 0, 11);
+  gg.addColorStop(0, '#ff6f60'); gg.addColorStop(1, '#c62828');
+  g.fillStyle = gg;
+  g.beginPath(); g.ellipse(2, 0, 11, 9, 0, 0, 7); g.fill();
+  g.beginPath(); g.ellipse(-2, -8, 5, 3.5, -0.3, 0, 7); g.fill(); // thumb
+  g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(6, -6); g.lineTo(6, 6); g.stroke();
+  g.restore();
+}
+
+function drawBanana(g, b) {
+  g.save();
+  g.translate(b.x, b.y);
+  g.rotate(b.a || 0);
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  g.beginPath(); g.ellipse(3, 4, 11, 6, 0, 0, 7); g.fill();
+  g.fillStyle = '#fdd835'; g.strokeStyle = '#c49000'; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(0, -8, 12, 0.35, Math.PI - 0.35); g.arc(0, -14, 13, Math.PI - 0.5, 0.5, true); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#5d4037';
+  g.beginPath(); g.arc(-11, -4, 2, 0, 7); g.arc(11, -4, 2, 0, 7); g.fill();
+  g.restore();
+}
+
+function drawSpinStars(g, c, time) {
+  for (let k = 0; k < 3; k++) {
+    const a = time * 6 + (k * Math.PI * 2) / 3;
+    const x = c.x + Math.cos(a) * 20, y = c.y - 22 + Math.sin(a) * 7;
+    g.fillStyle = '#ffeb3b'; g.strokeStyle = '#f57f17'; g.lineWidth = 1;
+    g.beginPath();
+    for (let i = 0; i < 10; i++) { const r = i % 2 ? 2.5 : 6, t = -Math.PI / 2 + (i * Math.PI) / 5; g.lineTo(x + Math.cos(t) * r, y + Math.sin(t) * r); }
+    g.closePath(); g.fill(); g.stroke();
+  }
+}
+
 export function drawItem(g, it) {
   if (it.type === 'jump') drawJump(g, it);
   else if (it.type === 'water') drawWater(g, it);
@@ -531,9 +599,10 @@ export function drawItem(g, it) {
   else if (it.type === 'stand') drawStand(g, it);
   else if (it.type === 'tree') { drawTreeShadow(g, it); drawTreeTop(g, it); }
   else if (it.type === 'cone') drawCone(g, it);
+  else if (it.type === 'box') for (const o of [-29, 0, 29]) drawBox(g, { x: it.x - Math.sin(it.a) * o, y: it.y + Math.cos(it.a) * o, cool: 0 }, 0.6);
 }
 // things painted once onto the ground layer (not tunnels, tree tops or cones)
-const flat = it => !['tunnel', 'cone'].includes(it.type);
+const flat = it => !['tunnel', 'cone', 'box'].includes(it.type);
 const groundDraw = (g, it) => (it.type === 'tree' ? drawTreeShadow(g, it) : drawItem(g, it));
 
 function drawTunnel(g, track, it) {
@@ -1037,6 +1106,8 @@ export function createRenderer(view) {
     drawWaterLive(g, waters.filter(w => !w.up), o.time, dt);
     for (const it of items) if (it.type === 'boost') drawBoostGlow(g, it, o.time);
     (o.cones || items.filter(i => i.type === 'cone')).forEach(k => drawCone(g, k));
+    (o.boxes || []).forEach(b => drawBox(g, b, o.time));
+    (o.bananas || []).forEach(b => drawBanana(g, b));
 
     const cars = o.cars || [];
     if (o.live) effects(cars, dt);
@@ -1064,6 +1135,11 @@ export function createRenderer(view) {
     }
 
     vis.filter(c => c.air).forEach(c => drawRaceCar(g, c));
+    (o.shots || []).forEach(sh => {
+      drawRocket(g, sh);
+      if (o.live && Math.random() < 0.6) add({ x: sh.x, y: sh.y - 6, vx: -sh.vx * 0.05, vy: -sh.vy * 0.05, life: 0.4, r: 4, grow: 10, color: '230,230,230', a: 0.5 });
+    });
+    cars.filter(c => c.spinT > 0).forEach(c => drawSpinStars(g, c, o.time));
     g.globalAlpha = 0.35; // cars inside a tunnel: see-through
     cars.filter(c => hidden(c)).forEach(c => drawCar(g, c.x, c.y, c.a, c));
     g.globalAlpha = 1;
@@ -1105,7 +1181,11 @@ export function createRenderer(view) {
     g.drawImage(tunnelL, 0, 0, canvas.width, canvas.height);
   }
 
-  return { setScene, resetRace, frame, toWorld, thumb, burst, splash, dust };
+  function pop(x, y) { // rocket hits something
+    for (let k = 0; k < 12; k++) add({ x, y, vx: rand(-120, 120), vy: rand(-120, 120), life: 0.5, r: rand(3, 6), grow: 8, color: k % 2 ? '255,235,59' : '255,255,255', a: 0.9 });
+  }
+
+  return { setScene, resetRace, frame, toWorld, thumb, burst, splash, dust, pop };
 }
 
 // ---------------------------------------------------------------- icons
@@ -1139,6 +1219,7 @@ export function drawItemIcon(canvas, type) {
   g.fillStyle = dirt(g);
   g.fillRect(-95, -TRACK_W / 2, 190, TRACK_W);
   if (type === 'boost') { drawBoost(g, { x: 0, y: 0, a: 0 }); drawBoostGlow(g, { x: 0, y: 0, a: 0 }, 0.3); }
+  else if (type === 'box') { g.scale(1.5, 1.5); drawItem(g, { type: 'box', x: 0, y: 0, a: 0 }); }
   else if (type === 'tunnel') {
     const fake = { n: 15, pts: Array.from({ length: 15 }, (_, i) => ({ x: -56 + i * 8, y: 0, a: 0 })) };
     drawTunnel(g, fake, { idx: TUNNEL_HALF });

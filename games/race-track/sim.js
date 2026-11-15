@@ -21,6 +21,34 @@ const BOOST_TIME = 1.0;
 export const CONE_R = 7;
 const END_WAIT = 8;    // seconds the others get after the winner finishes
 
+// ---- item boxes (Mario Kart style) ----
+export const PICKUPS = ['rocket', 'banana', 'turbo'];
+const BOX_RESPAWN = 3;
+const ROLL_TIME = 0.9;      // the item "spins" before you can use it
+const SHOT_SPEED = 620;
+const HIT_R = 22;
+
+// Each 'box' extra is a row of 3 boxes across the track.
+export function boxesFromItems(items) {
+  const out = [];
+  items.filter(i => i.type === 'box').forEach((it, k) => {
+    for (const o of [-29, 0, 29]) {
+      out.push({ id: `b${k}_${o}`, x: it.x - Math.sin(it.a) * o, y: it.y + Math.cos(it.a) * o, up: it.up, cool: 0 });
+    }
+  });
+  return out;
+}
+
+// No boxes placed? Put two rows on the track automatically (same on every device).
+export function withAutoBoxes(track, items) {
+  if (!track || items.some(i => i.type === 'box')) return items;
+  const rows = [Math.floor(track.n * 0.3), Math.floor(track.n * 0.7)].map(i => {
+    const p = track.pts[i];
+    return { type: 'box', x: p.x, y: p.y, a: p.a, idx: i, up: !!track.bridge[i], auto: true };
+  });
+  return [...items, ...rows];
+}
+
 export function createRace(track, players) {
   const n = track.n;
   const cars = players.map((pl, k) => {
@@ -33,12 +61,16 @@ export function createRace(track, players) {
       x: p.x - Math.sin(p.a) * side, y: p.y + Math.cos(p.a) * side, a: p.a,
       vx: 0, vy: 0, idx: i, prog: -back, lap: 1, lapsDone: 0, started: false, seen: 0, near: true,
       boostT: 0, onBoost: false, inMud: false, onIce: false,
+      item: null, rollT: 0, firePrev: false, spinT: 0, spinDir: 1, cpu: !!pl.cpu,
       z: 0, vz: 0, air: false, jumpCool: 0,
       onTrack: true, up: !!track.bridge[i], inWater: false,
       skid: 0, speed: 0, finished: false, place: 0,
     };
   });
-  return { t: 0, phase: 'countdown', countdown: 3, goT: -1, cars, finishOrder: [], endTimer: END_WAIT, events: [] };
+  return {
+    t: 0, phase: 'countdown', countdown: 3, goT: -1, cars, finishOrder: [], endTimer: END_WAIT, events: [],
+    shots: [], bananas: [], remoteShots: [], remoteBananas: [], hitIds: new Set(), nextId: 1,
+  };
 }
 
 function local(it, car) {
@@ -61,7 +93,8 @@ function locate(car, track) {
   car.up = car.onTrack && !!track.bridge[i];
 }
 
-function updateCar(car, input, track, items, dt, ev) {
+function updateCar(car, inputIn, track, items, dt, ev) {
+  let input = inputIn;
   const fx = Math.cos(car.a), fy = Math.sin(car.a);
   const rx = -fy, ry = fx;
   let vF = car.vx * fx + car.vy * fy;
@@ -90,6 +123,12 @@ function updateCar(car, input, track, items, dt, ev) {
     if (boost && !car.onBoost) { car.boostT = BOOST_TIME; ev.push({ type: 'boost', id: car.id }); }
   }
   car.onBoost = boost;
+  if (car.spinT > 0) { // spinning out: no steering, slides
+    car.spinT -= dt;
+    car.a += car.spinDir * 13 * dt;
+    grip = 1.2;
+    input = {};
+  }
   if (mud && !car.inMud && Math.abs(vF) > 40) ev.push({ type: 'mud', id: car.id });
   car.inMud = mud;
   car.onIce = ice;
@@ -206,6 +245,114 @@ function updateCones(race, dt, ev) {
   }
 }
 
+function knock(car, dx, dy, ev, kind) {
+  if (car.spinT > 0 || car.air) return false;
+  car.spinT = 1.0;
+  car.spinDir = Math.random() < 0.5 ? -1 : 1;
+  if (kind === 'rocket') {
+    const d = Math.hypot(dx, dy) || 1;
+    // shove sideways to the shot, so the car goes off the track
+    let nx = -dy / d, ny = dx / d;
+    if (Math.random() < 0.5) { nx = -nx; ny = -ny; }
+    car.vx = car.vx * 0.4 + nx * 380 + (dx / d) * 120;
+    car.vy = car.vy * 0.4 + ny * 380 + (dy / d) * 120;
+  } else {
+    car.vx *= 0.5; car.vy *= 0.5;
+  }
+  ev.push({ type: 'hit', id: car.id, kind });
+  return true;
+}
+
+function useItem(car, race, ev) {
+  const fx = Math.cos(car.a), fy = Math.sin(car.a);
+  const id = `${car.id}:${race.nextId++}`;
+  if (car.item === 'rocket') {
+    race.shots.push({ id, owner: car.id, x: car.x + fx * 28, y: car.y + fy * 28, vx: fx * (SHOT_SPEED + Math.max(0, car.speed * 0.5)), vy: fy * (SHOT_SPEED + Math.max(0, car.speed * 0.5)), life: 2.6 });
+  } else if (car.item === 'banana') {
+    race.bananas.push({ id, owner: car.id, x: car.x - fx * 32, y: car.y - fy * 32, a: car.a, life: 60 });
+  } else if (car.item === 'turbo') {
+    car.boostT = 1.5;
+    ev.push({ type: 'boost', id: car.id });
+  }
+  ev.push({ type: 'use', id: car.id, item: car.item });
+  car.item = null;
+}
+
+function updateItems(race, dt, inputs, ev) {
+  // pick up boxes
+  for (const b of race.boxes) {
+    if (b.cool > 0) { b.cool -= dt; continue; }
+    for (const c of race.cars) {
+      if (c.air || Math.hypot(c.x - b.x, c.y - b.y) > 27) continue;
+      b.cool = BOX_RESPAWN;
+      if (!c.remote && !c.item && !c.finished) {
+        c.item = PICKUPS[Math.floor(Math.random() * PICKUPS.length)];
+        c.rollT = ROLL_TIME;
+        ev.push({ type: 'pickup', id: c.id });
+      }
+      break;
+    }
+  }
+  // use items (press fire)
+  for (const c of race.cars) {
+    if (c.remote) continue;
+    if (c.rollT > 0) c.rollT -= dt;
+    const fire = race.phase === 'racing' && !!(inputs[c.id] && inputs[c.id].fire);
+    if (fire && !c.firePrev && c.item && c.rollT <= 0 && c.spinT <= 0) useItem(c, race, ev);
+    c.firePrev = fire;
+  }
+  // rockets: home in on the nearest car in front
+  for (let i = race.shots.length - 1; i >= 0; i--) {
+    const s = race.shots[i];
+    s.life -= dt;
+    let target = null, best = 520;
+    for (const c of race.cars) {
+      if (c.id === s.owner || c.air || c.finished) continue;
+      const dx = c.x - s.x, dy = c.y - s.y, d = Math.hypot(dx, dy);
+      const sp = Math.hypot(s.vx, s.vy);
+      if (d < best && (dx * s.vx + dy * s.vy) / (d * sp || 1) > 0.3) { best = d; target = c; }
+    }
+    if (target) {
+      const want = Math.atan2(target.y - s.y, target.x - s.x), cur = Math.atan2(s.vy, s.vx);
+      const turn = Math.max(-4 * dt, Math.min(4 * dt, Math.atan2(Math.sin(want - cur), Math.cos(want - cur))));
+      const sp = Math.hypot(s.vx, s.vy);
+      s.vx = Math.cos(cur + turn) * sp; s.vy = Math.sin(cur + turn) * sp;
+    }
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    let gone = s.life <= 0 || s.x < 0 || s.y < 0 || s.x > WORLD.w || s.y > WORLD.h;
+    for (const c of race.cars) {
+      if (gone || c.id === s.owner || c.air || Math.hypot(c.x - s.x, c.y - s.y) > HIT_R) continue;
+      if (!c.remote) knock(c, s.vx, s.vy, ev, 'rocket');
+      gone = true; // a friend's device does the knock for their own car
+    }
+    for (const o of race.solids) if (!gone && Math.hypot(o.x - s.x, o.y - s.y) < 22) gone = true;
+    if (gone) { race.shots.splice(i, 1); ev.push({ type: 'pop', x: s.x, y: s.y }); }
+  }
+  // bananas
+  for (let i = race.bananas.length - 1; i >= 0; i--) {
+    const bn = race.bananas[i];
+    bn.life -= dt;
+    let gone = bn.life <= 0;
+    for (const c of race.cars) {
+      if (gone || c.air || Math.hypot(c.x - bn.x, c.y - bn.y) > 20) continue;
+      if (c.id === bn.owner && bn.life > 59.4) continue; // just dropped it
+      if (!c.remote) knock(c, 0, 0, ev, 'banana');
+      gone = true;
+    }
+    if (gone) race.bananas.splice(i, 1);
+  }
+  // friends' rockets and bananas (from the network) hitting our cars
+  for (const list of [race.remoteShots, race.remoteBananas]) {
+    for (const o of list) {
+      if (race.hitIds.has(o.id)) continue;
+      for (const c of race.cars) {
+        if (c.remote || c.air || Math.hypot(c.x - o.x, c.y - o.y) > HIT_R) continue;
+        if (knock(c, o.vx || 0, o.vy || 0, ev, list === race.remoteShots ? 'rocket' : 'banana')) race.hitIds.add(o.id);
+      }
+    }
+  }
+}
+
 // A lap counts when you cross the line going forwards, after visiting
 // the other three quarters of the track. Going off the track for a bit
 // doesn't matter, and it counts the moment you cross the line.
@@ -274,6 +421,7 @@ export function stepRace(race, track, items, inputs, dt) {
   if (race.itemsRef !== items) {
     race.itemsRef = items;
     race.solids = items.filter(i => SOLIDS[i.type]);
+    if (!race.boxes) race.boxes = boxesFromItems(items);
     if (!race.cones) race.cones = items.filter(i => i.type === 'cone').map(i => ({ x: i.x, y: i.y, a: 0, vx: 0, vy: 0, z: 0, vz: 0, spin: 0, down: false }));
   }
 
@@ -287,6 +435,7 @@ export function stepRace(race, track, items, inputs, dt) {
   }
   collide(race.cars, ev);
   updateCones(race, dt, ev);
+  updateItems(race, dt, inputs, ev);
 
   if (race.phase === 'racing' && race.cars.some(c => c.finished)) {
     race.endTimer -= dt;
