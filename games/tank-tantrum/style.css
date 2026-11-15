@@ -150,3 +150,5 @@
 }
 .tt-small { min-height: 44px; padding: 0 16px; border-radius: 16px; background: #eceff1; color: #546e7a !important; font-size: 18px; font-weight: 700; }
 .tt-edit h2 { margin: 0; font-size: clamp(26px, 5vw, 36px); color: #d84315; text-align: center; }
+.tt-wind-btn { min-height: 52px; padding: 0 20px; border-radius: 18px; background: #eceff1; font-size: 22px; box-shadow: 0 4px 0 rgba(0,0,0,.12); }
+.tt-wind-btn.on { background: #b3e5fc; box-shadow: 0 0 0 4px #0288d1, 0 4px 0 4px rgba(0,0,0,.1); }

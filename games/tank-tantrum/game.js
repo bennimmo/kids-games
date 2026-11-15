@@ -52,7 +52,7 @@ export function mount(stage) {
       return { type: o && SLOT_TYPES.includes(o.type) ? o.type : (i === 1 ? 'easy' : 'off'), look: sanitizeLook(o && o.look ? o.look : randomLook(i + 1)) };
     });
     slots[0].type = 'human';
-    return { slots, map: s && (MAPS[s.map] || s.map === 'random') ? s.map : 'random' };
+    return { slots, map: s && (MAPS[s.map] || s.map === 'random') ? s.map : 'random', wind: !!(s && s.wind) };
   })();
 
   let screen = 'title';
@@ -74,8 +74,8 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- matches
   // ctrl[i]: 'me' (a person on this device), 'easy'/'tricky' (computer on this device), 'remote'
-  function newMatch({ seed, map, looks, ctrl, mode, owners, gameId }) {
-    const world = new World({ seed, map, tanks: looks });
+  function newMatch({ seed, map, wind, looks, ctrl, mode, owners, gameId }) {
+    const world = new World({ seed, map, wind, tanks: looks });
     match = {
       world, mode, ctrl, owners: owners || [], gameId,
       sel: looks.map(() => 'shell'),
@@ -94,7 +94,7 @@ export function mount(stage) {
   function startDemo() {
     const n = 3;
     newMatch({
-      seed: Math.floor(Math.random() * 1e9), map: pickMap('random'),
+      seed: Math.floor(Math.random() * 1e9), map: pickMap('random'), wind: true,
       looks: [0, 1, 2].map(i => randomLook(Math.floor(Math.random() * 8) + i)),
       ctrl: Array(n).fill('tricky'), mode: 'demo',
     });
@@ -108,7 +108,7 @@ export function mount(stage) {
     if (slots.length < 2) return;
     const looks = slots.map((s, i) => (i === 0 ? myLook : s.look));
     newMatch({
-      seed: Math.floor(Math.random() * 1e9), map: pickMap(localSetup.map),
+      seed: Math.floor(Math.random() * 1e9), map: pickMap(localSetup.map), wind: localSetup.wind,
       looks, ctrl: slots.map(s => (s.type === 'human' ? 'me' : s.type)), mode: 'local',
     });
     show('game');
@@ -123,7 +123,7 @@ export function mount(stage) {
     const owners = roster.map(r => (r.pid ? r.pid : hostPid));
     if (!ctrl.includes('me')) return false;   // joined after it started
     net.joinGame(game.id);
-    newMatch({ seed: game.seed >>> 0, map: MAPS[game.map] ? game.map : 'grass', looks, ctrl, owners, mode: 'online', gameId: game.id });
+    newMatch({ seed: game.seed >>> 0, map: MAPS[game.map] ? game.map : 'grass', wind: game.wind === true, looks, ctrl, owners, mode: 'online', gameId: game.id });
     show('game');
     return true;
   }
@@ -633,6 +633,7 @@ export function mount(stage) {
     setText('timer', hud.timer, left === '' ? '' : String(left));
     hud.timer.classList.toggle('low', left !== '' && left <= 10);
     const wind = w.wind;
+    setShow('windPill', hud.wind.parentElement, !!w.windOn);
     setText('wind', hud.wind, wind === 0 ? '·' : (wind < 0 ? '⬅'.repeat(Math.ceil(Math.abs(wind) / 4)) : '➡'.repeat(Math.ceil(wind / 4))));
     setShow('drive', hud.drive, mine);
     setShow('arms', hud.arms, mine);
@@ -789,6 +790,9 @@ export function mount(stage) {
     p.querySelector('[data-a="tank"]').addEventListener('click', () => { sound.pop(); editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); titleScreen(); }); });
   }
 
+  function windPicker(on) {
+    return `<button class="tt-wind-btn ${on ? 'on' : ''}" data-wind>🌬️ Wind: <b>${on ? 'ON' : 'OFF'}</b></button>`;
+  }
   function mapPicker(cur) {
     return `<div class="tt-maps">${[...MAP_IDS, 'random'].map(id => `<button class="tt-map ${cur === id ? 'on' : ''}" data-map="${id}">
       <span class="i">${id === 'random' ? '🎲' : MAPS[id].icon}</span><span>${id === 'random' ? 'Surprise' : MAPS[id].name}</span></button>`).join('')}</div>`;
@@ -809,6 +813,7 @@ export function mount(stage) {
       }).join('')}</div>
       <h3>Map</h3>
       ${mapPicker(s.map)}
+      ${windPicker(s.wind)}
       <div class="tt-row">
         <button class="tt-btn alt" data-a="back">⬅ Back</button>
         <button class="tt-btn" data-a="go" ${count < 2 ? 'disabled' : ''}>▶ Start!</button>
@@ -834,6 +839,7 @@ export function mount(stage) {
       localScreen();
     }));
     p.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => { sound.pop(); s.map = b.dataset.map; save(LOCAL_KEY, s); localScreen(); }));
+    p.querySelector('[data-wind]').addEventListener('click', () => { sound.pop(); s.wind = !s.wind; save(LOCAL_KEY, s); localScreen(); });
     p.querySelector('[data-a="back"]').addEventListener('click', () => { sound.pop(); show('title'); });
     p.querySelector('[data-a="go"]').addEventListener('click', () => { sound.pop(); startLocal(); });
   }
@@ -1003,6 +1009,7 @@ export function mount(stage) {
           <button class="tt-btn alt" data-bot="tricky" ${total >= MAX_TANKS ? 'disabled' : ''}>➕🤖 Tricky</button>
         </div>
         <h3>Map</h3>${mapPicker(map)}
+        ${windPicker(meta.wind === true)}
         <div class="tt-row">
           <button class="tt-btn alt" data-a="tank">🎨 My tank</button>
           <button class="tt-btn alt" data-a="leave">🚪 Leave</button>
@@ -1031,6 +1038,8 @@ export function mount(stage) {
       net.setLobby({ bots: list });
     }));
     p.querySelectorAll('[data-map]').forEach(b => b.addEventListener('click', () => { sound.pop(); net.setLobby({ map: b.dataset.map }); }));
+    const wb = p.querySelector('[data-wind]');
+    if (wb) wb.addEventListener('click', () => { sound.pop(); net.setLobby({ wind: !((net.meta() || {}).wind === true) }); });
     const q = s => p.querySelector(s);
     q('[data-a="leave"]').addEventListener('click', () => { sound.pop(); confirmLeave(); });
     q('[data-a="tank"]').addEventListener('click', () => { sound.pop(); editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); if (net) net.setLook(l); lastLobbyHtml = ''; lobbyScreen(); }); });
@@ -1051,6 +1060,7 @@ export function mount(stage) {
       id: Math.random().toString(36).slice(2, 10),
       seed: Math.floor(Math.random() * 1e9),
       map: pickMap(meta.map || 'random'),
+      wind: meta.wind === true,
       roster,
     });
   }
