@@ -173,7 +173,7 @@ export function createEditor(view) {
     },
     crossingAt(w) {
       if (!E.course) return -1;
-      return E.course.crossings.findIndex(c => Math.hypot(c.x - w.x, c.y - w.y) < 40 * Math.max(1, 0.95 / E.scale));
+      return E.course.crossings.findIndex(c => Math.hypot(c.x - w.x, c.y - w.y) < 40 * Math.min(1.8, Math.max(1, 0.95 / E.scale)));
     },
     frame({ insets, stroke, drag, hint, time }) {
       const g = view.ctx, T = THEMES[E.theme];
@@ -190,7 +190,7 @@ export function createEditor(view) {
       g.globalAlpha = 0.35; g.textAlign = 'center'; g.textBaseline = 'middle';
       for (const d of E.deco) { g.font = `${d.s}px serif`; g.fillText(d.e, d.x, d.y); }
       g.globalAlpha = 1;
-      if (E.course) drawCourse(g, E.course, E.items, E.theme, time, { badges: true, badgeScale: Math.max(1, 0.95 / E.scale) });
+      if (E.course) drawCourse(g, E.course, E.items, E.theme, time, { badges: true, badgeScale: Math.min(1.8, Math.max(1, 0.95 / E.scale)) });
       g.restore();
       g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 6;
       g.beginPath(); g.roundRect(0, 0, WORLD.w, WORLD.h, 30); g.stroke();

@@ -89,6 +89,7 @@ export function mount(stage) {
     bots: Number.isInteger(prefs.bots) ? Math.max(0, Math.min(6, prefs.bots)) : 3,
     level: Number.isInteger(prefs.level) ? Math.max(0, Math.min(2, prefs.level)) : 1,
     laps: LAP_CHOICES.includes(prefs.laps) ? prefs.laps : 3,
+    tilt: typeof prefs.tilt === 'boolean' ? prefs.tilt : Math.min(screen.width, screen.height) < 600,
     track: null, modes: [], items: [], course: null,
     stroke: null, drag: null, garage: null, gTab: 'body', paused: false, time: 0,
     net: null, busy: false, sad: 0, joinCode: '',
@@ -97,7 +98,7 @@ export function mount(stage) {
     hostSync();
     syncMyPlayers();
     if (S.net && !S.net.isHost) { try { localStorage.setItem(PREFS, JSON.stringify({ ...loadPrefs(), players: S.players.map(p => ({ look: p.look })) })); } catch (e) { /* ignore */ } return; }
-    try { localStorage.setItem(PREFS, JSON.stringify({ theme: S.theme, players: S.players.map(p => ({ look: p.look })), bots: S.bots, level: S.level, laps: S.laps })); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(PREFS, JSON.stringify({ theme: S.theme, players: S.players.map(p => ({ look: p.look })), bots: S.bots, level: S.level, laps: S.laps, tilt: S.tilt })); } catch (e) { /* ignore */ }
   }
 
   const $ = sel => ui.querySelector(sel);
@@ -188,7 +189,7 @@ export function mount(stage) {
     });
     bar.appendChild(pal);
     const go = el(`<button class="kk-go ${S.track ? '' : 'off'}">🏁</button>`);
-    click(go, () => { if (S.track) (S.net ? hostStartRace() : startRace()); });
+    click(go, () => { askTilt(); if (S.track) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     ui.appendChild(bar);
     ui.appendChild(el(`<div class="kk-bin">🗑️</div>`));
@@ -408,7 +409,7 @@ export function mount(stage) {
     R.views.forEach((v, i) => {
       const r = rects[i];
       const d = el(`<div class="kk-view" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;--pc:${P_COLORS[i]}">
-        <div class="kk-item"><span></span></div>
+        <div class="kk-item" data-p="${S.players[i] ? S.players[i].id : ''}" data-k="fire"><span></span></div>
         <div class="kk-place"></div>
         <div class="kk-lap"></div>
         <div class="kk-msg"></div>
@@ -424,6 +425,16 @@ export function mount(stage) {
           <div><button class="kk-tb kk-tb-s" data-p="${p.id}" data-k="down">▼</button><button class="kk-tb kk-tb-fire" data-p="${p.id}" data-k="fire">💥</button></div>
         </div>`);
         d.appendChild(pad);
+        if (R.views.length === 1) {
+          const tb = el(`<button class="kk-tilt" title="Tilt to steer">${S.tilt ? '📱' : '👆'}</button>`);
+          tb.addEventListener('pointerdown', e => {
+            e.preventDefault(); e.stopPropagation();
+            S.tilt = !S.tilt; askTilt(); tilt.base = tilt.steer; savePrefs();
+            tb.textContent = S.tilt ? '📱' : '👆';
+            sound.pop();
+          });
+          d.appendChild(tb);
+        }
       }
     });
     if (R.views.length > 1) {
@@ -759,7 +770,7 @@ export function mount(stage) {
     box.querySelectorAll('.kk-keypad button').forEach(b => click(b, () => {
       if (S.joinCode.length >= CODE_LEN) return;
       S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) tryJoin(S.joinCode); else render();
+      if (S.joinCode.length === CODE_LEN) { askTilt(); tryJoin(S.joinCode); } else render();
     }));
     click(box.querySelector('.kk-del-pic'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
     click(box.querySelector('.kk-back'), () => { S.phase = 'online'; render(); });
@@ -780,6 +791,7 @@ export function mount(stage) {
       if (c.item) icon = c.rollT > 0 ? ITEMS[ITEM_LIST[Math.floor(S.time * 14) % ITEM_LIST.length]] : ITEMS[c.item] + (c.itemN > 1 ? `<sup>${c.itemN}</sup>` : '');
       set('item', h.itemS, icon, 'innerHTML');
       h.item.classList.toggle('ready', !!c.item && c.rollT <= 0);
+      h.root.classList.toggle('kk-tilting', tiltActive());
       set('place', h.place, `${c.place}<small>${ORD(c.place).slice(-2)}</small>`, 'innerHTML');
       set('lap', h.lap, c.finished ? '🏁' : `🏁 ${Math.min(race.laps, c.lap + 1)}/${race.laps}`);
       let big = '';
@@ -829,7 +841,7 @@ export function mount(stage) {
     ui.parentElement.querySelectorAll('.kk-tb').forEach(b => b.classList.toggle('on', on.some(t => t.p === b.dataset.p && t.k === b.dataset.k)));
   }
   const onPadDown = e => {
-    const b = e.target.closest && e.target.closest('.kk-tb');
+    const b = e.target.closest && e.target.closest('.kk-tb, .kk-item[data-p]');
     if (!b) return;
     e.preventDefault();
     touches.set(e.pointerId, { p: b.dataset.p, k: b.dataset.k });
@@ -858,6 +870,27 @@ export function mount(stage) {
     return { up: b(0) || b(7), down: b(1) || b(6), left: ax < -0.35 || b(14), right: ax > 0.35 || b(15), fire: b(2) || b(3) || b(4) || b(5) };
   }
 
+  // ------------------------------------------------------------ tilt to steer (phones, one player)
+  const tilt = { ok: false, listening: false, steer: 0, base: 0 };
+  function tiltAxes(e) {
+    const a = ((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) % 360;
+    const b = e.beta || 0, g = e.gamma || 0;
+    if (a === 90) return b;
+    if (a === 270 || a === -90) return -b;
+    if (a === 180 || a === -180) return -g;
+    return g;
+  }
+  const onOrient = e => { if (e.beta == null) return; tilt.ok = true; tilt.steer = tiltAxes(e); };
+  // must be called straight from a tap (iPhone/iPad ask for permission)
+  function askTilt() {
+    if (!TOUCH || !S.tilt || tilt.listening || typeof DeviceOrientationEvent === 'undefined') return;
+    const listen = () => { tilt.listening = true; addEventListener('deviceorientation', onOrient); };
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') DeviceOrientationEvent.requestPermission().then(listen, listen); // if it says no, nothing arrives anyway
+    else listen();
+  }
+  const dead = (v, lo, hi) => { const a = Math.abs(v); return a < lo ? 0 : Math.sign(v) * Math.min(1, (a - lo) / (hi - lo)); };
+  const tiltActive = () => TOUCH && S.tilt && tilt.ok && S.players.length === 1 && R && R.views.length === 1;
+
   function gatherInputs() {
     const inputs = {};
     const solo = S.players.length === 1;
@@ -870,6 +903,7 @@ export function mount(stage) {
     });
     for (const t of touches.values()) if (inputs[t.p]) inputs[t.p][t.k] = true;
     if (TOUCH) for (const p of S.players) { const i = inputs[p.id]; if (!i.down && !keys.isDown('ArrowDown')) i.up = true; }
+    if (tiltActive()) { const i = inputs[S.players[0].id]; if (!i.left && !i.right) i.steer = dead(tilt.steer - tilt.base, 3, 24); }
     if (S.net) S.players.forEach(p => { inputs[pidOf(p)] = inputs[p.id]; });
     for (const c of R.race.cars) {
       if (c.remote) continue;
@@ -908,7 +942,7 @@ export function mount(stage) {
       const vi = e.id ? viewOf(e.id) : -1;
       switch (e.type) {
         case 'beep': sound.tone(440, 0.25, 'square', 0.12); break;
-        case 'go': sound.tone(880, 0.6, 'square', 0.14); break;
+        case 'go': sound.tone(880, 0.6, 'square', 0.14); tilt.base = tilt.steer; break;
         case 'lap':
           if (vi >= 0) { sound.tone(660, 0.12, 'triangle'); setTimeout(() => sound.tone(990, 0.2, 'triangle'), 110); say(vi, e.lap === race.laps - 1 ? '🏁 FINAL LAP! 🏁' : `Lap ${e.lap + 1}`, 1.8); }
           break;
@@ -1027,6 +1061,15 @@ export function mount(stage) {
   };
   window.addEventListener('keydown', onKey);
 
+  // how much room the bars take, so the track fills the rest
+  function edInsets() {
+    const rr = root.getBoundingClientRect();
+    let top = 12, bottom = 12;
+    for (const sel of ['.kk-top', '.kk-badge']) { const e = $(sel); if (e) top = Math.max(top, e.getBoundingClientRect().bottom - rr.top + 6); }
+    const b = $('.kk-bar'); if (b) bottom = rr.bottom - b.getBoundingClientRect().top + 6;
+    return { top, bottom };
+  }
+
   // ------------------------------------------------------------ main loop
   let lastW = 0, lastH = 0;
   const stopLoop = startLoop(dt => {
@@ -1048,7 +1091,7 @@ export function mount(stage) {
   }, () => {
     if (S.sad && S.time >= S.sad) { S.sad = 0; render(); }
     if (['build', 'saved', 'online', 'join', 'lobby'].includes(S.phase)) {
-      editor.frame({ insets: { top: 76, bottom: 128 }, stroke: S.stroke, drag: S.drag && S.drag.item, hint: !S.track && !S.stroke, time: S.time });
+      editor.frame({ insets: edInsets(), stroke: S.stroke, drag: S.drag && S.drag.item, hint: !S.track && !S.stroke, time: S.time });
     }
     if (S.garage && preview) preview.frame(1 / 60);
     if (R) {
@@ -1080,9 +1123,10 @@ export function mount(stage) {
 
   setCourse();
   render();
-  if (location.search.includes('kkdebug')) window.__kk = () => ({ S, R, renderer });
+  if (location.search.includes('kkdebug')) window.__kk = () => ({ S, R, renderer, tilt });
 
   return () => {
+    removeEventListener('deviceorientation', onOrient);
     if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; }
     keepAwake(false);
     document.removeEventListener('visibilitychange', onVisible);
