@@ -10,6 +10,7 @@ export function myName() {
 }
 export function setMyName(n) {
   const v = cleanName(n);
+  if (v) navigator.storage?.persist?.().catch(() => {}); // ask the browser not to clear it
   try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch (e) { /* private mode */ }
   return v;
 }

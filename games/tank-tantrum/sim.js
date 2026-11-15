@@ -34,6 +34,7 @@ export class World {
     this.seed = (opts.seed >>> 0) || 1;
     this.artSeed = this.seed;   // for the pictures in the ground (looks only)
     this.map = MAPS[opts.map] ? opts.map : 'grass';
+    this.windOn = !!opts.wind;   // off unless asked for
     this.g = MAPS[this.map].g;
     this.mask = new Uint8Array(COLS * ROWS);
     this.projectiles = [];
@@ -197,7 +198,8 @@ export class World {
     }
     const t = this.tanks[this.active];
     t.fuel = MAX_FUEL;
-    this.wind = Math.round(this.rand() * 20 - 10);
+    const wind = Math.round(this.rand() * 20 - 10);
+    this.wind = this.windOn ? wind : 0;
     if (t.cloud > 0) {
       t.cloud--;
       t.hp -= 10;

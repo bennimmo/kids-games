@@ -4,6 +4,7 @@
 // 🌍 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
 import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { W, H, COLORS, STAMPS, BRUSH, STAMP, SHAPES, MAX_NUMS, byOrder, drawOp, createPainter } from './ops.js';
 import { loadGallery, loadPicture, saveToGallery, removeFromGallery, getCurrent, setCurrent } from './gallery.js';
 import { makeRoom, findRoom, connect, CODE_PICS } from './online.js';
@@ -35,12 +36,12 @@ export function mount(stage) {
     <div class="pt-top"></div>
     <div class="pt-wrap"><div class="pt-paper"><canvas class="pt-main"></canvas><canvas class="pt-over"></canvas></div></div>
     <div class="pt-actions">
-      <button data-act="undo" aria-label="Undo">↩️</button>
-      <button data-act="redo" aria-label="Redo">↪️</button>
-      <button data-act="clear" aria-label="Clear">🗑️</button>
-      <button data-act="download" aria-label="Download">📥</button>
-      <button data-act="gallery" aria-label="My drawings">🖼️</button>
-      <button data-act="friends" aria-label="Draw with friends">🌍</button>
+      <button data-act="undo" aria-label="Undo">${icon('undo')}</button>
+      <button data-act="redo" aria-label="Redo">${icon('redo')}</button>
+      <button data-act="clear" aria-label="Clear">${icon('trash')}</button>
+      <button data-act="download" aria-label="Download">${icon('save')}</button>
+      <button data-act="gallery" aria-label="My drawings">${icon('gallery')}</button>
+      <button data-act="friends" aria-label="Draw with friends">${icon('globe')}</button>
     </div>
     <div class="pt-palette"></div>`;
   stage.appendChild(root);
@@ -353,7 +354,7 @@ export function mount(stage) {
         <span class="pt-code"><b>🔑</b>${net.pics.map(p => `<span>${p}</span>`).join('')}</span>
         <span class="pt-sep"></span>
         <span class="pt-people">${net.players().map(p => `<span class="${p.me ? 'me' : ''}">${p.emoji}${p.name ? `<small>${p.name}</small>` : ''}</span>`).join('')}</span>
-        <button class="pt-leave" aria-label="Leave">🚪</button>
+        <button class="pt-leave" aria-label="Leave">${icon('leave')}</button>
       </div>` : '';
     if (html === lastTop) return;
     lastTop = html;
@@ -397,7 +398,7 @@ export function mount(stage) {
     closeModal();
     const m = document.createElement('div');
     m.className = 'pt-modal';
-    m.innerHTML = `<div class="pt-card"><button class="pt-x" aria-label="Close">✖</button>${html}</div>`;
+    m.innerHTML = `<div class="pt-card"><button class="pt-x" aria-label="Close">${icon('close')}</button>${html}</div>`;
     m.addEventListener('pointerdown', e => { if (e.target === m) { sound.pop(); closeModal(); } });
     m.querySelector('.pt-x').addEventListener('click', () => { sound.pop(); closeModal(); });
     root.appendChild(m);
@@ -439,7 +440,7 @@ export function mount(stage) {
       <h2>Tap your friend's pictures</h2>
       <div class="pt-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
       <div class="pt-keypad">${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <button class="pt-rub" aria-label="Rub out">⌫</button>
+      <button class="pt-rub" aria-label="Rub out">${icon('backspace')}</button>
       <p class="pt-msg"></p>`);
     const slots = [...m.querySelectorAll('.pt-slots span')];
     const msg = m.querySelector('.pt-msg');
@@ -480,11 +481,11 @@ export function mount(stage) {
     const m = modal(`
       <h2>My drawings</h2>
       <div class="pt-gallery">
-        <button class="pt-pic pt-new" aria-label="New drawing"><span>➕</span></button>
+        <button class="pt-pic pt-new" aria-label="New drawing">${icon('plus')}</button>
         ${pics.map(p => `
           <div class="pt-pic-wrap">
             <button class="pt-pic ${p.id === drawingId ? 'cur' : ''}" data-open="${p.id}"><img alt="" src="${loadPicture(p.id)}"></button>
-            <button class="pt-del" data-del="${p.id}" aria-label="Delete">✖</button>
+            <button class="pt-del" data-del="${p.id}" aria-label="Delete">${icon('close')}</button>
           </div>`).join('')}
       </div>`);
     m.querySelector('.pt-new').addEventListener('click', () => {
@@ -503,7 +504,7 @@ export function mount(stage) {
     m.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
       if (!b.classList.contains('sure')) {
         b.classList.add('sure');
-        b.textContent = '🗑️';
+        b.innerHTML = icon('trash');
         sound.bump();
         return;
       }

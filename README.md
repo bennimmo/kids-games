@@ -36,7 +36,35 @@ Then open http://localhost:8000
 - `sound.js` – little beeps, no audio files needed
 - `coming-soon.js` – placeholder screen
 
+## 📞 Friends (on the menu)
+- Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
+- Up to 4 friends in a group. Anyone in the group can let more in.
+- Friend bubbles float on the side over every game. Drag them up/down or to the other side.
+- Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
+- 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
+- `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
+- Some networks block direct links: a TURN server would fix that (not added yet).
+
 ## Games
+### ✈️ Sky Pilot (`games/sky-pilot/`)
+3D flight simulator with an easy mode. Built with three.js.
+- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast, carrier catapult + arrestor wire). 8 colours.
+- One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
+- 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
+- Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
+- Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
+- Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
+- Views (just two): 🎥 behind the plane and 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet). Drag to look, wheel/pinch to zoom, double-tap to reset.
+- 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
+- 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
+- Keys (always pilot style: ↑ = nose down, ↓ = nose up): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
+- Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
+- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Start spots avoid planes already parked there; 👋 shows when someone arrives. Tap the 🌍 chip (or T) for a list of pilots: tap one to jump in just behind them with the same speed, angle, wheels and flaps (parked = park next to them). Turn off with 🌍 in the menu.
+- 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).
+- Missions: ready for later (`missions.js` explains the hooks). The 🎯 menu button appears once `MISSIONS` has some.
+- Test params: `?sptime=<seconds>` fixes the time of day (0–900), `?spq=low|mid|high` quality, `?spdebug` adds `window.__sp()`.
+- Files: `island.js` (land, airports, roads, what's under you), `terrain.js`, `sky.js`, `scenery.js`, `life.js`, `planes.js`, `cockpit.js`, `physics.js`, `missions.js`, `game.js` (screens, controls, cameras, HUD, online).
+
 ### 🚂 Choo Choo Wilf (`games/choo-choo/`)
 3D steam train for age 2–3 (no reading needed, spoken prompts). Built with three.js.
 - Hold anywhere = go (puffs of steam + chuff chuff). Let go = slows down. Red button = whistle "CHOO CHOO!".
@@ -44,12 +72,15 @@ Then open http://localhost:8000
 - Things get in the way. The train always stops itself:
   - 🦆 ducks cross, 🚗 cars at a level crossing, 🚜 digger drives across (just wait).
   - 🚧 barrier down, 🐄🐑🐧🦀 animals on the line (tap them; a 👆 shows where).
+  - 💧 water tower (tap it to fill up), 🪨 rock on the line (tap, the crane lifts it off), 🚦 red signal (tap to make it green).
+- 🔀 Junctions: the line splits round a duck pond. Big ⬅ ➡ arrows: tap to pick the way (picks itself after a while).
+- Tap things in the world: 🐄 field animals jump and moo/baa/quack, 🏠 someone pops out and waves, 🌳 squirrel / 🍎 apple (🦉 at night), 🌴 coconut, 🌿 bunny, 🍄 frog, 🌼 butterflies, 🐟 fish in ponds, ☁️ clouds rain then make a 🌈.
 - 🐦 birds fly over now and then. Tap to spot them.
 - Every sticker flies to the row at the bottom.
 - 🚉 Each stretch ends at a station: "Well done!", passengers (animals) hop off and on.
 - Lands change at each station: meadow → forest → snowy (snowing) → town → seaside. Every 3rd stretch is at night (headlight, glowing windows).
 - Keyboard: Space = go, W = whistle.
-- Files: `world.js` (track, land, stations), `scenery.js`, `models.js` (train, animals, vehicles), `events.js`, `audio.js` (sounds + speech), `game.js`.
+- Files: `world.js` (track, land, stations, junctions), `scenery.js`, `models.js` (train, animals, vehicles), `events.js` (things on the line), `interact.js` (tap surprises), `audio.js` (sounds + speech), `game.js`.
 
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
@@ -127,7 +158,7 @@ Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - Your turn (45 s): ◀ ▶ drive (fuel runs out), 🎒 pick a weapon, drag back from your tank like a slingshot, let go to fire.
 - Keys: ← → drive, ↑ ↓ aim, hold Space for power, Q / E change weapon.
 - 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb.
-- Wind changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
+- 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
 - Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).

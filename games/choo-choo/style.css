@@ -24,10 +24,11 @@
 
 /* whistle */
 .cc-whistle { position: absolute; right: 16px; bottom: 16px; width: 116px; height: 116px; border-radius: 50%; border: 0; padding: 14px;
-  background: radial-gradient(circle at 35% 30%, #ef5350, #b71c1c); box-shadow: 0 8px 0 #7f0000, 0 10px 18px rgba(0,0,0,.3);
+  background: radial-gradient(circle at 35% 25%, #ff6f61, #d32f2f 60%, #b71c1c); border: 4px solid rgba(255,255,255,.9);
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,.15), 0 10px 22px -6px rgba(0,0,0,.45); transition: transform .1s;
   pointer-events: auto; cursor: pointer; touch-action: none; }
 .cc-whistle svg { width: 100%; height: 100%; display: block; }
-.cc-whistle:active, .cc-whistle.blow { transform: translateY(6px); box-shadow: 0 2px 0 #7f0000, 0 4px 10px rgba(0,0,0,.3); }
+.cc-whistle:active, .cc-whistle.blow { transform: scale(.93); box-shadow: inset 0 -2px 0 rgba(0,0,0,.15), 0 4px 10px -4px rgba(0,0,0,.45); }
 .cc-whistle.blow svg { animation: cc-wiggle .5s ease-in-out 2; }
 @keyframes cc-wiggle { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-10deg) scale(1.1); } 75% { transform: rotate(10deg) scale(1.1); } }
 
@@ -66,3 +67,19 @@
   .cc-chip { width: 48px; height: 48px; font-size: 30px; }
   .cc-stickers { right: 120px; }
 }
+
+/* junction arrows */
+.cc-arrow { position: absolute; top: 50%; width: 130px; height: 130px; margin-top: -65px; border-radius: 50%; border: 6px solid #fff;
+  background: radial-gradient(circle at 35% 25%, #6fdc8c, #2fb35f 60%, #1f8f47); color: #fff; font-size: 72px; line-height: 1; padding: 0;
+  display: grid; place-items: center;
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,.15), 0 10px 22px -6px rgba(0,0,0,.45); pointer-events: none; cursor: pointer; touch-action: none;
+  opacity: 0; transform: scale(.3); transition: opacity .3s, transform .3s; font-family: system-ui, sans-serif; }
+.cc-arrow.show { opacity: 1; transform: scale(1); pointer-events: auto; animation: cc-arrow 1.2s ease-in-out infinite; }
+.cc-left { left: 18px; }
+.cc-right { right: 18px; }
+.cc-left.show { --dx: -10px; }
+.cc-right.show { --dx: 10px; }
+@keyframes cc-arrow { 0%,100% { transform: translateX(0) scale(1); } 50% { transform: translateX(var(--dx)) scale(1.08); } }
+.cc-arrow .ic { stroke-width: 3.2; }
+.cc-arrow:active { box-shadow: inset 0 -2px 0 rgba(0,0,0,.15), 0 4px 10px -4px rgba(0,0,0,.45); filter: brightness(.95); }
+@media (max-width: 600px) { .cc-arrow { width: 100px; height: 100px; margin-top: -50px; font-size: 56px; } }

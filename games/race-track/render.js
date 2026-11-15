@@ -924,11 +924,22 @@ export function createRenderer(view) {
     wet.clear();
   }
 
-  function computeFit(ins) {
+  // cam (phones): { x, y, span } = look at x,y and show about `span` world units of the shorter side
+  function computeFit(ins, cam) {
     const W = view.width, H = view.height - ins.top - ins.bottom;
     fit.s = Math.min(W / WORLD.w, H / WORLD.h);
     fit.ox = (W - WORLD.w * fit.s) / 2;
     fit.oy = ins.top + (H - WORLD.h * fit.s) / 2;
+    if (!cam) return;
+    const s = Math.max(fit.s, Math.min(W, H) / cam.span);
+    if (s <= fit.s * 1.05) return;
+    const place = (size, world, c, off) => {
+      if (world * s <= size) return off + (size - world * s) / 2; // fits: centre it
+      return off + size / 2 - c * s; // keep my car in the middle (even near the edge)
+    };
+    fit.s = s;
+    fit.ox = place(W, WORLD.w, cam.x, 0);
+    fit.oy = place(H, WORLD.h, cam.y, ins.top);
   }
 
   function toWorld(cx, cy) {
@@ -1116,7 +1127,7 @@ export function createRenderer(view) {
   function frame(o) {
     const g = view.ctx;
     const dt = o.dt;
-    computeFit(o.insets);
+    computeFit(o.insets, o.cam);
     g.fillStyle = '#3f5f2c';
     g.fillRect(0, 0, view.width, view.height);
     g.save();

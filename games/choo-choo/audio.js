@@ -100,6 +100,19 @@ export const sfx = {
   sticker() {
     [784, 988, 1175].forEach((f, i) => osc({ when: i * 0.07, type: 'triangle', f0: f, dur: 0.18, vol: 0.12 }));
   },
+  pop() { osc({ type: 'sine', f0: 600, f1: 1200, dur: 0.12, vol: 0.2 }); },
+  tok() { osc({ type: 'square', f0: 900, f1: 500, dur: 0.07, vol: 0.1 }); },
+  hello() { osc({ type: 'triangle', f0: 600, f1: 800, dur: 0.12, vol: 0.13 }); osc({ when: 0.14, type: 'triangle', f0: 800, f1: 1150, dur: 0.18, vol: 0.13 }); },
+  glug() { for (let i = 0; i < 3; i++) osc({ when: i * 0.16, type: 'sine', f0: 180 + i * 40, f1: 420 + i * 40, dur: 0.1, vol: 0.18 }); },
+  splash() { noise({ dur: 0.5, freq: 900, q: 0.6, vol: 0.25 }); },
+  pour() { noise({ dur: 2.4, freq: 1100, q: 0.4, vol: 0.12, attack: 0.15 }); },
+  rain() { noise({ dur: 3.2, freq: 5000, type: 'highpass', q: 0.3, vol: 0.09, attack: 0.3 }); },
+  hoot() { for (const w of [0, 0.45]) osc({ when: w, type: 'sine', f0: 420, f1: 360, attack: 0.05, hold: 0.15, dur: 0.2, vol: 0.16 }); },
+  croak() { for (const w of [0, 0.2]) osc({ when: w, type: 'sawtooth', f0: 140, f1: 110, dur: 0.12, vol: 0.12, filter: ['lowpass', 700] }); },
+  squeak() { for (const w of [0, 0.15]) osc({ when: w, type: 'sine', f0: 2800, f1: 3400, dur: 0.06, vol: 0.09 }); },
+  clunk() { osc({ type: 'square', f0: 140, f1: 70, dur: 0.12, vol: 0.14, filter: ['lowpass', 900] }); osc({ when: 0.12, type: 'square', f0: 220, f1: 90, dur: 0.1, vol: 0.1, filter: ['lowpass', 900] }); },
+  whirr() { osc({ type: 'sawtooth', f0: 90, f1: 140, attack: 0.1, hold: 0.8, dur: 0.3, vol: 0.07, filter: ['lowpass', 500], vib: 8, vibRate: 22 }); },
+  rainbow() { [523, 659, 784, 988, 1175, 1319].forEach((f, i) => osc({ when: i * 0.09, type: 'sine', f0: f, dur: 0.4, vol: 0.1 })); },
   yay() {
     [523, 659, 784, 1047, 784, 1047].forEach((f, i) => osc({ when: i * 0.13, type: 'triangle', f0: f, dur: 0.25, vol: 0.14 }));
     noise({ when: 0.1, dur: 1.4, freq: 1400, q: 0.4, vol: 0.12, attack: 0.15 });

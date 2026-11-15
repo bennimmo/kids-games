@@ -8,6 +8,9 @@ const ROOFS = ['#c0392b', '#8d4e2a', '#5d6d7e', '#b03a2e'];
 const BRIGHT = ['#e53935', '#fdd835', '#1e88e5', '#8e24aa', '#ff7043', '#ec407a', '#ffffff'];
 
 export const BIG = new Set(['house', 'building', 'igloo', 'hut', 'pond']);
+// things you can tap, and roughly how tall they are
+export const TAPPABLE = new Set(['tree', 'pine', 'snowpine', 'palm', 'bush', 'flowers', 'mushroom', 'hay', 'pond', 'house', 'building', 'igloo', 'hut', 'snowman']);
+export const TOP = { tree: 3.6, pine: 4.0, snowpine: 4.0, palm: 4.3, bush: 1.0, flowers: 0.5, mushroom: 1.0, hay: 1.2, pond: 0.3, house: 3.9, hut: 2.9, igloo: 1.6, snowman: 2.9 };
 
 export const SCENERY = {
   tree(b, gl, dec, r) {
@@ -88,6 +91,7 @@ export const SCENERY = {
         gl.part('box', '', -w / 2 - 0.02, yy, z, 0.05, 0.7, 0.6);
       }
     }
+    return h + 0.6;
   },
   lamp(b, gl) {
     b.part('cyl6', '#37474f', 0, 1.6, 0, 0.14, 3.2, 0.14);
