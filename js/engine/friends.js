@@ -399,7 +399,9 @@ function makePeer(g, theirUid, theirSid) {
     if (st !== 'connected') setStatus('connecting');
     else if (dc.readyState === 'open') setStatus('on');
   };
-  pc.ontrack = e => { // video/voice later
+  pc.ontrack = e => {
+    // A bit more buffer: smooths bumpy wifi instead of speeding voices up to catch up.
+    try { if ('jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 250; else if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0.25; } catch (er) { /* */ }
     peer.stream = e.streams[0] || peer.stream || new MediaStream();
     if (!e.streams[0]) peer.stream.addTrack(e.track);
     emit();

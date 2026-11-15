@@ -59,7 +59,7 @@ async function info() {
     rows.push(['My mic rate', `${s.sampleRate || '?'} Hz, ${s.channelCount || '?'} ch, echo ${s.echoCancellation ? 'on' : 'off'}`]);
   } else rows.push(['My mic', 'off']);
   for (const p of friendPeers()) {
-    let codec = '?', rate = '?', level = '?', lost = '?';
+    let codec = '?', rate = '?', level = '?', lost = '?', pkt = '?', jit = '?', buf = '?', speed = '?', path = '?', rtt = '?';
     try {
       const stats = await p.pc.getStats();
       const byId = new Map(); stats.forEach(r => byId.set(r.id, r));
@@ -74,9 +74,27 @@ async function info() {
           last.set(p.uid, { t: now, samples: r.totalSamplesReceived });
         }
         if (r.concealedSamples != null && r.totalSamplesReceived) lost = Math.round(100 * r.concealedSamples / r.totalSamplesReceived) + '%';
+        if (r.packetsReceived != null) pkt = (100 * (r.packetsLost || 0) / Math.max(1, r.packetsReceived + (r.packetsLost || 0))).toFixed(1) + '%';
+        if (r.jitter != null) jit = Math.round(r.jitter * 1000) + 'ms';
+        if (r.jitterBufferEmittedCount) buf = Math.round(1000 * r.jitterBufferDelay / r.jitterBufferEmittedCount) + 'ms';
+        if (r.totalSamplesReceived) {
+          const up = r.removedSamplesForAcceleration || 0, down = r.insertedSamplesForDeceleration || 0;
+          speed = `+${(100 * up / r.totalSamplesReceived).toFixed(0)}% / -${(100 * down / r.totalSamplesReceived).toFixed(0)}%`;
+        }
+      });
+      stats.forEach(r => {
+        if (r.type !== 'candidate-pair' || !(r.nominated || r.selected) || r.state !== 'succeeded') return;
+        const l = byId.get(r.localCandidateId), rm = byId.get(r.remoteCandidateId);
+        const kind = c => (c ? `${c.candidateType}${c.protocol ? '/' + c.protocol : ''}` : '?');
+        path = `${kind(l)} → ${kind(rm)}`;
+        if (r.currentRoundTripTime != null) rtt = Math.round(r.currentRoundTripTime * 1000) + 'ms';
       });
     } catch (e) { /* */ }
-    rows.push([`${nameHTML(p.name)} ⬇`, `${codec} · ${rate} · level ${level} · gaps ${lost}`]);
+    rows.push([`${nameHTML(p.name)} ⬇`, `${codec} · ${rate} · level ${level}`]);
+    rows.push(['  gaps / lost', `${lost} / ${pkt} packets`]);
+    rows.push(['  jitter / buffer', `${jit} / ${buf}`]);
+    rows.push(['  sped up / slowed', speed]);
+    rows.push(['  path / delay', `${path} · ${rtt}`]);
   }
   return rows;
 }
