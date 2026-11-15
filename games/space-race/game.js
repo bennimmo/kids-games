@@ -62,7 +62,7 @@ export function mount(stage) {
   let race = null, clock = 0, alive = true, raf = 0;
 
   function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (e) { return {}; } }
-  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ style: S.style, level: S.level })); } catch (e) { /* ignore */ } }
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify({ style: S.style, level: S.level, tilt: tilt.on })); } catch (e) { /* ignore */ } }
 
   // ---------------------------------------------------------------- input
   const keys = new Set();
@@ -80,6 +80,35 @@ export function mount(stage) {
   const ARROWS = () => ({ l: keys.has('ArrowLeft'), r: keys.has('ArrowRight'), u: keys.has('ArrowUp'), d: keys.has('ArrowDown') });
   const WASD = () => ({ l: keys.has('KeyA'), r: keys.has('KeyD'), u: keys.has('KeyW'), d: keys.has('KeyS') });
   const or = (a, b) => ({ l: a.l || b.l, r: a.r || b.r, u: a.u || b.u, d: a.d || b.d });
+
+  // ---------------------------------------------------------------- tilt (phones / iPads, one player only)
+  // sx: -1 (left) .. 1 (right). sy: -1 (down) .. 1 (up, tilt the top towards you).
+  const tilt = { on: prefs.tilt ?? true, ok: false, listening: false, steer: 0, pitch: 0, base: null };
+  function tiltAxes(e) {
+    const a = ((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) % 360;
+    const b = e.beta || 0, g = e.gamma || 0;
+    if (a === 90) return [b, g];
+    if (a === 270 || a === -90) return [-b, -g];
+    if (a === 180 || a === -180) return [-g, -b];
+    return [g, b];
+  }
+  const onOrient = e => {
+    if (e.beta == null) return;
+    tilt.ok = true;
+    [tilt.steer, tilt.pitch] = tiltAxes(e);
+    if (tilt.base == null) tilt.base = tilt.pitch;
+  };
+  // must be called straight from a tap (iPhone/iPad ask for permission)
+  function askTilt() {
+    if (!TOUCH || tilt.listening || typeof DeviceOrientationEvent === 'undefined') return;
+    const listen = () => { tilt.listening = true; addEventListener('deviceorientation', onOrient); };
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') listen(); }).catch(() => {});
+    } else listen();
+  }
+  const dead = (v, lo, hi) => { const a = Math.abs(v); return a < lo ? 0 : Math.sign(v) * Math.min(1, (a - lo) / (hi - lo)); };
+  const tiltActive = () => TOUCH && tilt.on && tilt.ok && race && race.views.length === 1 && race.mode !== 'demo';
+  const recenter = () => { tilt.base = tilt.pitch; };
 
   // ---------------------------------------------------------------- races
   // mode: demo | ai | two | online
@@ -162,15 +191,22 @@ export function mount(stage) {
         <div class="sd-speed"><i></i></div>
         <div class="sd-big"></div><div class="sd-msg"></div>
         ${TOUCH ? `<div class="sd-pad"><div><button data-k="l">◀</button><button data-k="r">▶</button></div>
-          <div><button data-k="d">▼</button><button data-k="u">▲</button></div></div>` : ''}`;
+          <div><button data-k="d">▼</button><button data-k="u">▲</button></div></div>` : ''}
+        ${TOUCH && race.views.length === 1 ? '<button class="sd-tilt" aria-label="Tilt to steer"></button>' : ''}`;
       hudEl.appendChild(el);
       el.querySelectorAll('.sd-pad button').forEach(b => {
         const set = on => e => { e.preventDefault(); touch[i][b.dataset.k] = on; b.classList.toggle('on', on); };
         b.addEventListener('pointerdown', set(true));
         for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, set(false));
       });
+      const tb = el.querySelector('.sd-tilt');
+      if (tb) tb.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        if (!tilt.listening) { askTilt(); tilt.on = true; } else tilt.on = !tilt.on;
+        recenter(); savePrefs(); sound.pop();
+      });
       const q = s => el.querySelector(s);
-      Object.assign(v, { el, lap: q('.sd-lap'), place: q('.sd-place'), dots: [...el.querySelectorAll('.sd-prog i')], speed: q('.sd-speed i'), big: q('.sd-big'), msg: q('.sd-msg'), msgT: 0 });
+      Object.assign(v, { el, tiltBtn: tb, lap: q('.sd-lap'), place: q('.sd-place'), dots: [...el.querySelectorAll('.sd-prog i')], speed: q('.sd-speed i'), big: q('.sd-big'), msg: q('.sd-msg'), msgT: 0 });
     });
     touch[0] = {}; touch[1] = {};
     if (race.views.length === 2) { const d = document.createElement('div'); d.className = 'sd-divider'; hudEl.appendChild(d); race.divider = d; }
@@ -265,7 +301,7 @@ export function mount(stage) {
         R.views.forEach(v => { if (v.big) v.big.textContent = n > 0 ? n : 'GO!'; });
       }
       if (R.countdown <= 0) {
-        R.countdown = 0; R.startAt = 0;
+        R.countdown = 0; R.startAt = 0; recenter();
         setTimeout(() => R.views.forEach(v => { if (v.big && !R.finish.includes(v.ship)) v.big.textContent = ''; }), 700);
       }
     }
@@ -276,7 +312,14 @@ export function mount(stage) {
     const single = R.views.length === 1;
     for (const sh of R.ships) {
       if (sh.ctrl === 'ai') sh.input = W.aiInput(sh, sh.skill, dt);
-      else if (sh.ctrl === 'solo') sh.input = or(or(ARROWS(), WASD()), touch[0]);
+      else if (sh.ctrl === 'solo') {
+        sh.input = or(or(ARROWS(), WASD()), touch[0]);
+        if (tiltActive()) {
+          sh.input.sx = dead(tilt.steer, 3, 20);
+          sh.input.sy = dead(tilt.pitch - tilt.base, 4, 18);
+          if (W.kind === 'tube' && !sh.input.d) sh.input.u = true; // tube: tilt steers, ship goes fast by itself
+        }
+      }
       else if (sh.ctrl === 'p1') sh.input = or(single ? or(ARROWS(), WASD()) : ARROWS(), touch[0]);
       else if (sh.ctrl === 'p2') sh.input = or(WASD(), touch[1]);
     }
@@ -305,6 +348,11 @@ export function mount(stage) {
         v.speed.style.width = (W.speed01(sh) * 100) + '%';
         if (v.msgT > 0) { v.msgT -= dt; if (v.msgT <= 0) v.msg.classList.remove('show'); }
         if (R.engines[i]) R.engines[i].set(racing ? W.speed01(sh) : 0.1, sh.boost > 0);
+        if (v.tiltBtn) {
+          const on = tiltActive();
+          v.el.classList.toggle('sd-tilting', on);
+          v.tiltBtn.textContent = on ? '📱' : '👆';
+        }
       });
       // results when every player on this device is done (wait a bit for the others)
       if (S.phase === 'race' && R.views.every(v => v.ship.done)) {
@@ -367,6 +415,7 @@ export function mount(stage) {
     box.querySelectorAll('.sd-level').forEach(b => click(b, () => { sound.pop(); S.level = +b.dataset.l; savePrefs(); render(); }));
     box.querySelectorAll('.sd-go').forEach(b => click(b, () => {
       const m = b.dataset.m;
+      if (m !== 'two' && tilt.on) askTilt();
       if (m === 'online') { sound.pop(); S.phase = 'online'; render(); } else startLocal(m);
     }));
     ui.appendChild(box);
@@ -602,6 +651,7 @@ export function mount(stage) {
     removeEventListener('keydown', onKeyDown);
     removeEventListener('keyup', onKeyUp);
     removeEventListener('blur', onBlur);
+    removeEventListener('deviceorientation', onOrient);
     removeEventListener('resize', onResize);
     if (ro) ro.disconnect();
     document.removeEventListener('visibilitychange', onVisible);

@@ -138,7 +138,7 @@ export function createTube({ scene, seed, dpr }) {
   function simulate(sh, dt, racing) {
     const inp = sh.input;
     if (racing && !sh.done) {
-      const steer = (inp.r ? 1 : 0) - (inp.l ? 1 : 0);
+      const steer = ((inp.r ? 1 : 0) - (inp.l ? 1 : 0)) || inp.sx || 0; // buttons, or tilt
       sh.angV += (-steer * 2.7 - sh.angV) * Math.min(1, dt * 9);
       sh.ang = wrapAng(sh.ang + sh.angV * dt);
       let target = (58 + (inp.u ? 42 : 0) - (inp.d ? 30 : 0)) * (sh.topSpeed || 1);

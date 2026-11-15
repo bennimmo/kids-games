@@ -53,6 +53,10 @@ Then open http://localhost:8000
   - 🪐 **Open Space**: fly anywhere. Go through every ring in order (follow your arrow). Each ring = boost. 2 laps.
 - Three ways to play:
   - 🙂 vs 🤖 full screen. Computer level 🐢 / 🐇 / 🚀 (remembered).
+- 📱 Tilt to steer on phones/iPads (one player only: vs computer and online). Tap 📱/👆 in the race to switch tilt on/off. Straight is set at GO.
+  - Tube: tilt left/right steers, the ship goes fast by itself (▼ brakes).
+  - Open Space: tilt left/right turns, tilt the top towards you to climb, away to dive.
+  - iPhone/iPad ask for permission the first time (needs https, so it works on GitHub Pages, not on http://localhost).
   - 🙂 vs 🙂 split screen. Arrows vs WASD, or touch buttons. Wide screens split left/right (WASD player on the left), tall screens top/bottom.
   - 🌍 online (up to 4). Host picks the style and taps ▶. Each device flies its own ship and sends where it is ~15×/sec.
 - Every track comes from a seed, so all devices build the same tube, rocks and rings. New seed each race.
