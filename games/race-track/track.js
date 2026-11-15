@@ -7,6 +7,12 @@ export const TRACK_W = 88;
 export const JUMP_L = 50;
 export const WATER_RX = TRACK_W * 0.75;
 export const WATER_RY = TRACK_W * 0.62;
+export const BOOST_L = 46;
+
+// Extras that sit where you drop them (not snapped onto the track).
+export const FREE_ITEMS = ['cone', 'tyres', 'tree', 'stand'];
+// Things cars bump into: circle radius, or box half-sizes.
+export const SOLIDS = { tyres: { r: 20 }, tree: { r: 15 }, stand: { box: [72, 24] } };
 export const SPACING = 12;
 export const TUNNEL_HALF = 7; // tunnel covers idx-7 .. idx+7
 
@@ -60,6 +66,7 @@ function segInter(a, b, c, d) {
 function findBridges(pts) {
   const n = pts.length;
   const bridge = new Array(n).fill(false);
+  const under = new Array(n).fill(false); // the road going under a bridge
   const gap = Math.ceil((TRACK_W * 1.5) / SPACING);
   for (let i = 0; i < n; i++) {
     const a = pts[i], b = pts[(i + 1) % n];
@@ -71,6 +78,7 @@ function findBridges(pts) {
       const L = (TRACK_W / 2 + 18) / Math.max(s, 0.3) + 16;
       const k = Math.ceil(L / SPACING);
       for (let o = -k; o <= k + 1; o++) bridge[((j + o) % n + n) % n] = true;
+      for (let o = -k; o <= k + 1; o++) under[((i + o) % n + n) % n] = true;
     }
   }
   // contiguous runs, for drawing
@@ -83,13 +91,14 @@ function findBridges(pts) {
       runs.push({ start: i, len });
     }
   }
-  return { bridge, runs };
+  return { bridge, runs, under };
 }
 
 // Put the start line on a spot far away from any bridge.
 function pickStart(p) {
   const n = p.length;
-  const { bridge } = findBridges(withAngles(p));
+  const { bridge: top, under } = findBridges(withAngles(p));
+  const bridge = top.map((b, i) => b || under[i]);
   if (!bridge.some(Boolean)) return p;
   let best = 0, bestD = -1;
   for (let i = 0; i < n; i++) {
@@ -129,8 +138,22 @@ function segPoint(a, b, c, d) {
   return { x: a.x + r.x * t, y: a.y + r.y * t };
 }
 
+// smallest distance from point q to the polyline pts[a..b]
+function distToPart(q, pts, a, b) {
+  let best = Infinity;
+  for (let i = a; i < b; i++) {
+    const p = pts[i], r = pts[i + 1];
+    const vx = r.x - p.x, vy = r.y - p.y;
+    const t = Math.max(0, Math.min(1, ((q.x - p.x) * vx + (q.y - p.y) * vy) / (vx * vx + vy * vy || 1)));
+    best = Math.min(best, Math.hypot(p.x + vx * t - q.x, p.y + vy * t - q.y));
+  }
+  return best;
+}
+
 // If the end of the line overlaps the start, cut off the extra bits
 // so the loop joins cleanly (no messy bridge at the join).
+// Only cuts bits that go over track we keep anyway, so a figure of eight
+// (which crosses itself in the middle) is never chopped down to one loop.
 function trimEnds(p) {
   const n = p.length;
   const head = Math.floor(n * 0.35), tail = Math.floor(n * 0.65);
@@ -141,8 +164,13 @@ function trimEnds(p) {
       if (d < bd) { bd = d; bi = i; bj = j; }
     }
   }
-  if (Math.sqrt(bd) < TRACK_W * 0.8) return p.slice(bi, bj + 1);
-  return p;
+  if (Math.sqrt(bd) >= TRACK_W * 0.8) return p;
+  if (bi === 0 && bj === n - 1) return p;
+  const removed = [...p.slice(0, bi), ...p.slice(bj + 1)];
+  for (const q of removed) {
+    if (distToPart(q, p, bi, bj) > TRACK_W * 0.9) return p; // a real part of the track: keep it all
+  }
+  return p.slice(bi, bj + 1);
 }
 
 // Remove little knots (tiny loops) where the line crosses itself very close by.
@@ -175,10 +203,10 @@ export function buildTrack(raw) {
   let p = resample(clamped, 8);
   if (p.length < 12) return null;
   p = trimEnds(p);
-  p = removeSmallLoops(p, 600);
+  p = removeSmallLoops(p, 320);
   if (p.length < 12) return null;
   p = closedResample(p, 8);
-  p = removeSmallLoops([...p, p[0]], 600).slice(0, -1);
+  p = removeSmallLoops([...p, p[0]], 320).slice(0, -1);
   for (let k = 0; k < 3; k++) p = chaikinClosed(p);
   p = closedResample(p, SPACING);
   if (p.length * SPACING < 700) return null;
@@ -230,6 +258,15 @@ function segDist(track, x, y, i) {
 
 // Snap a dropped extra onto the track. Tunnels must be on the track.
 export function snapItem(track, type, x, y) {
+  if (FREE_ITEMS.includes(type)) {
+    let a = 0;
+    if (type === 'stand' && track) { // grandstand faces the track
+      const g = nearestGlobal(track, x, y);
+      const p = track.pts[g.i];
+      a = Math.atan2(p.y - y, p.x - x) - Math.PI / 2;
+    }
+    return { type, x, y, a, idx: -1, up: false };
+  }
   if (track) {
     const g = nearestGlobal(track, x, y);
     if (g.d < TRACK_W * 0.9) {

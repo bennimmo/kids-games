@@ -1,5 +1,5 @@
 // All drawing for Raffy Race. Reads game state, never changes it.
-import { WORLD, TRACK_W, TUNNEL_HALF, JUMP_L, WATER_RX, WATER_RY, inRange } from './track.js';
+import { WORLD, TRACK_W, TUNNEL_HALF, JUMP_L, WATER_RX, WATER_RY, BOOST_L, inRange } from './track.js';
 
 export const STYLES = ['truck', 'rally', 'buggy'];
 export const DECALS = ['none', 'stripes', 'flames', 'star'];
@@ -344,10 +344,197 @@ function drawJump(g, it) {
   g.restore();
 }
 
+function drawBoost(g, it) {
+  const L = BOOST_L, W = TRACK_W - 8;
+  g.save();
+  g.translate(it.x, it.y);
+  g.rotate(it.a);
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  rr(g, -L / 2 + 2, -W / 2 + 3, L, W, 6); g.fill();
+  const gr = g.createLinearGradient(0, -W / 2, 0, W / 2);
+  gr.addColorStop(0, '#2b2b30'); gr.addColorStop(0.5, '#3d3d44'); gr.addColorStop(1, '#2b2b30');
+  g.fillStyle = gr;
+  rr(g, -L / 2, -W / 2, L, W, 6); g.fill();
+  g.strokeStyle = '#9a9aa2'; g.lineWidth = 2;
+  rr(g, -L / 2, -W / 2, L, W, 6); g.stroke();
+  g.restore();
+}
+
+// glowing arrows, drawn every frame so they ripple forwards
+function drawBoostGlow(g, it, time) {
+  const L = BOOST_L, W = TRACK_W - 8;
+  g.save();
+  g.translate(it.x, it.y);
+  g.rotate(it.a);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let k = 0; k < 3; k++) {
+    const x = -L / 2 + 10 + k * 13;
+    const glow = 0.45 + 0.55 * Math.max(0, Math.sin(time * 8 - k * 1.2));
+    g.strokeStyle = `rgba(255,${150 + 90 * glow},40,${0.5 + 0.5 * glow})`;
+    g.lineWidth = 5;
+    g.beginPath(); g.moveTo(x - 5, -W / 2 + 7); g.lineTo(x + 4, 0); g.lineTo(x - 5, W / 2 - 7); g.stroke();
+  }
+  g.restore();
+}
+
+function drawMud(g, it) {
+  const path = puddlePath(it);
+  g.save();
+  g.fillStyle = 'rgba(60,38,18,.45)'; g.fill(puddlePath(it, 1.18));
+  const gr = g.createRadialGradient(it.x, it.y, 0, it.x, it.y, WATER_RX);
+  gr.addColorStop(0, '#5a3a1e'); gr.addColorStop(0.7, '#4a2f17'); gr.addColorStop(1, '#3a2410');
+  g.fillStyle = gr; g.fill(path);
+  g.clip(path);
+  const rnd = mulberry(Math.round(it.x) * 13 + Math.round(it.y));
+  for (let k = 0; k < 14; k++) { // wet shiny blobs
+    const x = it.x + (rnd() - 0.5) * WATER_RX * 1.6, y = it.y + (rnd() - 0.5) * WATER_RY * 1.6;
+    g.fillStyle = `rgba(150,110,70,${0.15 + rnd() * 0.15})`;
+    g.beginPath(); g.ellipse(x, y, 4 + rnd() * 10, 2 + rnd() * 5, rnd() * 3, 0, 7); g.fill();
+  }
+  g.strokeStyle = 'rgba(25,15,5,.35)'; g.lineWidth = 6;
+  for (const o of [-TRACK_W * 0.22, TRACK_W * 0.22]) { // ruts
+    g.beginPath();
+    g.moveTo(it.x - Math.cos(it.a) * WATER_RX - Math.sin(it.a) * o, it.y - Math.sin(it.a) * WATER_RX + Math.cos(it.a) * o);
+    g.lineTo(it.x + Math.cos(it.a) * WATER_RX - Math.sin(it.a) * o, it.y + Math.sin(it.a) * WATER_RX + Math.cos(it.a) * o);
+    g.stroke();
+  }
+  g.restore();
+}
+
+function drawIce(g, it) {
+  const path = puddlePath(it);
+  g.save();
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.fill(puddlePath(it, 1.1));
+  const gr = g.createLinearGradient(it.x - WATER_RX, it.y - WATER_RY, it.x + WATER_RX, it.y + WATER_RY);
+  gr.addColorStop(0, '#e8f6ff'); gr.addColorStop(0.5, '#b9e0f5'); gr.addColorStop(1, '#d6efff');
+  g.fillStyle = gr; g.fill(path);
+  g.clip(path);
+  const rnd = mulberry(Math.round(it.x) * 17 + Math.round(it.y) * 3);
+  g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.2;
+  for (let k = 0; k < 7; k++) { // cracks
+    let x = it.x + (rnd() - 0.5) * WATER_RX, y = it.y + (rnd() - 0.5) * WATER_RY;
+    g.beginPath(); g.moveTo(x, y);
+    for (let j = 0; j < 4; j++) { x += (rnd() - 0.5) * 30; y += (rnd() - 0.5) * 30; g.lineTo(x, y); }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(255,255,255,.55)';
+  g.beginPath(); g.ellipse(it.x - WATER_RX * 0.3, it.y - WATER_RY * 0.3, WATER_RX * 0.4, 6, it.a - 0.5, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(120,170,200,.6)'; g.lineWidth = 3; g.stroke(path);
+  g.restore();
+}
+
+function softShadow(g, x, y, r) {
+  for (let k = 0; k < 3; k++) {
+    g.fillStyle = 'rgba(0,0,0,.12)';
+    g.beginPath(); g.arc(x, y, r + k * 3, 0, 7); g.fill();
+  }
+}
+
+function drawTyres(g, it) {
+  const spots = [[-10, -8], [10, -8], [0, 9]];
+  g.save();
+  g.translate(it.x, it.y);
+  for (const [x, y] of spots) softShadow(g, x + 4, y + 5, 10);
+  spots.forEach(([x, y], i) => {
+    const tg = g.createRadialGradient(x - 3, y - 3, 2, x, y, 11);
+    tg.addColorStop(0, '#3a3a3a'); tg.addColorStop(1, '#111');
+    g.fillStyle = tg;
+    g.beginPath(); g.arc(x, y, 11, 0, 7); g.fill();
+    g.strokeStyle = i % 2 ? '#e53935' : '#f5f5f5'; g.lineWidth = 2.5;
+    g.beginPath(); g.arc(x, y, 7.5, 0, 7); g.stroke();
+    g.fillStyle = '#4a3b2a';
+    g.beginPath(); g.arc(x, y, 4.5, 0, 7); g.fill();
+  });
+  g.restore();
+}
+
+function drawStand(g, it) {
+  const W = 144, H = 48;
+  g.save();
+  g.translate(it.x, it.y);
+  g.rotate(it.a);
+  for (let k = 0; k < 3; k++) { g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(-W / 2 + 6 - k * 2, -H / 2 + 8 - k * 2, W + k * 4, H + k * 4); }
+  for (let r = 0; r < 4; r++) { // seat rows, the back row is highest (lightest)
+    g.fillStyle = ['#8d8d93', '#9d9da3', '#adadb3', '#bdbdc3'][r];
+    g.fillRect(-W / 2, -H / 2 + r * (H / 4), W, H / 4);
+  }
+  const rnd = mulberry(Math.round(it.x) * 7 + Math.round(it.y) * 11);
+  const shirts = ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#fb8c00', '#8e24aa', '#fafafa', '#ec407a'];
+  for (let r = 0; r < 4; r++) {
+    for (let x = -W / 2 + 6; x < W / 2 - 3; x += 8) {
+      if (rnd() < 0.2) continue;
+      const y = -H / 2 + r * (H / 4) + H / 8;
+      g.fillStyle = shirts[Math.floor(rnd() * shirts.length)];
+      g.beginPath(); g.arc(x + (rnd() - 0.5) * 2, y + 1.5, 3.4, 0, 7); g.fill();
+      g.fillStyle = ['#f1c27d', '#c68642', '#8d5524', '#ffdbac'][Math.floor(rnd() * 4)];
+      g.beginPath(); g.arc(x + (rnd() - 0.5) * 2, y - 1.5, 2.3, 0, 7); g.fill();
+    }
+  }
+  g.fillStyle = '#e0e0e0'; g.fillRect(-W / 2, H / 2 - 2, W, 4); // front rail
+  g.fillStyle = '#5d5d63'; g.fillRect(-W / 2, -H / 2 - 4, W, 5); // back wall
+  g.restore();
+}
+
+function treeShape(it) {
+  const rnd = mulberry(Math.round(it.x) * 31 + Math.round(it.y) * 7);
+  return Array.from({ length: 7 }, () => ({ x: (rnd() - 0.5) * 34, y: (rnd() - 0.5) * 34, r: 16 + rnd() * 10 }));
+}
+function drawTreeShadow(g, it) {
+  g.save();
+  g.translate(it.x + 14, it.y + 18);
+  for (const b of treeShape(it)) { g.fillStyle = 'rgba(0,0,0,.09)'; g.beginPath(); g.arc(b.x, b.y, b.r + 2, 0, 7); g.fill(); }
+  g.restore();
+  g.fillStyle = '#4e3620';
+  g.beginPath(); g.arc(it.x, it.y, 7, 0, 7); g.fill();
+}
+function drawTreeTop(g, it) {
+  g.save();
+  g.translate(it.x, it.y);
+  const blobs = treeShape(it);
+  for (const [col, sh, sc] of [['#2f5a1e', 0, 1], ['#3f7426', -2, 0.85], ['#559233', -4, 0.62], ['#73ad48', -6, 0.35]]) {
+    g.fillStyle = col;
+    for (const b of blobs) { g.beginPath(); g.arc(b.x * sc + sh, b.y * sc + sh, b.r * (0.5 + sc * 0.5), 0, 7); g.fill(); }
+  }
+  g.restore();
+}
+
+export function drawCone(g, k) {
+  g.save();
+  g.translate(k.x, k.y - (k.z || 0) * 0.6);
+  if (!k.down) {
+    softShadow(g, 3, 4, 7);
+    g.fillStyle = '#d84315'; g.fillRect(-8, -8, 16, 16);
+    const cg = g.createRadialGradient(-2, -2, 1, 0, 0, 7);
+    cg.addColorStop(0, '#ffab40'); cg.addColorStop(1, '#f4511e');
+    g.fillStyle = cg; g.beginPath(); g.arc(0, 0, 7, 0, 7); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, 4.2, 0, 7); g.stroke();
+    g.fillStyle = '#ffcc80'; g.beginPath(); g.arc(0, 0, 1.6, 0, 7); g.fill();
+  } else {
+    g.rotate(k.a);
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    g.beginPath(); g.ellipse(3, 4, 11, 6, 0, 0, 7); g.fill();
+    g.fillStyle = '#f4511e';
+    g.beginPath(); g.moveTo(-8, -7); g.lineTo(9, 0); g.lineTo(-8, 7); g.closePath(); g.fill();
+    g.fillStyle = '#fff'; g.fillRect(-3, -4.5, 3, 9);
+    g.fillStyle = '#d84315'; g.fillRect(-10, -8, 3, 16);
+  }
+  g.restore();
+}
+
 export function drawItem(g, it) {
   if (it.type === 'jump') drawJump(g, it);
   else if (it.type === 'water') drawWater(g, it);
+  else if (it.type === 'boost') drawBoost(g, it);
+  else if (it.type === 'mud') drawMud(g, it);
+  else if (it.type === 'ice') drawIce(g, it);
+  else if (it.type === 'tyres') drawTyres(g, it);
+  else if (it.type === 'stand') drawStand(g, it);
+  else if (it.type === 'tree') { drawTreeShadow(g, it); drawTreeTop(g, it); }
+  else if (it.type === 'cone') drawCone(g, it);
 }
+// things painted once onto the ground layer (not tunnels, tree tops or cones)
+const flat = it => !['tunnel', 'cone'].includes(it.type);
+const groundDraw = (g, it) => (it.type === 'tree' ? drawTreeShadow(g, it) : drawItem(g, it));
 
 function drawTunnel(g, track, it) {
   const n = track.n;
@@ -634,12 +821,17 @@ export function createRenderer(view) {
     const tu = tunnelL.getContext('2d');
     b.clearRect(0, 0, WORLD.w, WORLD.h);
     tu.clearRect(0, 0, WORLD.w, WORLD.h);
-    if (!t) return;
+    if (!t) {
+      its.filter(flat).forEach(i => groundDraw(g, i));
+      its.filter(i => i.type === 'tree').forEach(i => drawTreeTop(tu, i));
+      return;
+    }
     drawTrack(g, t);
-    items.filter(i => !i.up && i.type !== 'tunnel').forEach(i => drawItem(g, i));
+    items.filter(i => !i.up && flat(i)).forEach(i => groundDraw(g, i));
     drawBridges(b, t);
-    items.filter(i => i.up && i.type !== 'tunnel').forEach(i => drawItem(b, i));
+    items.filter(i => i.up && flat(i)).forEach(i => groundDraw(b, i));
     items.filter(i => i.type === 'tunnel').forEach(i => drawTunnel(tu, t, i));
+    items.filter(i => i.type === 'tree').forEach(i => drawTreeTop(tu, i)); // cars drive under trees
   }
 
   function resetRace() {
@@ -708,6 +900,21 @@ export function createRenderer(view) {
           const p = Math.random() < 0.5 ? now.l : now.r;
           add({ x: p.x, y: p.y, vx: -c.vx * 0.3 + rand(-30, 30), vy: -c.vy * 0.3 + rand(-30, 30), vz: rand(60, 140), grav: 700, life: 0.7, r: rand(1.5, 3), color: Math.random() < 0.6 ? '90,62,35' : '70,110,40' });
         }
+      }
+      if (c.inMud && c.speed > 30) {
+        if (chance(30)) {
+          const p = Math.random() < 0.5 ? now.l : now.r;
+          add({ x: p.x, y: p.y, vx: -c.vx * 0.3 + rand(-40, 40), vy: -c.vy * 0.3 + rand(-40, 40), vz: rand(60, 150), grav: 700, life: 0.8, r: rand(1.8, 3.5), color: Math.random() < 0.7 ? '74,48,24' : '110,75,40' });
+        }
+        wet.set(c.id, 1.6); // muddy tyre tracks afterwards
+      }
+      if ((c.boostT || 0) > 0) {
+        const back = wheel(-24, 0);
+        for (let k = 0; k < 2; k++) if (chance(40)) add({ x: back.x + rand(-3, 3), y: back.y + rand(-3, 3), vx: -fx * 120 + rand(-20, 20), vy: -fy * 120 + rand(-20, 20), life: 0.3, r: rand(3, 5), grow: -6, color: Math.random() < 0.5 ? '255,180,40' : '255,90,20', a: 0.9 });
+      }
+      if (c.onIce && c.skid > 30 && prev) {
+        sg.strokeStyle = 'rgba(255,255,255,.5)'; sg.lineWidth = 2;
+        for (const k of ['l', 'r']) { sg.beginPath(); sg.moveTo(prev[k].x, prev[k].y); sg.lineTo(now[k].x, now[k].y); sg.stroke(); }
       }
       if (c.inWater && c.speed > 25) {
         const n = Math.min(4, c.speed / 60);
@@ -828,6 +1035,8 @@ export function createRenderer(view) {
       if (r.life <= 0) rings.splice(i, 1);
     }
     drawWaterLive(g, waters.filter(w => !w.up), o.time, dt);
+    for (const it of items) if (it.type === 'boost') drawBoostGlow(g, it, o.time);
+    (o.cones || items.filter(i => i.type === 'cone')).forEach(k => drawCone(g, k));
 
     const cars = o.cars || [];
     if (o.live) effects(cars, dt);
@@ -916,11 +1125,21 @@ export function drawItemIcon(canvas, type) {
   g.translate(w / 2, h / 2);
   const s = w / 190;
   g.scale(s, s);
+  const decor = { cone: 3.2, tyres: 2.4, tree: 1.6, stand: 1.1 };
+  if (decor[type]) { // scenery: shown on grass, bigger
+    g.fillStyle = '#6f9e45';
+    g.fillRect(-95, -95, 190, 190);
+    g.scale(decor[type], decor[type]);
+    drawItem(g, { type, x: 0, y: 0, a: 0 });
+    g.restore();
+    return;
+  }
   g.fillStyle = 'rgba(85,62,35,.6)';
   g.fillRect(-95, -TRACK_W / 2 - 7, 190, TRACK_W + 14);
   g.fillStyle = dirt(g);
   g.fillRect(-95, -TRACK_W / 2, 190, TRACK_W);
-  if (type === 'tunnel') {
+  if (type === 'boost') { drawBoost(g, { x: 0, y: 0, a: 0 }); drawBoostGlow(g, { x: 0, y: 0, a: 0 }, 0.3); }
+  else if (type === 'tunnel') {
     const fake = { n: 15, pts: Array.from({ length: 15 }, (_, i) => ({ x: -56 + i * 8, y: 0, a: 0 })) };
     drawTunnel(g, fake, { idx: TUNNEL_HALF });
   } else {
