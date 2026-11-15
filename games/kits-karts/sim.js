@@ -264,7 +264,8 @@ function updateCar(race, car, input, dt) {
   }
 
   // ---- controls
-  let steer = (input.left ? -1 : 0) + (input.right ? 1 : 0);
+  // tilt gives a number -1..1, keys and buttons give left/right
+  let steer = typeof input.steer === 'number' && !input.left && !input.right ? Math.max(-1, Math.min(1, input.steer)) : (input.left ? -1 : 0) + (input.right ? 1 : 0);
   let gas = !!input.up, brake = !!input.down;
   if (car.spinT > 0) {
     car.spinT -= dt;
@@ -282,7 +283,7 @@ function updateCar(race, car, input, dt) {
     // flying: a little air control, tricks
     car.vz -= race.grav * dt;
     car.z += car.vz * dt;
-    if (steer && !car.trick && car.trickT <= 0 && car.flipT <= 0 && car.vz > -120) { car.trick = true; car.trickT = 0.5; car.trickDir = steer; ev.push({ type: 'trick', id: car.id }); }
+    if (Math.abs(steer) > 0.5 && !car.trick && car.trickT <= 0 && car.flipT <= 0 && car.vz > -120) { car.trick = true; car.trickT = 0.5; car.trickDir = Math.sign(steer); ev.push({ type: 'trick', id: car.id }); }
     car.a += steer * turn * 0.25 * dt;
     if (car.assist >= 0) { // crossing jump: aim for the landing
       const p = course.pts[(car.idx + 3) % course.n];
@@ -293,7 +294,7 @@ function updateCar(race, car, input, dt) {
     }
   } else {
     // drifting: hold ▼ while turning fast. Let go for a mini turbo.
-    if (!car.drifting && brake && steer && car.vF > 170) { car.drifting = true; car.driftDir = steer; car.driftT = 0; ev.push({ type: 'hop', id: car.id }); }
+    if (!car.drifting && brake && Math.abs(steer) > 0.3 && car.vF > 170) { car.drifting = true; car.driftDir = Math.sign(steer); car.driftT = 0; ev.push({ type: 'hop', id: car.id }); }
     if (car.drifting) {
       if (!brake || car.vF < 110) {
         if (car.driftT > 0.7) { car.boostT = Math.max(car.boostT, car.driftT > 1.6 ? 1.0 : 0.55); ev.push({ type: 'miniturbo', id: car.id, big: car.driftT > 1.6 }); }

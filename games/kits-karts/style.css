@@ -176,3 +176,59 @@
   .kk-choice { width: 180px; }
   .kk-choice canvas, .kk-blank { height: 112px; }
 }
+
+/* ---- tilt */
+.kk-tilt { position: absolute; right: 14px; top: 116px; width: 54px; height: 54px; border-radius: 50%; pointer-events: auto; touch-action: none; background: rgba(0,0,0,.4); border: 3px solid var(--pc) !important; font-size: 26px; }
+.kk-tilting .kk-pad > div:first-child { visibility: hidden; }
+
+/* ---- phones: smaller bars so the track gets the room */
+@media (max-height: 500px) {
+  .kk-top { top: 6px; left: 88px; right: 6px; }
+  .kk-themes { padding: 4px; gap: 4px; max-width: calc(100% - 196px); }
+  .kk-theme { width: 38px; height: 38px; font-size: 21px; }
+  .kk-tools { gap: 6px; }
+  .kk-btn { width: 42px; height: 42px; font-size: 20px; }
+  .kk-bar { height: 70px; bottom: 6px; left: 6px; right: 6px; gap: 6px; }
+  .kk-panel { padding: 5px; gap: 6px; border-radius: 16px; }
+  .kk-player { width: 76px; height: 58px; border-radius: 14px; border-width: 3px !important; font-size: 22px; }
+  .kk-player .kk-kimg { width: 70px; height: 44px; }
+  .kk-player b { font-size: 12px; }
+  .kk-player i { font-size: 13px; }
+  .kk-bots { gap: 3px; }
+  .kk-botrow { gap: 3px; }
+  .kk-mini { min-width: 30px; height: 28px; font-size: 15px; padding: 0 4px; }
+  .kk-mini b { font-size: 13px; }
+  .kk-bcount { font-size: 17px; min-width: 38px; }
+  .kk-bcount b { font-size: 14px; }
+  .kk-extra { width: 50px; height: 50px; font-size: 28px; border-radius: 14px; }
+  .kk-go { width: 70px; font-size: 36px; border-radius: 20px; }
+  .kk-badge { top: 54px; }
+  .kk-lobby-info { font-size: 28px; }
+  .kk-place { font-size: 40px; }
+  .kk-lap { top: 52px; font-size: 18px; }
+  .kk-item { width: 56px; height: 56px; font-size: 32px; left: 92px; top: 8px; }
+  .kk-tilt { top: 84px; width: 46px; height: 46px; font-size: 22px; }
+  .kk-tb { width: 64px; height: 64px; font-size: 26px; }
+  .kk-tb-fire { width: 74px; height: 74px; font-size: 32px; }
+  .kk-tb-s { width: 52px; height: 52px; font-size: 20px; }
+  .kk-map { width: 130px; height: 82px; }
+  .kk-view:has(.kk-pad) ~ .kk-map { bottom: auto; top: 8px; right: 50%; transform: translateX(50%); }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  .kk-top { left: 90px; right: 6px; top: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .kk-themes { order: 2; flex: 1 1 100%; max-width: none; padding: 4px; gap: 4px; }
+  .kk-theme { width: 36px; height: 36px; font-size: 20px; }
+  .kk-btn { width: 42px; height: 42px; font-size: 20px; }
+  .kk-bar { height: auto; flex-wrap: wrap; left: 6px; right: 6px; bottom: 6px; gap: 6px; }
+  .kk-players { flex: 1 1 auto; padding: 5px; gap: 6px; }
+  .kk-player { width: 76px; height: 60px; }
+  .kk-player .kk-kimg { width: 70px; height: 46px; }
+  .kk-go { width: 76px; font-size: 38px; }
+  .kk-palette { order: 3; flex: 1 1 100%; padding: 5px; gap: 6px; }
+  .kk-extra { width: 48px; height: 48px; font-size: 26px; }
+  .kk-mini { min-width: 32px; height: 30px; font-size: 16px; }
+  .kk-bcount { font-size: 18px; min-width: 40px; }
+  .kk-badge { top: 112px; }
+  .kk-badge.up { top: 90px; }
+  .kk-badge .kk-code span { width: 38px; height: 38px; font-size: 24px; }
+}
