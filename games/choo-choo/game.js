@@ -322,6 +322,7 @@ export function mount(stage) {
     phase = 'station';
     station = { leg, t: 0, first: false, did: {} };
     v = 0;
+    s = leg.S;
     sfx.toot();
     sfx.hiss();
     sidePuff();
@@ -379,7 +380,8 @@ export function mount(stage) {
     if (st.t > (st.first ? 3.6 : 6.2)) {
       el.done.classList.remove('show');
       phase = 'drive';
-      nextStation = world.nextStationAfter(s);
+      while (world.legs.length <= station.leg.k + 1) world.genLeg();
+      nextStation = world.legs[station.leg.k + 1];
     }
   }
 
@@ -644,12 +646,14 @@ export function mount(stage) {
   }
 
   const stopLoop = startLoop(update, () => renderer.render(scene, camera));
-  window.__cc = () => ({ s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
+  window.__ccJump = to => { s = to; world.buildAll(s); };
+  window.__cc = () => ({ nextS: nextStation && nextStation.S, s, v, phase, leg: world.legIndexAt(s), waitFor: waitE && waitE.ev.type, stickers: [...stickers] });
 
   return () => {
     stopLoop();
     stopSpeech();
     delete window.__cc;
+    delete window.__ccJump;
     removeEventListener('resize', onResize);
     removeEventListener('keydown', onKey);
     removeEventListener('keyup', onKey);
