@@ -290,3 +290,61 @@
 .rt-pics3 { font-size: 46px; letter-spacing: 4px; }
 .rt-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
 .rt-badge .rt-code > b { font-size: 26px; margin-right: 0; }
+
+/* steering mode button + finger hint */
+.rt-mode {
+  width: 64px; height: 64px; border-radius: 50%; font-size: 34px; align-self: flex-end;
+  background: rgba(255,255,255,.9); box-shadow: 0 5px 0 rgba(0,0,0,.25); pointer-events: auto;
+}
+.rt-mode.ask { animation: rt-pulse .8s infinite; box-shadow: 0 0 0 5px #ffb300; }
+.rt-finger-hint {
+  position: absolute; left: 50%; top: 50%; font-size: 70px; pointer-events: none;
+  animation: rt-finger 1.6s ease-in-out infinite; filter: drop-shadow(0 4px 4px rgba(0,0,0,.35));
+}
+@keyframes rt-finger { 0%, 100% { transform: translate(-90%, -40%); } 50% { transform: translate(10%, -60%); } }
+
+/* ---------- phones (small screens) ---------- */
+@media (max-height: 520px), (max-width: 520px) {
+  .rt-top { top: 6px; right: 6px; gap: 8px; }
+  .rt-btn { width: 50px; height: 50px; font-size: 26px; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+  .rt-bar { height: 74px; bottom: 4px; left: 4px; right: 4px; gap: 6px; }
+  .rt-panel { border-radius: 18px; padding: 5px; gap: 5px; }
+  .rt-player { width: 72px; height: 62px; border-width: 3px; border-radius: 14px; }
+  .rt-player canvas { width: 58px; height: 36px; }
+  .rt-keys { display: none; }
+  .rt-plus { font-size: 24px; }
+  .rt-x { width: 26px; height: 26px; font-size: 12px; top: -8px; right: -8px; }
+  .rt-extra, .rt-palette .rt-extra { width: 64px; height: 62px; border-radius: 14px; border-width: 3px; }
+  .rt-extra canvas, .rt-palette .rt-extra canvas { width: 58px; height: 44px; }
+  .rt-palette { max-width: calc(100vw - 340px); }
+  .rt-go { width: 66px; height: 66px; font-size: 36px; flex: 0 0 auto; }
+  .rt-hud { top: 6px; gap: 6px; }
+  .rt-row { padding: 3px 8px; gap: 4px; }
+  .rt-row canvas { width: 34px; height: 21px; }
+  .rt-dots { gap: 3px; }
+  .rt-dots i { width: 11px; height: 11px; border-width: 1px; }
+  .rt-item { width: 24px; height: 24px; font-size: 17px; border-radius: 7px; }
+  .rt-lights i { width: 54px; height: 54px; }
+  .rt-pad { bottom: 8px; gap: 8px; }
+  .rt-pad-l { left: 8px; } .rt-pad-r { right: 8px; }
+  .rt-tb { width: 70px; height: 70px; font-size: 32px; border-radius: 20px; border-width: 4px !important; }
+  .rt-tb-up { width: 84px; height: 84px; }
+  .rt-mode { width: 52px; height: 52px; font-size: 28px; }
+  .rt-badge .rt-code span { width: 36px; height: 36px; font-size: 22px; }
+  .rt-badge .rt-btn { width: 44px; height: 44px; font-size: 22px; }
+  .game .home-btn { width: 50px; height: 50px; font-size: 26px; top: 6px; left: 6px; }
+}
+@media (max-width: 520px) and (orientation: portrait) {
+  .rt-bar { height: auto; flex-wrap: wrap; justify-content: center; }
+  .rt-palette { max-width: calc(100vw - 16px); }
+}
+/* phone held upright: ask to turn it sideways */
+.rt-rotate { display: none; }
+@media (max-width: 520px) and (orientation: portrait) {
+  .rt-rotate {
+    display: flex; position: absolute; inset: 0; z-index: 30; align-items: center; justify-content: center;
+    background: rgba(30,50,20,.85); font-size: 90px; pointer-events: auto;
+  }
+  .rt-rotate span { display: inline-block; animation: rt-turn 2s ease-in-out infinite; }
+}
+@keyframes rt-turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
