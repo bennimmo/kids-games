@@ -1,4 +1,4 @@
-import { GAMES } from './games.js';
+import { GAMES, AGES } from './games.js';
 import { gameArt } from './game-art.js';
 import { icon } from './engine/icons.js';
 import { VERSION } from './version.js';
@@ -120,13 +120,19 @@ function showMenu() {
       ${appButtons()}
       <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
       ${friendBarHTML()}
-      <div class="grid">
-        ${GAMES.map(g => `
-          <button class="tile" style="--c:${g.color}" data-id="${g.id}">
-            <div class="icon">${gameArt(g.id) || g.icon}</div>
-            <div class="name">${g.name}</div>
-          </button>`).join('')}
-      </div>
+      ${AGES.map(a => {
+        const list = GAMES.filter(g => (g.age || AGES[0].id) === a.id);
+        return list.length ? `<section class="age" style="--a:${a.color}">
+        <h2 class="age-title"><span>${a.name}</span></h2>
+        <div class="grid">
+          ${list.map(g => `
+            <button class="tile" style="--c:${g.color}" data-id="${g.id}">
+              <div class="icon">${gameArt(g.id) || g.icon}</div>
+              <div class="name">${g.name}</div>
+            </button>`).join('')}
+        </div>
+      </section>` : '';
+      }).join('')}
       <div class="version">v${VERSION}</div>
     </div>`;
   wireAppButtons();

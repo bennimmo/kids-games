@@ -27,7 +27,8 @@ Then open http://localhost:8000
 1. Make `games/<my-game>/game.js` that exports `mount(stage, game)`.
    - `stage` is the full-screen element to draw in.
    - Return a function that tidies up (stop loops, remove listeners).
-2. Add it to the list in `js/games.js` (name, emoji icon, colour).
+2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / middle / big).
+   - Optional: a drawn menu icon in `js/game-art.js`.
 
 ## Shared engine bits (`js/engine/`)
 - `canvas.js` – full-screen sharp canvas

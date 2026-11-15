@@ -55,16 +55,25 @@ body {
 .grid {
   width: 100%;
   max-width: 1000px;
+  margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 24px;
 }
+.age { width: 100%; max-width: 1000px; margin-bottom: 30px; }
+.age-title { margin: 0 0 16px; display: flex; align-items: center; gap: 14px; font-size: 26px; }
+.age-title::before, .age-title::after { content: ""; flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,.45); }
+.age-title span {
+  padding: 6px 22px; border-radius: 999px; background: var(--a); color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,.15);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), inset 0 0 0 3px rgba(255,255,255,.35), 0 6px 14px -6px rgba(43,33,64,.5);
+}
 .tile {
   border: 0;
   border-radius: 32px;
-  padding: 22px 16px 20px;
-  width: 240px;
+  padding: 22px 14px 20px;
+  width: 220px;
   max-width: 100%;
   min-height: 230px;
   background:
@@ -297,6 +306,7 @@ html, body { overscroll-behavior: none; }
 @media (max-width: 560px) {
   .menu { padding-top: 80px; }
   .grid { gap: 14px; }
+  .age-title { font-size: 21px; }
   .tile { width: calc(50% - 7px); min-height: 180px; padding: 14px 8px; border-radius: 26px; gap: 10px; }
   .tile .icon { width: 104px; height: 104px; border-radius: 32px; }
   .tile .art { width: 92px; height: 92px; }
