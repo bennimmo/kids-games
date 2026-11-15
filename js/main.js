@@ -1,4 +1,6 @@
 import { GAMES } from './games.js';
+import { gameArt } from './game-art.js';
+import { icon } from './engine/icons.js';
 import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX } from './engine/profile.js';
@@ -48,8 +50,8 @@ function toggleFullscreen() {
 function appButtons() {
   if (standalone) return '';
   const b = [];
-  if (installPrompt || isIOS) b.push('<button class="app-btn app-install" aria-label="Install app">📲</button>');
-  if (canFullscreen) b.push('<button class="app-btn app-full" aria-label="Full screen">⛶</button>');
+  if (installPrompt || isIOS) b.push(`<button class="app-btn app-install" aria-label="Install app">${icon('install')}</button>`);
+  if (canFullscreen) b.push(`<button class="app-btn app-full" aria-label="Full screen">${icon('fullscreen')}</button>`);
   return b.length ? `<div class="app-btns">${b.join('')}</div>` : '';
 }
 
@@ -59,7 +61,7 @@ function iosHelp() {
   o.innerHTML = `<div class="app-help-card">
       <div class="app-help-steps"><span>⬆️</span><span>➜</span><span>➕</span><span>➜</span><span>🎮</span></div>
       <p>Tap <b>Share</b> <span class="ios-share">⬆️</span> at the top of Safari, then <b>Add to Home Screen</b>.</p>
-      <button class="app-btn">✔️</button>
+      <button class="app-btn name-ok" aria-label="OK">${icon('check')}</button>
     </div>`;
   o.addEventListener('click', () => o.remove());
   document.body.appendChild(o);
@@ -83,16 +85,16 @@ function wireAppButtons() {
 // ---------- my name (used in every online game) ----------
 function nameButton() {
   const n = myName();
-  return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span>👤</span>${n ? `<b>${nameHTML(n)}</b>` : '<b>✏️</b>'}</button>`;
+  return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span class="name-ico">${icon('user')}</span>${n ? `<b>${nameHTML(n)}</b>` : `<b class="name-pen">${icon('edit')}</b>`}</button>`;
 }
 
 function editName() {
   const o = document.createElement('div');
   o.className = 'app-help name-edit';
   o.innerHTML = `<form class="app-help-card name-card">
-      <div class="name-face">👤</div>
+      <div class="name-face">${icon('user')}</div>
       <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
-      <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">⌫</button><button type="submit" class="app-btn name-ok" aria-label="Done">✔️</button></div>
+      <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">${icon('backspace')}</button><button type="submit" class="app-btn name-ok" aria-label="Done">${icon('check')}</button></div>
     </form>`;
   const input = o.querySelector('input');
   const before = myName();
@@ -121,7 +123,7 @@ function showMenu() {
       <div class="grid">
         ${GAMES.map(g => `
           <button class="tile" style="--c:${g.color}" data-id="${g.id}">
-            <div class="icon">${g.icon}</div>
+            <div class="icon">${gameArt(g.id) || g.icon}</div>
             <div class="name">${g.name}</div>
           </button>`).join('')}
       </div>
@@ -142,7 +144,7 @@ async function showGame(game) {
   app.innerHTML = `
     <div class="game">
       <div class="game-stage"></div>
-      <button class="home-btn" aria-label="Home">🏠</button>
+      <button class="home-btn" aria-label="Home">${icon('home')}</button>
     </div>`;
   app.querySelector('.home-btn').addEventListener('click', () => {
     sound.pop();
