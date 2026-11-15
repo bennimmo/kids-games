@@ -148,3 +148,5 @@
   .tt-who, .tt-wind { font-size: 18px; }
   .tt-hint { top: 150px; font-size: 16px; }
 }
+.tt-small { min-height: 44px; padding: 0 16px; border-radius: 16px; background: #eceff1; color: #546e7a !important; font-size: 18px; font-weight: 700; }
+.tt-edit h2 { margin: 0; font-size: clamp(26px, 5vw, 36px); color: #d84315; text-align: center; }
