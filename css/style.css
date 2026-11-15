@@ -280,6 +280,18 @@ html, body { overscroll-behavior: none; }
 .fb-mic:active { transform: scale(.92); }
 .fmic { max-width: 100%; font-family: inherit; font-size: 18px; padding: 8px 12px; border-radius: 14px; border: 3px solid #b388ff; background: #fff; color: var(--ink); }
 .fmic[hidden] { display: none; }
+.vt { z-index: 70; overflow-y: auto; padding-top: 24px; }
+.vt-card { width: min(460px, 100%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.vt-sw { text-align: left; border: 0; border-radius: 16px; padding: 12px 14px; font-family: inherit; font-size: 18px; background: #f4f0ff; color: var(--ink); cursor: pointer; }
+.vt-sw { display: flex; align-items: center; gap: 10px; }
+.vt-sw.on { background: #d7f5e1; }
+.vt-box { width: 30px; height: 30px; flex: none; border-radius: 9px; background: #fff; box-shadow: inset 0 0 0 3px #c9c2e6; display: grid; place-items: center; color: #fff; font-size: 20px; }
+.vt-sw.on .vt-box { background: var(--btn-ok); box-shadow: none; }
+.vt-box .ic { stroke-width: 3.4; }
+.vt-info { font-size: 14px; text-align: left; background: #fafafa; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.vt-info div { display: flex; gap: 8px; justify-content: space-between; }
+.vt-info span { text-align: right; overflow-wrap: anywhere; }
+.vt-close { align-self: center; }
 
 /* ---------- Phones: two tiles a row, room for the top buttons ---------- */
 @media (max-width: 560px) {

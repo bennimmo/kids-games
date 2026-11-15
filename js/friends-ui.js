@@ -4,6 +4,8 @@ import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import { icon } from './engine/icons.js';
+import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
+import { onVoiceOpts } from './engine/voice-opts.js';
 import {
   onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
@@ -89,9 +91,10 @@ function renderBubbles(s) {
     // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
     const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
     if (v.srcObject !== vs) v.srcObject = vs;
-    if (a.srcObject !== (f.stream || null)) { a.srcObject = f.stream || null; if (f.stream) a.play().catch(() => {}); }
+    playVoice(a, f.stream);
     el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
   }
+  tidyVoices(new Set(s.friends.map(f => f.stream).filter(Boolean)));
   micBtn.innerHTML = s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   dock.hidden = !s.friends.length;
@@ -192,7 +195,7 @@ function renderPanel(s) {
       ${s.friends.length ? `<div class="fsec">
         <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${nameHTML(f.name)}</span>`).join('')}</div>
         <select class="fmic" aria-label="Microphone" hidden></select>
-        <button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button>
+        <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">${icon('settings')}</button><button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button></div>
       </div>` : ''}
       <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
@@ -212,6 +215,7 @@ function renderPanel(s) {
   });
   q('.fcancel')?.addEventListener('click', () => { sound.pop(); cancelAsk(); });
   q('.fleave')?.addEventListener('click', () => { sound.pop(); leaveGroup(); });
+  q('.ftools')?.addEventListener('click', () => { sound.pop(); openVoiceTools(); });
   const sel = q('.fmic');
   if (sel && s.micStatus === 'on') listMics().then(mics => {
     if (!panel || !sel.isConnected || mics.length < 2) return;
@@ -241,6 +245,7 @@ export function mountFriends({ editName }) {
   // Browsers only play sound after a tap: any tap starts friends' voices if they were blocked.
   document.addEventListener('pointerdown', () => {
     layer.querySelectorAll('.fb audio').forEach(a => { if (a.srcObject && a.paused) a.play().catch(() => {}); });
+    unlockVoices();
   }, true);
   knockEl = layer.querySelector('.fk');
   shield(dock); shield(knockEl);
@@ -255,6 +260,7 @@ export function mountFriends({ editName }) {
     else renderPanel(s);
     wasAsking = !!(s.outgoing && s.outgoing.status === 'asking');
   });
+  onVoiceOpts(() => renderBubbles(friendState()));
   startFriends();
 }
 
