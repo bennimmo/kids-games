@@ -1,6 +1,7 @@
 // Drawing for Tank Tantrum: sky, ground, water, tanks, shots and bangs.
 import { W, H, CELL, COLS, ROWS, WATER_Y } from './sim.js';
 import { WEAPON } from './weapons.js';
+import { createGround } from './ground.js';
 
 // ---------------------------------------------------------------- tank looks
 export const TANK_COLORS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5', '#8e24aa', '#ec407a', '#6d4c41', '#546e7a', '#212121', '#ffffff'];
@@ -34,17 +35,12 @@ const THEMES = {
   candy: { sky: ['#ffb6e1', '#fff0fa'], hills: '#ffd2ec', top: [255, 120, 190], dirt: [205, 140, 92], deep: [160, 100, 62], water: 'rgba(170,100,255,.75)', wave: '#f0d9ff', sprinkles: true },
   moon: { sky: ['#07071f', '#2b2356'], hills: '#3b3466', top: [222, 222, 232], dirt: [150, 150, 165], deep: [100, 100, 118], water: 'rgba(80,230,120,.7)', wave: '#c9ffd8', stars: true },
 };
-const CUSTARD = [255, 214, 72];
-const SPRINKLES = [[255, 80, 80], [80, 200, 255], [255, 240, 80], [120, 230, 120], [255, 255, 255]];
 
 const TS = 1.4; // tanks are drawn this much bigger than drawTank's size
 const emojiFont = px => `${px}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
 export function createRenderer() {
-  const terrain = document.createElement('canvas');
-  terrain.width = COLS; terrain.height = ROWS;
-  const tctx = terrain.getContext('2d');
-  const img = tctx.createImageData(COLS, ROWS);
+  const ground = createGround();
   let theme = THEMES.grass;
   let world = null;
   const parts = [];       // particles
@@ -53,50 +49,12 @@ export function createRenderer() {
   const stars = Array.from({ length: 120 }, () => [Math.random(), Math.random(), Math.random() * 1.5 + 0.5]);
   const flakes = Array.from({ length: 70 }, () => [Math.random(), Math.random(), Math.random() * 0.5 + 0.5]);
 
-  function paintCells(c0, r0, c1, r1) {
-    const m = world.mask, d = img.data;
-    c0 = Math.max(0, c0); r0 = Math.max(0, r0); c1 = Math.min(COLS - 1, c1); r1 = Math.min(ROWS - 1, r1);
-    for (let r = r0; r <= r1; r++) {
-      for (let c = c0; c <= c1; c++) {
-        const i = r * COLS + c, o = i * 4, v = m[i];
-        if (!v) { d[o + 3] = 0; continue; }
-        let col;
-        if (v === 2) col = CUSTARD;
-        else {
-          let depth = 0;
-          while (depth < 4 && r - depth - 1 >= 0 && m[i - (depth + 1) * COLS]) depth++;
-          if (depth < 4) col = theme.top;
-          else {
-            const h = ((c * 73856093) ^ (r * 19349663)) >>> 0;
-            col = (h & 15) < 3 ? theme.deep : theme.dirt;
-            if (theme.sprinkles && (h & 255) < 6) col = SPRINKLES[(h >>> 8) % SPRINKLES.length];
-          }
-        }
-        const shade = v === 2 ? 1 : 1 - (r / ROWS) * 0.35;
-        d[o] = col[0] * shade; d[o + 1] = col[1] * shade; d[o + 2] = col[2] * shade; d[o + 3] = 255;
-      }
-    }
-  }
-
   function setWorld(w) {
     world = w;
     theme = THEMES[w.map] || THEMES.grass;
-    paintCells(0, 0, COLS - 1, ROWS - 1);
-    tctx.putImageData(img, 0, 0);
-    w.dirty.length = 0;
+    ground.setWorld(w);
   }
-  function syncTerrain() {
-    if (!world || !world.dirty.length) return;
-    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
-    for (const [c0, r0, c1, r1] of world.dirty) {
-      // the grass top of the cells under a hole changes too
-      paintCells(c0, r0, c1, r1 + 5);
-      a = Math.min(a, c0); b = Math.min(b, r0); c = Math.max(c, c1); d = Math.max(d, r1 + 5);
-    }
-    world.dirty.length = 0;
-    a = Math.max(0, a); b = Math.max(0, b); c = Math.min(COLS - 1, c); d = Math.min(ROWS - 1, d);
-    tctx.putImageData(img, 0, 0, a, b, c - a + 1, d - b + 1);
-  }
+  function syncTerrain() { ground.sync(); }
 
   // ---------------------------------------------------------------- effects
   function burstParts(x, y, n, colors, speed, life, size, grav = 400) {
@@ -213,9 +171,9 @@ export function createRenderer() {
     }
 
     // ground
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(terrain, 0, 0, COLS, ROWS, sx(0), sy(0), W * z, H * z);
-    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(ground.canvas, sx(0), sy(0), W * z, H * z);
+    const bed = sy(H);   // sea floor under the map
+    if (bed < vh) { ctx.fillStyle = `rgb(${theme.deep.join(',')})`; ctx.fillRect(0, bed - 1, vw, vh - bed + 1); }
 
     if (!world) return;
     const w = world;
