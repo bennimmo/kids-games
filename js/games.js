@@ -2,6 +2,13 @@
 // To add a game: make a folder in /games with a game.js, then add it here.
 export const GAMES = [
   {
+    id: 'kits-karts',
+    name: "Kit's Karts",
+    icon: '🏁',
+    color: '#ff7043',
+    load: () => import('../games/kits-karts/game.js'),
+  },
+  {
     id: 'race-track',
     name: 'Raffy Race',
     icon: '🏎️',

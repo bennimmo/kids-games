@@ -37,6 +37,20 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## Games
+### 🏁 Kit's Karts (`games/kits-karts/`)
+3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
+- 8 themes (top bar): 🏙️ city, 🌳 countryside, 🏜️ desert, ❄️ snow (slippy, snowing), 🏖️ beach, 🌋 volcano, 🍭 candy, 🌙 moon (low gravity).
+- Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
+- Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
+- Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).
+- Driving: ▲ go, ▼ brake. Hold ▼ while turning fast = drift; let go for a mini turbo (blue/orange sparks). Steer in the air = trick, turbo when you land. Karts bash each other (heavy karts win).
+- 🤖 robots: 0–6, speed 🐢 / 🐇 / 🚀. Laps 1/2/3/5. 
+- 2 players = split screen (P1 arrows + Enter, P2 WASD + Space). Solo: either keys. Gamepads work (A go, B brake, X fire). Touch: ◀ ▶ ▼ 💥, goes by itself.
+- 🔧 Garage (tap your kart): 10 bodies (go-kart, F1, off-road, monster, NASA rover, rocket, tractor, hover, police, bath tub), colours, decals, wheels (slicks, knobbly, big, gold, neon), drivers (kid, astronaut, robot, cat, dog, bear, alien, dino), helmet, spoilers, toppers, boost flame colour. Bodies and wheels change the stat bars (speed, accel, turn, weight, off-road).
+- Saved tracks 🖼️ keep the theme and jump/bridge choices.
+- `?kkdebug` puts `window.__kk()` in the console. `?kklow` turns shadows off.
+- Files: `course.js` (heights, jumps, bridges), `sim.js` (physics, items, laps), `ai.js`, `karts.js` (options + 3D karts), `world.js` (3D world + scenery), `editor.js` (2D designer), `preview.js` (garage viewer), `themes.js`, `game.js` (screens, HUD, split screen).
+
 ### 🏎️ Raffy Race (`games/race-track/`)
 - Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
 - Drag extras onto the track: jump, speed boost, water, mud, ice, tunnel. Scenery anywhere: cones (knock them over), tyre walls, trees (drive under), grandstand (crowd cheers). Drag to 🗑️ to remove.
