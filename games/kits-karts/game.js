@@ -14,6 +14,7 @@ import { makeCourse } from './course.js';
 import { createRace, stepRace, standings, ITEMS, ITEM_LIST, zapAhead, boomAt } from './sim.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { aiInput } from './ai.js';
+import { myName, cleanName } from '../../js/engine/profile.js';
 import { THEMES, THEME_IDS, PLANT_ICON } from './themes.js';
 import { createWorld, chaseCam } from './world.js';
 import { createEditor, drawThumb, EXTRA_ICON } from './editor.js';
@@ -150,7 +151,7 @@ export function mount(stage) {
     const bar = el(`<div class="kk-bar"></div>`);
     const pl = el(`<div class="kk-panel kk-players"></div>`);
     S.players.forEach((p, i) => {
-      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>P${i + 1}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
+      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
       click(card, () => openGarage(i));
       click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
       pl.appendChild(card);
@@ -283,7 +284,7 @@ export function mount(stage) {
     if (!p) { S.garage = null; return; }
     const L = p.look;
     const box = el(`<div class="kk-overlay kk-garage-wrap"><div class="kk-garage" style="--pc:${P_COLORS[S.garage.i]}">
-      <div class="kk-gleft"><div class="kk-gname">P${S.garage.i + 1} 🔧</div><div class="kk-gview"></div><div class="kk-stats"></div></div>
+      <div class="kk-gleft"><div class="kk-gname">${pname(S.garage.i)} 🔧</div><div class="kk-gview"></div><div class="kk-stats"></div></div>
       <div class="kk-gright">
         <div class="kk-tabs">${TABS.map(([id, ic]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}">${ic}</button>`).join('')}</div>
         <div class="kk-opts"></div>
@@ -355,8 +356,11 @@ export function mount(stage) {
     R = null;
   }
 
+  // the first player on this device uses the name from the main menu
+  function pname(i) { return (i === 0 && myName()) || 'P' + (i + 1); }
+
   function startRace() {
-    const humans = S.players.map((p, i) => ({ id: p.id, name: 'P' + (i + 1), look: p.look }));
+    const humans = S.players.map((p, i) => ({ id: p.id, name: pname(i), look: p.look }));
     const bots = Array.from({ length: S.bots }, (_, k) => ({ id: 'bot' + k, name: BOT_NAMES[k % BOT_NAMES.length], look: botLook(k + (S.theme.length * 3)), cpu: true, level: S.level }));
     // humans start at the back so there's someone to catch
     beginRace([...bots, ...humans], S.laps, humans.map(h => h.id));
@@ -377,7 +381,7 @@ export function mount(stage) {
     race.cars.forEach(c => {
       const hi = localIds.indexOf(c.id);
       let tag = null;
-      if (hi >= 0 && localIds.length > 1) tag = { text: 'P' + (hi + 1), color: P_COLORS[hi], layer: 10 + hi };
+      if (hi >= 0 && localIds.length > 1) tag = { text: pname(hi), color: P_COLORS[hi], layer: 10 + hi };
       else if (c.remote && !c.cpu) tag = { text: c.name || '🙂', color: c.look.color };
       world.addKart(c.id, c.look, tag);
     });
@@ -455,7 +459,7 @@ export function mount(stage) {
       <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : '<button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button>'}</div></div></div>`);
     list.forEach((c, i) => {
       const hi = R.localIds.indexOf(c.id);
-      const who = hi >= 0 ? 'P' + (hi + 1) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
+      const who = hi >= 0 ? pname(hi) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
       const li = el(`<li class="${hi >= 0 ? 'me' : ''}" style="--pc:${hi >= 0 ? P_COLORS[hi] : c.cpu ? '#888' : c.look.color}"><span class="kk-medal">${MEDALS[i] || ORD(i + 1)}</span>${kartImg(c.look)}<b>${who}</b></li>`);
       box.querySelector('ol').appendChild(li);
     });
@@ -496,7 +500,7 @@ export function mount(stage) {
     S.players.forEach((p, i) => {
       const id = pidOf(p);
       now.add(id);
-      S.net.room.setPlayer(id, { look: p.look, name: DRIVER_ICON[p.look.driver] || '🙂', joined: S.net.joined + i });
+      S.net.room.setPlayer(id, { look: p.look, name: (i === 0 && myName()) || DRIVER_ICON[p.look.driver] || '🙂', joined: S.net.joined + i });
     });
     S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
     S.net.synced = now;
@@ -509,7 +513,7 @@ export function mount(stage) {
       .filter(([, p]) => p && p.look)
       .sort((a, b) => (a[1].joined - b[1].joined) || (a[0] < b[0] ? -1 : 1))
       .slice(0, MAX_KARTS)
-      .map(([id, p]) => ({ id, look: cleanLook(p.look), name: typeof p.name === 'string' ? p.name.slice(0, 8) : '🙂' }));
+      .map(([id, p]) => ({ id, look: cleanLook(p.look), name: cleanName(p.name) || (typeof p.name === 'string' ? p.name.slice(0, 8) : '') || '🙂' }));
     const nb = Math.max(0, Math.min(6, m.bots | 0, MAX_KARTS - humans.length));
     const theme = (m.track && m.track.theme) || '';
     const bots = Array.from({ length: nb }, (_, k) => ({ id: `${m.hostUid}_bot${k}`, name: BOT_NAMES[k % BOT_NAMES.length], look: botLook(k + theme.length * 3), cpu: true, level: Math.max(0, Math.min(2, m.level | 0)) }));
@@ -702,10 +706,10 @@ export function mount(stage) {
   const onVisible = () => { if (S.net && document.visibilityState === 'visible') keepAwake(true); };
   document.addEventListener('visibilitychange', onVisible);
 
-  const picsHTML = code => `<div class="kk-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+  const picsHTML = code => `<div class="kk-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
   function badgeUI() {
     const list = roster().filter(r => !r.cpu);
-    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => kartImg(r.look)).join('')}</div><button class="kk-btn kk-leave" title="Leave">🚪</button></div>`);
+    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => `<figure>${kartImg(r.look)}${cleanName(r.name) ? `<b>${cleanName(r.name)}</b>` : ''}</figure>`).join('')}</div><button class="kk-btn kk-leave" title="Leave">🚪</button></div>`);
     click(b.querySelector('.kk-leave'), () => leaveOnline());
     ui.appendChild(b);
   }
@@ -718,7 +722,7 @@ export function mount(stage) {
     const bar = el(`<div class="kk-bar"><div class="kk-panel kk-players"></div><div class="kk-panel kk-lobby-info">${lobbyInfo()}</div></div>`);
     const pl = bar.querySelector('.kk-players');
     S.players.forEach((p, i) => {
-      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>P${i + 1}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
+      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
       click(card, () => openGarage(i));
       click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
       pl.appendChild(card);
@@ -733,10 +737,10 @@ export function mount(stage) {
   function onlineUI() {
     const box = el(`<div class="kk-overlay"><div class="kk-card">
       <div class="kk-actions">
-        <button class="kk-choice kk-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🌍</span></button>
-        <button class="kk-choice kk-join"><div class="kk-blank">🔑</div><span>🌍</span></button>
+        <button class="kk-choice kk-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
+        <button class="kk-choice kk-join"><div class="kk-blank kk-pics3">🐶🍎🚀</div><span>🔑</span></button>
       </div>
-      ${S.track ? '' : '<div class="kk-hint">✏️ ➜ 🌍</div>'}
+      ${S.track ? '' : '<div class="kk-hint">✏️ ➜ 🏠</div>'}
       <button class="kk-btn kk-back">↩️</button>
     </div></div>`);
     if (S.track) drawThumb(box.querySelector('canvas'), S.course, S.items, S.theme);

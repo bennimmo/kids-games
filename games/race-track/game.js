@@ -723,7 +723,7 @@ export function mount(stage) {
   }
 
   function picsHTML(code) {
-    return `<div class="rt-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
+    return `<div class="rt-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
   }
   function carsHTML() {
     return `<div class="rt-room-cars">${roster().map(p => `<figure><canvas width="100" height="70"></canvas>${p.name ? `<b class="rt-name">${p.name}</b>` : ''}</figure>`).join('')}</div>`;
@@ -786,8 +786,8 @@ export function mount(stage) {
   function onlineUI() {
     const box = el(`<div class="rt-overlay"><div class="rt-card">
       <div class="rt-actions">
-        <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🌍</span></button>
-        <button class="rt-choice rt-join"><div class="rt-blank rt-gallery">🔑</div><span>🌍</span></button>
+        <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
+        <button class="rt-choice rt-join"><div class="rt-blank rt-gallery rt-pics3">🐶🍎🚀</div><span>🔑</span></button>
       </div>
       <button class="rt-btn rt-back">↩️</button>
     </div></div>`);

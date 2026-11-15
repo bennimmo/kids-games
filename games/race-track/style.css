@@ -287,3 +287,6 @@
 .rt-name { font-size: 18px; font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-place .rt-name { font-size: 26px; min-width: 0; }
 .rt-badge .rt-name { font-size: 12px; max-width: 70px; }
+.rt-pics3 { font-size: 46px; letter-spacing: 4px; }
+.rt-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
+.rt-badge .rt-code > b { font-size: 26px; margin-right: 0; }

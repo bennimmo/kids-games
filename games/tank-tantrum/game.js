@@ -783,7 +783,7 @@ export function mount(stage) {
       <h1 class="tt-title">💥 Tank Tantrum</h1>
       <div class="tt-choices">
         <button class="tt-big" data-a="local"><span class="i">📱</span><span>Play here</span><small>Pass it round, or vs 🤖</small></button>
-        <button class="tt-big" data-a="online"><span class="i">👫</span><span>Play online</span><small>With friends</small></button>
+        <button class="tt-big" data-a="online"><span class="i">🌍</span><span>Play online</span><small>With friends</small></button>
       </div>
       <button class="tt-mytank" data-a="tank"><canvas></canvas><span>My tank: <b>${esc(myLook.name)}</b> ✏️</span></button>`);
     tankIcon(p.querySelector('.tt-mytank canvas'), myLook, 64);

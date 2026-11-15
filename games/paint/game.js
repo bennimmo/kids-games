@@ -1,7 +1,7 @@
 // Paint Party – a simple paint program (like the old Paint on Windows).
 // Tools down the left, colours and sizes along the bottom, actions on the right.
 // Every drawing saves itself in this browser (🖼️ to see them). 📥 downloads a PNG.
-// 👫 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
+// 🌍 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
 import { CODE_LEN } from '../../js/engine/net.js';
 import { sound } from '../../js/engine/sound.js';
 import { W, H, COLORS, STAMPS, BRUSH, STAMP, SHAPES, MAX_NUMS, byOrder, drawOp, createPainter } from './ops.js';
@@ -40,7 +40,7 @@ export function mount(stage) {
       <button data-act="clear" aria-label="Clear">🗑️</button>
       <button data-act="download" aria-label="Download">📥</button>
       <button data-act="gallery" aria-label="My drawings">🖼️</button>
-      <button data-act="friends" aria-label="Draw with friends">👫</button>
+      <button data-act="friends" aria-label="Draw with friends">🌍</button>
     </div>
     <div class="pt-palette"></div>`;
   stage.appendChild(root);
