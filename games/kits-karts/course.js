@@ -3,7 +3,7 @@
 //   'jump'   = ramp up, a gap over the other road, and a landing ramp
 //   'bridge' = a bridge with ramps either side
 // Pure data, no drawing.
-import { TRACK_W, SPACING, nearestLocal, nearestGlobal } from '../race-track/track.js';
+import { TRACK_W, SPACING, nearestLocal, nearestGlobal, trackFromJSON } from '../race-track/track.js';
 
 export { TRACK_W, SPACING };
 export const BRIDGE_H = 42;
@@ -233,4 +233,34 @@ export function arrowSpots(course, items = []) {
     }
   }
   return out;
+}
+
+// Smooth out the little wobbles from a hand-drawn line (they make jaggy road
+// and barriers). Averages each point with its neighbours a few times, then
+// spaces the points evenly again. Big shapes stay, small wiggles go.
+export function smoothTrack(track, passes = 4, win = 4) {
+  const n = track.n;
+  if (n < 30) return track;
+  let p = track.pts.map(q => ({ x: q.x, y: q.y }));
+  for (let k = 0; k < passes; k++) {
+    p = p.map((_, i) => {
+      let x = 0, y = 0;
+      for (let o = -win; o <= win; o++) { const q = p[(i + o + n) % n]; x += q.x; y += q.y; }
+      return { x: x / (win * 2 + 1), y: y / (win * 2 + 1) };
+    });
+  }
+  // even spacing round the closed loop
+  const loop = [...p, p[0]];
+  let total = 0;
+  for (let i = 1; i < loop.length; i++) total += Math.hypot(loop[i].x - loop[i - 1].x, loop[i].y - loop[i - 1].y);
+  const m = Math.max(12, Math.round(total / SPACING));
+  const step = total / m, out = [];
+  let seg = 1, segStart = 0, segLen = Math.hypot(loop[1].x - loop[0].x, loop[1].y - loop[0].y);
+  for (let k = 0; k < m; k++) {
+    const d = k * step;
+    while (segStart + segLen < d && seg < loop.length - 1) { segStart += segLen; seg++; segLen = Math.hypot(loop[seg].x - loop[seg - 1].x, loop[seg].y - loop[seg - 1].y); }
+    const t = segLen ? (d - segStart) / segLen : 0, a = loop[seg - 1], b = loop[seg];
+    out.push([Math.round((a.x + (b.x - a.x) * t) * 10) / 10, Math.round((a.y + (b.y - a.y) * t) * 10) / 10]);
+  }
+  return trackFromJSON(out);
 }

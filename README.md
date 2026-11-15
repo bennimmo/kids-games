@@ -27,7 +27,8 @@ Then open http://localhost:8000
 1. Make `games/<my-game>/game.js` that exports `mount(stage, game)`.
    - `stage` is the full-screen element to draw in.
    - Return a function that tidies up (stop loops, remove listeners).
-2. Add it to the list in `js/games.js` (name, emoji icon, colour).
+2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / big).
+   - Optional: a drawn menu icon in `js/game-art.js`.
 
 ## Shared engine bits (`js/engine/`)
 - `canvas.js` – full-screen sharp canvas
@@ -85,6 +86,7 @@ Then open http://localhost:8000
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
 - 8 themes (top bar): 🏙️ city, 🌳 countryside, 🏜️ desert, ❄️ snow (slippy, snowing), 🏖️ beach, 🌋 volcano, 🍭 candy, 🌙 moon (low gravity).
+- Drawn tracks are smoothed (wobbles from the finger/mouse removed) before the road is made.
 - Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
 - Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
 - Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).

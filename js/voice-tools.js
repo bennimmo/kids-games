@@ -1,4 +1,5 @@
 // Playing friends' voices, plus the 🔧 voice tools (info + switches to try when a voice sounds wrong).
+import { icon } from './engine/icons.js';
 import { voiceOpts, setVoiceOpt, onVoiceOpts } from './engine/voice-opts.js';
 import { friendPeers, micTrack } from './engine/friends.js';
 import { audioCtx } from './engine/sound.js';
@@ -103,7 +104,7 @@ async function info() {
 function render() {
   if (!el) return;
   const o = voiceOpts();
-  const sw = (k, on, label) => `<button class="vt-sw${on ? ' on' : ''}" data-k="${k}">${on ? '✅' : '⬜'} ${label}</button>`;
+  const sw = (k, on, label) => `<button class="vt-sw${on ? ' on' : ''}" data-k="${k}"><span class="vt-box">${on ? icon('check') : ''}</span> ${label}</button>`;
   el.querySelector('.vt-sws').innerHTML =
     sw('gameSounds', o.gameSounds, 'Game sounds during calls') +
     sw('player', o.player === 'webaudio', 'Play voices with Web Audio') +
@@ -129,7 +130,7 @@ export function openVoiceTools() {
       <div class="flabel">🔧 Voice tools</div>
       <div class="vt-sws"></div>
       <div class="vt-info"></div>
-      <button class="app-btn vt-close" aria-label="Close">✔️</button>
+      <button class="app-btn vt-close name-ok" aria-label="Close">${icon('check')}</button>
     </div>`;
   for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown']) el.addEventListener(t, e => e.stopPropagation());
   el.addEventListener('click', e => { if (e.target === el) closeVoiceTools(); });

@@ -11,6 +11,7 @@ import { createEvent } from './events.js';
 import { sfx, say, stopSpeech } from './audio.js';
 import { Fun } from './interact.js';
 import { startLoop } from '../../js/engine/loop.js';
+import { icon } from '../../js/engine/icons.js';
 
 const VMAX = 7, ACC = 2.4, DEC = 3.0, BRAKE = 3.0;
 const RAIL = 0.36;
@@ -45,8 +46,8 @@ export function mount(stage) {
     <button class="cc-whistle" aria-label="Whistle">${WHISTLE_SVG}</button>
     <div class="cc-hand cc-tap">👆</div>
     <div class="cc-go"><div class="cc-ring"></div><span>👆</span></div>
-    <button class="cc-arrow cc-left" aria-label="Go left">⬅</button>
-    <button class="cc-arrow cc-right" aria-label="Go right">➡</button>
+    <button class="cc-arrow cc-left" aria-label="Go left">${icon('back')}</button>
+    <button class="cc-arrow cc-right" aria-label="Go right">${icon('next')}</button>
     <div class="cc-bubble">CHOO CHOO!</div>
     <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done!</div><div class="cc-name"></div></div>
     <div class="cc-confetti"></div>`;

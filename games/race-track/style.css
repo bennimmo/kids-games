@@ -1,14 +1,16 @@
 .rt-ui { position: absolute; inset: 0; pointer-events: none; font-family: "Fredoka", system-ui, sans-serif; }
 .rt-ui > * { pointer-events: auto; }
-.rt-ui button { font-family: inherit; cursor: pointer; border: 0; }
+.rt-ui button { font-family: inherit; cursor: pointer; border: 0; color: var(--ink); transition: transform .1s, box-shadow .1s; }
+.rt-ui button .ic { stroke-width: 2.8; }
 
 .rt-top { position: absolute; top: 12px; right: 12px; display: flex; gap: 12px; }
 .rt-btn {
-  width: 72px; height: 72px; border-radius: 50%;
-  background: #fff; font-size: 36px;
-  box-shadow: 0 6px 0 rgba(0,0,0,.2);
+  width: 72px; height: 72px; border-radius: 50%; padding: 0;
+  background: var(--btn-face); font-size: 34px;
+  display: inline-grid; place-items: center;
+  box-shadow: var(--btn-shadow);
 }
-.rt-btn:active, .rt-big:active, .rt-go:active, .rt-choice:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.2); }
+.rt-btn:active, .rt-big:active, .rt-go:active, .rt-choice:active, .rt-keypad button:active { transform: scale(.93); box-shadow: var(--btn-press); }
 
 /* bottom bar in build mode */
 .rt-bar {
@@ -18,7 +20,7 @@
 .rt-panel {
   background: rgba(255,255,255,.85); border-radius: 24px; padding: 8px;
   display: flex; gap: 8px; height: 100%; align-items: center;
-  box-shadow: 0 6px 0 rgba(0,0,0,.15);
+  box-shadow: 0 8px 20px -8px rgba(43,33,64,.4);
 }
 .rt-player {
   position: relative; width: 110px; height: 96px; border-radius: 18px;
@@ -32,11 +34,14 @@
 .rt-keys b { background: #455a64; color: #fff; border-radius: 4px; }
 .rt-add { border-style: dashed; }
 .rt-add canvas { opacity: .5; }
-.rt-plus { position: absolute; font-size: 34px; }
+.rt-plus { position: absolute; font-size: 34px; display: grid; place-items: center; color: #607d8b; }
+.rt-plus .ic { stroke-width: 3; }
 .rt-x {
-  position: absolute; top: -10px; right: -10px; width: 34px; height: 34px; border-radius: 50%;
-  background: #ff5252; color: #fff; font-size: 16px;
+  position: absolute; top: -10px; right: -10px; width: 34px; height: 34px; border-radius: 50%; padding: 0;
+  background: var(--btn-no); color: #fff !important; font-size: 16px;
+  display: grid; place-items: center; box-shadow: 0 0 0 3px #fff, 0 3px 6px rgba(0,0,0,.25);
 }
+.rt-ui .rt-x .ic { stroke-width: 3.4; }
 .rt-colors {
   position: absolute; display: grid; grid-template-columns: repeat(4, 56px); gap: 10px;
   background: #fff; padding: 12px; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,.3);
@@ -54,20 +59,23 @@
 .rt-extra canvas { width: 100px; height: 75px; pointer-events: none; }
 
 .rt-go {
-  width: 110px; height: 110px; border-radius: 50%; background: #43a047; font-size: 60px;
-  box-shadow: 0 6px 0 rgba(0,0,0,.25); animation: rt-pulse 1.2s ease-in-out infinite;
+  flex: 0 0 auto; width: 110px; height: 110px; border-radius: 50%; background: var(--btn-ok); font-size: 60px; padding: 0;
+  display: grid; place-items: center;
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,.12), 0 0 0 5px #fff, 0 10px 22px -6px rgba(43,33,64,.5);
+  animation: rt-pulse 1.2s ease-in-out infinite;
 }
 .rt-go.off { opacity: .35; animation: none; pointer-events: none; }
 @keyframes rt-pulse { 50% { transform: scale(1.08); } }
 
 .rt-bin {
   position: absolute; left: 50%; top: 16px; transform: translateX(-50%) scale(0);
-  width: 100px; height: 100px; border-radius: 50%; background: #ff7043;
-  font-size: 54px; display: flex; align-items: center; justify-content: center;
-  transition: transform .15s; box-shadow: 0 6px 0 rgba(0,0,0,.2); pointer-events: none;
+  width: 100px; height: 100px; border-radius: 50%; background: var(--btn-hot); color: #fff;
+  font-size: 50px; display: flex; align-items: center; justify-content: center;
+  transition: transform .15s; box-shadow: 0 0 0 5px #fff, 0 10px 22px -6px rgba(43,33,64,.5); pointer-events: none;
 }
+.rt-bin .ic { stroke-width: 2.6; }
 .rt-bin.show { transform: translateX(-50%) scale(1); }
-.rt-bin.hot { transform: translateX(-50%) scale(1.3); background: #e53935; }
+.rt-bin.hot { transform: translateX(-50%) scale(1.3); background: var(--btn-no); }
 
 /* race HUD */
 .rt-hud {
@@ -76,7 +84,7 @@
 }
 .rt-row {
   display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,.9);
-  padding: 6px 12px; border-radius: 999px; box-shadow: 0 4px 0 rgba(0,0,0,.15);
+  padding: 6px 12px; border-radius: 999px; box-shadow: 0 6px 16px -6px rgba(43,33,64,.4);
 }
 .rt-row canvas { width: 50px; height: 30px; }
 .rt-dots { display: flex; gap: 5px; }
@@ -102,7 +110,7 @@
 }
 .rt-card {
   background: #fff; border-radius: 32px; padding: 24px; text-align: center;
-  box-shadow: 0 10px 0 rgba(0,0,0,.2); position: relative; max-width: 100%;
+  box-shadow: 0 24px 48px -16px rgba(43,33,64,.5); position: relative; max-width: 100%;
 }
 .rt-trophy { font-size: 90px; animation: rt-pulse 1s infinite; }
 .rt-podium { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 16px; }
@@ -110,19 +118,20 @@
 .rt-place canvas { width: 100px; height: 60px; }
 .rt-actions { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
 .rt-big {
-  width: 120px; height: 120px; border-radius: 32px; font-size: 64px;
-  background: #ffd54f; box-shadow: 0 6px 0 rgba(0,0,0,.2);
+  width: 120px; height: 120px; border-radius: 32px; font-size: 60px; padding: 0;
+  display: grid; place-items: center; color: #fff !important;
+  background: var(--btn-ok); box-shadow: inset 0 -5px 0 rgba(0,0,0,.12), 0 10px 22px -8px rgba(43,33,64,.5);
 }
-.rt-big.rt-draw2 { background: #81d4fa; }
+.rt-big.rt-draw2 { background: linear-gradient(180deg, #6ec6ff, #2f8fe0); }
 .rt-choice {
   position: relative; width: 260px; height: 170px; border-radius: 24px; padding: 10px;
-  background: #e3f2fd; box-shadow: 0 6px 0 rgba(0,0,0,.2); max-width: 100%;
+  background: #e3f2fd; box-shadow: inset 0 -4px 0 rgba(0,0,0,.06), 0 10px 22px -8px rgba(43,33,64,.45); max-width: 100%;
 }
 .rt-choice canvas { width: 100%; height: 100%; border-radius: 14px; }
 .rt-choice span {
   position: absolute; right: -12px; bottom: -12px; font-size: 48px;
-  background: #fff; border-radius: 50%; width: 76px; height: 76px; line-height: 76px;
-  box-shadow: 0 4px 0 rgba(0,0,0,.2);
+  background: var(--btn-face); border-radius: 50%; width: 76px; height: 76px; line-height: 76px;
+  box-shadow: var(--btn-shadow);
 }
 .rt-blank { width: 100%; height: 100%; border-radius: 14px; background: #7cc55f; border: 4px dashed #fff; }
 .rt-back { position: absolute; top: -24px; left: -24px; }
@@ -141,22 +150,24 @@
 }
 .rt-saved-item {
   position: relative; border-radius: 20px; padding: 8px; background: #e3f2fd; cursor: pointer;
-  box-shadow: 0 6px 0 rgba(0,0,0,.15); aspect-ratio: 16 / 10;
+  box-shadow: 0 10px 22px -10px rgba(43,33,64,.45); aspect-ratio: 16 / 10; transition: transform .1s;
 }
-.rt-saved-item:active { transform: translateY(3px); }
-.rt-saved-item.fav { background: #fff3c4; box-shadow: 0 6px 0 #f9a825; }
+.rt-saved-item:active { transform: scale(.97); }
+.rt-saved-item.fav { background: #fff3c4; box-shadow: 0 0 0 4px #ffca28, 0 10px 22px -10px rgba(43,33,64,.45); }
 .rt-saved-item canvas { width: 100%; height: 100%; border-radius: 14px; display: block; }
 .rt-star, .rt-del, .rt-del-yes {
-  position: absolute; width: 52px; height: 52px; border-radius: 50%;
-  font-size: 28px; box-shadow: 0 4px 0 rgba(0,0,0,.2);
+  position: absolute; width: 52px; height: 52px; border-radius: 50%; padding: 0;
+  font-size: 26px; display: grid; place-items: center;
+  box-shadow: 0 0 0 3px #fff, 0 4px 10px -2px rgba(0,0,0,.3);
 }
-.rt-star { top: -12px; left: -12px; background: #fff; filter: grayscale(1); opacity: .6; }
-.fav .rt-star { filter: none; opacity: 1; }
-.rt-del { top: -12px; right: -12px; background: #ff5252; color: #fff; font-size: 22px; }
-.rt-del-yes { display: none; inset: 0; margin: auto; width: 90px; height: 90px; font-size: 48px; background: #e53935; }
+.rt-star { top: -12px; left: -12px; background: var(--btn-face); color: #b0bec5 !important; }
+.fav .rt-star { background: linear-gradient(180deg, #ffd54f, #ffb300); color: #fff !important; }
+.rt-del { top: -12px; right: -12px; background: var(--btn-no); color: #fff !important; font-size: 22px; }
+.rt-ui .rt-del .ic { stroke-width: 3.4; }
+.rt-del-yes { display: none; inset: 0; margin: auto; width: 90px; height: 90px; font-size: 44px; background: var(--btn-no); color: #fff !important; }
 .rt-saved-item.asking { background: #ffcdd2; }
 .rt-saved-item.asking canvas { opacity: .4; }
-.rt-saved-item.asking .rt-del-yes { display: block; }
+.rt-saved-item.asking .rt-del-yes { display: grid; }
 .rt-empty { grid-column: 1 / -1; font-size: 64px; padding: 40px; opacity: .5; }
 
 /* customise box */
@@ -175,9 +186,12 @@
 .rt-opt.on { background: #fff8e1; border-color: #ffb300 !important; }
 .rt-opt canvas { width: 84px; height: 66px; }
 .rt-ok {
-  position: absolute; bottom: 14px; right: 14px; width: 64px; height: 64px; border-radius: 50%;
-  background: #43a047; font-size: 30px; box-shadow: 0 4px 0 rgba(0,0,0,.25);
+  position: absolute; bottom: 14px; right: 14px; width: 64px; height: 64px; border-radius: 50%; padding: 0;
+  background: var(--btn-ok); color: #fff !important; font-size: 32px;
+  display: grid; place-items: center; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), 0 6px 14px -4px rgba(43,33,64,.45);
 }
+.rt-ui .rt-ok .ic { stroke-width: 3.4; }
+.rt-ok:active { transform: scale(.92); }
 .rt-player canvas { width: 86px; height: 56px; }
 
 /* touch buttons */
@@ -189,12 +203,14 @@
 .rt-pad-l { left: 14px; }
 .rt-pad-r { right: 14px; }
 .rt-tb {
-  width: 96px; height: 96px; border-radius: 26px; font-size: 44px; color: #fff;
+  width: 96px; height: 96px; border-radius: 26px; font-size: 44px; color: #fff !important; padding: 0;
+  display: grid; place-items: center;
   background: rgba(30,30,30,.45); border: 5px solid var(--c) !important;
-  box-shadow: 0 5px 0 rgba(0,0,0,.3); touch-action: none;
+  box-shadow: 0 6px 14px -4px rgba(0,0,0,.4); touch-action: none;
   -webkit-touch-callout: none; user-select: none; -webkit-user-select: none;
 }
-.rt-tb.on { transform: translateY(4px) scale(.95); filter: brightness(1.4); box-shadow: 0 1px 0 rgba(0,0,0,.3); }
+.rt-tb .ic { stroke-width: 3.2; }
+.rt-tb.on { transform: scale(.92); filter: brightness(1.4); box-shadow: 0 2px 4px rgba(0,0,0,.3); }
 .rt-tb-up { background: rgba(46,125,50,.75); width: 116px; height: 116px; }
 .rt-tb-down { background: rgba(198,40,40,.6); }
 .rt-pad-4 { gap: 8px; align-items: flex-end; }
@@ -214,17 +230,16 @@
 }
 .rt-keypad { display: grid; grid-template-columns: repeat(4, 84px); gap: 12px; justify-content: center; }
 .rt-keypad button {
-  width: 84px; height: 84px; border-radius: 20px; font-size: 50px; background: #e3f2fd;
-  box-shadow: 0 5px 0 rgba(0,0,0,.18);
+  width: 84px; height: 84px; border-radius: 20px; font-size: 50px; background: var(--btn-face); padding: 0;
+  box-shadow: var(--btn-shadow);
 }
-.rt-keypad button:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
 .rt-del-pic { position: absolute; top: -24px; right: -24px; }
 .rt-room-cars { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
 .rt-room-cars canvas { width: 80px; height: 56px; }
 .rt-badge {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   background: rgba(255,255,255,.92); border-radius: 24px; padding: 8px 12px; display: flex; align-items: center; gap: 10px;
-  box-shadow: 0 5px 0 rgba(0,0,0,.15);
+  box-shadow: 0 8px 20px -8px rgba(43,33,64,.4);
 }
 .rt-badge .rt-code { margin: 0; gap: 4px; }
 .rt-badge .rt-code span { width: 48px; height: 48px; font-size: 30px; border-radius: 12px; border-width: 3px; }
@@ -254,7 +269,7 @@
 .rt-toast {
   position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 8px; background: #fff; padding: 8px 18px; border-radius: 999px;
-  box-shadow: 0 6px 0 rgba(0,0,0,.2); font-size: 56px; pointer-events: none;
+  box-shadow: 0 12px 26px -10px rgba(43,33,64,.5); font-size: 56px; pointer-events: none;
   animation: rt-toast 1.8s ease-out forwards;
 }
 .rt-toast canvas { width: 90px; height: 60px; }
@@ -267,7 +282,7 @@
 .rt-end {
   position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%) scale(0);
   background: rgba(255,255,255,.92); padding: 8px 20px; border-radius: 999px; font-size: 34px;
-  box-shadow: 0 5px 0 rgba(0,0,0,.18); transition: transform .2s; pointer-events: none;
+  box-shadow: 0 8px 20px -8px rgba(43,33,64,.4); transition: transform .2s; pointer-events: none;
 }
 .rt-end.show { transform: translateX(-50%) scale(1); }
 .rt-end b { display: inline-block; min-width: 1.2em; text-align: center; }
@@ -293,8 +308,8 @@
 
 /* steering mode button + finger hint */
 .rt-mode {
-  width: 64px; height: 64px; border-radius: 50%; font-size: 34px; align-self: flex-end;
-  background: rgba(255,255,255,.9); box-shadow: 0 5px 0 rgba(0,0,0,.25); pointer-events: auto;
+  width: 64px; height: 64px; border-radius: 50%; font-size: 34px; align-self: flex-end; padding: 0;
+  background: var(--btn-face); box-shadow: var(--btn-shadow); pointer-events: auto;
 }
 .rt-mode.ask { animation: rt-pulse .8s infinite; box-shadow: 0 0 0 5px #ffb300; }
 .rt-finger-hint {
@@ -306,14 +321,14 @@
 /* ---------- phones (small screens) ---------- */
 @media (max-height: 520px), (max-width: 520px) {
   .rt-top { top: 6px; right: 6px; gap: 8px; }
-  .rt-btn { width: 50px; height: 50px; font-size: 26px; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+  .rt-btn { width: 50px; height: 50px; font-size: 24px; }
   .rt-bar { height: 74px; bottom: 4px; left: 4px; right: 4px; gap: 6px; }
   .rt-panel { border-radius: 18px; padding: 5px; gap: 5px; }
   .rt-player { width: 72px; height: 62px; border-width: 3px; border-radius: 14px; }
   .rt-player canvas { width: 58px; height: 36px; }
   .rt-keys { display: none; }
   .rt-plus { font-size: 24px; }
-  .rt-x { width: 26px; height: 26px; font-size: 12px; top: -8px; right: -8px; }
+  .rt-x { width: 26px; height: 26px; font-size: 13px; top: -8px; right: -8px; }
   .rt-extra, .rt-palette .rt-extra { width: 64px; height: 62px; border-radius: 14px; border-width: 3px; }
   .rt-extra canvas, .rt-palette .rt-extra canvas { width: 58px; height: 44px; }
   .rt-palette { max-width: calc(100vw - 340px); }
@@ -332,7 +347,7 @@
   .rt-mode { width: 52px; height: 52px; font-size: 28px; }
   .rt-badge .rt-code span { width: 36px; height: 36px; font-size: 22px; }
   .rt-badge .rt-btn { width: 44px; height: 44px; font-size: 22px; }
-  .game .home-btn { width: 50px; height: 50px; font-size: 26px; top: 6px; left: 6px; }
+  .game .home-btn { width: 50px; height: 50px; font-size: 24px; top: 6px; left: 6px; }
 }
 @media (max-width: 520px) and (orientation: portrait) {
   .rt-bar { height: auto; flex-wrap: wrap; justify-content: center; }

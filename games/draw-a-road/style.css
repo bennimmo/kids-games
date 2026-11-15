@@ -14,16 +14,18 @@
 .dar-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; width: 100%; max-width: 900px; }
 .dar-lv {
   border: 0; border-radius: 24px; padding: 14px 8px 10px;
-  background: #fff; color: #2b2140; cursor: pointer;
-  box-shadow: 0 6px 0 rgba(0,0,0,.15);
+  background: var(--btn-face); color: #2b2140; cursor: pointer;
+  box-shadow: var(--btn-shadow); transition: transform .1s;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
-.dar-lv:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.15); }
+.dar-lv:active { transform: scale(.95); box-shadow: var(--btn-press); }
 .dar-lv .num { font-size: 40px; font-weight: 700; line-height: 1; color: #1e88e5; }
 .dar-lv .nm { font-size: 16px; }
 .dar-lv.locked { opacity: .55; cursor: default; }
 .dar b { font-weight: 700; color: rgba(0,0,0,.18); }
-.dar b.on { color: #ffc107; text-shadow: 0 2px 0 #ff8f00; }
+.dar b.on { color: #ffc107; }
+.dar b .ic { margin: 0 .04em; }
+.dar b.on .ic { filter: drop-shadow(0 2px 0 #ff8f00); }
 .dar-lv .st { font-size: 24px; letter-spacing: 2px; }
 
 /* top bar */
@@ -45,14 +47,16 @@
 .dar-ink .stars { font-size: 26px; letter-spacing: 3px; line-height: 1; }
 .dar-btns { display: flex; gap: 8px; }
 .dar-btn {
-  width: 64px; height: 64px; border: 0; border-radius: 20px;
-  background: #fff; color: #2b2140; font-size: 32px; cursor: pointer;
-  box-shadow: 0 5px 0 rgba(0,0,0,.18);
+  width: 64px; height: 64px; border: 0; border-radius: 20px; padding: 0;
+  background: var(--btn-face); color: #2b2140; font-size: 30px; cursor: pointer;
+  box-shadow: var(--btn-shadow); display: inline-grid; place-items: center; transition: transform .1s;
 }
-.dar-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+.dar-btn:active { transform: scale(.92); box-shadow: var(--btn-press); }
 .dar-btn:disabled { opacity: .4; }
-.dar-btn.go, .dar-btn.next { background: #43a047; color: #fff; width: 84px; }
-.dar-btn.go.stop { background: #e53935; }
+.dar-btn.go, .dar-btn.next, .dar-btn.again { background: var(--btn-ok); color: #fff; }
+.dar-btn.go, .dar-btn.next { width: 84px; }
+.dar-btn.go .ic, .dar-btn.next .ic, .dar-btn.again .ic { stroke-width: 3; }
+.dar-btn.go.stop { background: var(--btn-no); }
 
 @media (max-width: 720px) {
   .dar-hud { height: auto; flex-wrap: wrap; padding-left: 92px; gap: 6px; }

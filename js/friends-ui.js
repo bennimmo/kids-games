@@ -3,6 +3,7 @@
 import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
+import { icon } from './engine/icons.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
@@ -22,7 +23,7 @@ function openDock(on) {
   clearTimeout(openTimer);
   dock.classList.toggle('open', on);
   if (on) openTimer = setTimeout(() => openDock(false), 5000);
-  else { hangBtn.classList.remove('sure'); hangBtn.textContent = '📴'; }
+  else { hangBtn.classList.remove('sure'); hangBtn.innerHTML = icon('hangup'); }
 }
 let onEditName = () => {};
 
@@ -99,7 +100,8 @@ function renderBubbles(s) {
       sound.pop();
     }
     el.classList.toggle('on', f.status === 'on');
-    el.querySelector('.fb-face b').textContent = [...f.name][0] || '?';
+    el.querySelector('.fb-face b').textContent = f.face || [...f.name][0] || '?';
+    el.classList.toggle('has-face', !!f.face);
     el.querySelector('.fb-name').textContent = f.name;
     const v = el.querySelector('video'), a = el.querySelector('audio');
     // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
@@ -113,10 +115,10 @@ function renderBubbles(s) {
   }
   for (const u of quiet) if (!want.has(u)) quiet.delete(u);
   tidyVoices(new Set(s.friends.filter(f => !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
-  micBtn.textContent = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : (s.muted || s.micStatus !== 'on') ? '🔇' : '🎤';
+  micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   badge.hidden = !(s.muted || s.micStatus === 'denied');
-  badge.textContent = s.micStatus === 'denied' ? '🚫' : '🔇';
+  badge.innerHTML = s.micStatus === 'denied' ? '🚫' : icon('micOff');
   if (!s.friends.length) openDock(false);
   dock.hidden = !s.friends.length;
   placeDock();
@@ -132,11 +134,11 @@ function renderKnock(s) {
   knockEl.hidden = !k;
   if (!k) return;
   knockEl.innerHTML = `<div class="app-help-card fk-card">
-      <div class="fk-ring">📞</div>
+      <div class="fk-ring">${icon('phone')}</div>
       <div class="fk-name">${nameHTML(k.name)}</div>
       <div class="name-row">
-        <button class="app-btn fk-no" aria-label="No">❌</button>
-        <button class="app-btn fk-yes name-ok" aria-label="Yes">✅</button>
+        <button class="app-btn fk-no" aria-label="No">${icon('close')}</button>
+        <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>
       </div>
     </div>`;
   knockEl.querySelector('.fk-yes').addEventListener('click', () => { sound.pop(); accept(k.pid); });
@@ -152,11 +154,11 @@ function renderBar(s) {
   const bar = document.querySelector('.friend-bar');
   if (!bar) return;
   let inner;
-  if (s.codeStatus === 'noname') inner = '<span class="fbar-ico">📞</span><b>👤 ✏️</b>';
+  if (s.codeStatus === 'noname') inner = `<span class="fbar-ico">${icon('phone')}</span><b class="fbar-name">${icon('user')}${icon('edit')}</b>`;
   else if (s.codeStatus === 'offline') inner = '<span class="fbar-ico">📵</span>';
-  else if (s.codeStatus === 'ok') inner = `<span class="fbar-ico">📞</span><span class="fcode">${picsHTML(s.code)}</span>`;
-  else inner = '<span class="fbar-ico">📞</span><span class="fcode fcode-wait">⏳</span>';
-  if (s.friends.length) inner += `<span class="fbar-count">👫 ${s.friends.length}</span>`;
+  else if (s.codeStatus === 'ok') inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode">${picsHTML(s.code)}</span>`;
+  else inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode fcode-wait">⏳</span>`;
+  if (s.friends.length) inner += `<span class="fbar-count">${icon('people')} ${s.friends.length}</span>`;
   bar.innerHTML = `<button class="fbar-btn" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
@@ -199,26 +201,26 @@ function renderPanel(s) {
   const full = s.friends.length >= MAX_FRIENDS;
   panel.innerHTML = `<div class="app-help-card friend-card">
       <div class="fsec">
-        <div class="flabel">👤 My code</div>
+        <div class="flabel">${icon('user')} My code</div>
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
-        <button class="fsmall fnew" aria-label="New code">🔄</button>
+        <button class="fsmall fnew" aria-label="New code">${icon('refresh')}</button>
       </div>
       ${full ? '' : `<div class="fsec">
-        <div class="flabel">👫 Friend's code</div>
+        <div class="flabel">${icon('people')} Friend's code</div>
         <div class="fslots">${slots}</div>
         <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}">${p}</button>`).join('')}</div>
         <div class="name-row">
-          <button class="app-btn fback" aria-label="Delete">⌫</button>
-          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>📞</button>
+          <button class="app-btn fback" aria-label="Delete">${icon('backspace')}</button>
+          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('phone')}</button>
         </div>
-        ${out ? `<div class="fmsg">${OUT_MSG[out.status](out.name)}${out.status === 'asking' ? ' <button class="fsmall fcancel" aria-label="Stop">✖️</button>' : ''}</div>` : ''}
+        ${out ? `<div class="fmsg">${OUT_MSG[out.status](out.name)}${out.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}
       </div>`}
       ${s.friends.length ? `<div class="fsec">
-        <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${nameHTML(f.name)}</span>`).join('')}</div>
+        <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${f.face ? f.face + ' ' : ''}${nameHTML(f.name)}</span>`).join('')}</div>
         <select class="fmic" aria-label="Microphone" hidden></select>
-        <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">🔧</button><button class="app-btn fleave" aria-label="End call">👋</button></div>
+        <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">${icon('settings')}</button><button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button></div>
       </div>` : ''}
-      <button class="app-btn fclose" aria-label="Close">✔️</button>
+      <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
   const q = sel => panel.querySelector(sel);
   q('.fnew').addEventListener('click', () => { sound.pop(); newCode(); });
@@ -252,7 +254,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = '<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">🎤</button><button class="fb-hang" aria-label="Hang up">📴</button></div><span class="fb-badge" hidden>🔇</span><div class="fb-list"></div></div><div class="app-help fk" hidden></div>';
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div></div><div class="app-help fk" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
@@ -263,7 +265,7 @@ export function mountFriends({ editName }) {
   hangBtn.addEventListener('click', () => {
     sound.pop();
     if (hangBtn.classList.contains('sure')) { openDock(false); leaveGroup(); return; }
-    hangBtn.classList.add('sure'); hangBtn.textContent = '✔️';
+    hangBtn.classList.add('sure'); hangBtn.innerHTML = icon('check');
     openDock(true);
   });
   micBtn.addEventListener('click', () => {
