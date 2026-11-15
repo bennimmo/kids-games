@@ -334,7 +334,7 @@ export function mount(stage) {
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 33);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, sizeAttenuation: false, transparent: true }));
-    sp.scale.set(0.16, 0.04, 1); sp.renderOrder = 20;
+    sp.scale.set(0.26, 0.065, 1); sp.renderOrder = 20;
     return sp;
   }
   const displayName = (n, type) => cleanName(n) || (PLANES[type] ? PLANES[type].icon + ' Pilot' : 'Pilot');
@@ -878,7 +878,7 @@ export function mount(stage) {
       r.model.group.position.copy(r.pos); r.model.group.quaternion.copy(r.quat);
       r.model.group.visible = !r.d.cr;
       const P = PLANES[r.type];
-      r.tag.position.copy(r.pos).add(tv.set(0, P.span * 0.35 + 4, 0));
+      r.tag.position.copy(r.pos).add(tv.set(0, P.span * 0.15 + 3, 0));
       const inp = Array.isArray(r.d.i) ? r.d.i : [0, 0, 0];
       animatePlane(r.model, { roll: inp[1] || 0, pitch: inp[0] || 0, yaw: inp[2] || 0, flaps: (r.d.f || 0) / Math.max(1, P.flaps.length - 1), gear: r.d.g ?? 1, rpm: r.d.th || 0, lights: true, landLight: world.sky.state.lightsOn > 0.3, t: clock, ab: r.d.ab || 0 }, dt);
       if (r.d.sm && !r.d.cr) { r.smokeT -= dt; if (r.smokeT <= 0) { r.smokeT = 0.06; world.fx.puff(r.model.parts.smokeAt.clone().applyQuaternion(r.quat).add(r.pos), r.color, 1.6, 7, null, 1.2, 0.85); } }
@@ -981,7 +981,7 @@ export function mount(stage) {
       m.group.visible = !s.crashed;
       animatePlane(m, { roll: s.input.roll, pitch: s.input.pitch, yaw: s.input.yaw, flaps: s.flapPos / Math.max(1, s.P.flaps.length - 1), gear: s.gear, rpm: s.rpm, lights: true, landLight: s.landLight, t: clock, ab: s.ab, steer: s.steer }, dt);
       if (p.view === 'cockpit') p.cockpit.update(s, dt);
-      p.tag.position.copy(s.pos).add(tv.set(0, s.P.span * 0.35 + 4, 0));
+      p.tag.position.copy(s.pos).add(tv.set(0, s.P.span * 0.15 + 3, 0));
       updateCamera(p, dt);
       if (p.engine) p.engine.set(s.crashed ? 0 : s.rpm, s.speed, s.ab, p.view === 'cockpit');
       updateHud(p, dt);
@@ -1004,7 +1004,7 @@ export function mount(stage) {
     terrain.update(cams[0].position, T);
     terrain.lod(cams.map(c => c.position));
     scenery.update(dt, T, sky.state, cams.map(c => c.position));
-    life.update(T, dt);
+    life.update(T, dt, cams.map(c => c.position));
     fx.update(dt, sky);
     if (sky.state.thunder) thunder(sky.state.thunder);
     if (flying) rainSound(sky.state.weather.rain * (cams[0].position.y < 2200 ? 1 : 0.2));

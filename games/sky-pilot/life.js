@@ -340,7 +340,7 @@ export function createLife(scene, sky, quality, dpr) {
         const cyc = (T + wh.off) % 40, up = cyc < 14;
         const sx = wh.x + Math.sin(T * 0.01 + wh.off) * 400, sz = wh.z + Math.cos(T * 0.012 + wh.off) * 400;
         const k = up ? Math.sin(cyc / 14 * Math.PI) : 0;
-        wh.w.visible = up;
+        wh.w.userData.hide = !up;
         wh.w.position.set(sx, -3 + k * 3.2, sz);
         wh.w.rotation.set(up ? (cyc > 10 ? (cyc - 10) * 0.25 : 0) : 0, T * 0.01 + wh.off, 0);
         wh.w.userData.tail.rotation.x = up && cyc > 10 ? -(cyc - 10) * 0.35 : Math.sin(T * 2) * 0.15;
@@ -357,7 +357,7 @@ export function createLife(scene, sky, quality, dpr) {
         const jump = ph < 1 ? Math.sin(ph * Math.PI) : 0;
         dd.d.position.set(x, -0.6 + jump * 3, z);
         dd.d.rotation.set(-Math.cos(ph * Math.PI) * 0.8 * (ph < 1 ? 1 : 0), Math.atan2(-Math.sin(base / 900), Math.cos(base / 900) * 0.36) + Math.PI / 2, 0);
-        dd.d.visible = ph < 1.1;
+        dd.d.userData.hide = !(ph < 1.1);
       }
     },
   });
@@ -427,8 +427,16 @@ export function createLife(scene, sky, quality, dpr) {
     },
   });
 
-  function update(T, dt) {
+  // far away things are hidden (they'd only be a pixel or two)
+  const cullList = [];
+  root.children.forEach(o => { if (o.isGroup) cullList.push(o); });
+  function update(T, dt, cams = []) {
     for (const m of movers) m.update(T, dt);
+    for (const o of cullList) {
+      let d = 1e9;
+      for (const c of cams) d = Math.min(d, Math.abs(c.x - o.position.x) + Math.abs(c.z - o.position.z));
+      o.visible = d < 9000 && (o.userData.hide !== true);
+    }
     for (const l of glowLights) { l.u.amount.value = sky.state.lightsOn; l.u.time.value = T; }
     // car headlights follow the cars
     const hp = head.geo.attributes.position;
