@@ -45,7 +45,7 @@ Then open http://localhost:8000
 - Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
 - Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
 - Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
-- Views 🎥: chase, 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet), 🔄 orbit, 📸 fly-by. Drag to look, wheel/pinch to zoom.
+- Views (just two): 🎥 behind the plane and 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet). Drag to look, wheel/pinch to zoom, double-tap to reset.
 - 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
 - Keys (pilot style by default: ↑ = nose down, flip it in ⏸): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.

@@ -28,7 +28,7 @@ const PREFS_KEY = 'sky-pilot-v1';
 const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
 const PERIOD = DAY * 7;               // world clock repeats (day + weather line up)
 const STEP = 1 / 120;
-const VIEWS = ['chase', 'cockpit', 'orbit', 'flyby'];
+const VIEWS = ['chase', 'cockpit'];   // just two: behind the plane and inside it
 const VIEW_ICON = { chase: '🎥', cockpit: '👨‍✈️', orbit: '🔄', flyby: '📸' };
 const D = Math.PI / 180;
 const kts = v => Math.round(v * 1.944), ftOf = m => Math.round(m * 3.281);
@@ -357,7 +357,7 @@ export function mount(stage) {
     const cam = new THREE.PerspectiveCamera(65, 1, 0.3, 90000);
     const p = {
       slot, s, model, cockpit, tag: tagObj, cam, type, color, colorIdx,
-      view: prefs.view[slot] || 'chase', look: { yaw: 0, pitch: 0, dist: 1, oyaw: 0.6, opitch: 0.25 },
+      view: VIEWS.includes(prefs.view[slot]) ? prefs.view[slot] : 'chase', look: { yaw: 0, pitch: 0, dist: 1, oyaw: 0.6, opitch: 0.25 },
       flyby: null, crashAt: 0, spot: null, smokeT: 0, engine: null, msgT: 0, warnSaid: 0, said: {}, camPos: new THREE.Vector3(), camInit: false,
       touch: TOUCH ? { stick: { active: false, x: 0, y: 0 }, thrSet: null, brake: false, actions: [] } : null,
     };
