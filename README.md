@@ -37,6 +37,25 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## Games
+### ✈️ Sky Pilot (`games/sky-pilot/`)
+3D flight simulator with an easy mode. Built with three.js.
+- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast, carrier catapult + arrestor wire). 8 colours.
+- One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
+- 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
+- Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
+- Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
+- Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
+- Views 🎥: chase, 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet), 🔄 orbit, 📸 fly-by. Drag to look, wheel/pinch to zoom.
+- 🐣 Easy: wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
+- 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
+- Keys: W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
+- Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
+- 🌍 Shared sky: everyone playing is in the same sky (planes + name tags, no chat). Time and weather come from the server clock so everyone sees the same sky. Each device sends its plane ~4×/sec (`games/sky-pilot/rooms/public/live/<uid>_p0`). Turn off with 🌍 in the menu.
+- 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).
+- Missions: ready for later (`missions.js` explains the hooks). The 🎯 menu button appears once `MISSIONS` has some.
+- Test params: `?sptime=<seconds>` fixes the time of day (0–900), `?spq=low|mid|high` quality, `?spdebug` adds `window.__sp()`.
+- Files: `island.js` (land, airports, roads, what's under you), `terrain.js`, `sky.js`, `scenery.js`, `life.js`, `planes.js`, `cockpit.js`, `physics.js`, `missions.js`, `game.js` (screens, controls, cameras, HUD, online).
+
 ### 🚂 Choo Choo Wilf (`games/choo-choo/`)
 3D steam train for age 2–3 (no reading needed, spoken prompts). Built with three.js.
 - Hold anywhere = go (puffs of steam + chuff chuff). Let go = slows down. Red button = whistle "CHOO CHOO!".

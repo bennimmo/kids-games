@@ -2,6 +2,13 @@
 // To add a game: make a folder in /games with a game.js, then add it here.
 export const GAMES = [
   {
+    id: 'sky-pilot',
+    name: 'Sky Pilot',
+    icon: '✈️',
+    color: '#81d4fa',
+    load: () => import('../games/sky-pilot/game.js'),
+  },
+  {
     id: 'choo-choo',
     name: 'Choo Choo Wilf',
     icon: '🚂',
