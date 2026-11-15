@@ -14,6 +14,16 @@
 import { firebaseCore } from './net.js';
 import { myName, cleanName } from './profile.js';
 import { pauseAudio, resetAudio } from './sound.js';
+import { voiceOpts, onVoiceOpts } from './voice-opts.js';
+
+// Game sounds back on, unless switched off for calls (🔧) while in a group.
+const soundsBack = () => { if (group && !voiceOpts().gameSounds) pauseAudio(); else resetAudio(); };
+let lastEcho = voiceOpts().echo;
+onVoiceOpts(o => {
+  soundsBack();
+  if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
+});
+export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
 export const FRIEND_CODE_LEN = 6;
 export const MAX_FRIENDS = 4;
@@ -80,7 +90,7 @@ export async function startMic() {
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
     group.peers.forEach(addMic);
   } catch (e) { micStatus = 'denied'; }
-  resetAudio();
+  soundsBack();
   emit();
 }
 const MIC_KEY = 'kg-mic';
@@ -88,7 +98,7 @@ const savedMic = () => { try { return localStorage.getItem(MIC_KEY) || ''; } cat
 function getMic() {
   const id = savedMic();
   return navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(id ? { deviceId: { exact: id } } : {}) },
+    audio: { echoCancellation: voiceOpts().echo, noiseSuppression: voiceOpts().echo, autoGainControl: voiceOpts().echo, ...(id ? { deviceId: { exact: id } } : {}) },
     video: false,
   });
 }
@@ -107,7 +117,7 @@ export async function listMics() {
 }
 // Swap to another mic without dropping the call.
 export async function chooseMic(id) {
-  try { localStorage.setItem(MIC_KEY, id); } catch (e) { /* */ }
+  try { if (id) localStorage.setItem(MIC_KEY, id); } catch (e) { /* */ }
   if (!mic) return startMic();
   const m = await getMic().catch(() => null);
   if (!m) return;
@@ -122,6 +132,7 @@ export async function chooseMic(id) {
 function stopMic() {
   if (mic) mic.getTracks().forEach(t => t.stop());
   mic = null; micStatus = 'off'; emit();
+  resetAudio();
 }
 function addMic(p) {
   if (!mic || p.micSender || p.pc.signalingState === 'closed') return;
