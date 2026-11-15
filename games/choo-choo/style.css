@@ -66,3 +66,17 @@
   .cc-chip { width: 48px; height: 48px; font-size: 30px; }
   .cc-stickers { right: 120px; }
 }
+
+/* junction arrows */
+.cc-arrow { position: absolute; top: 50%; width: 130px; height: 130px; margin-top: -65px; border-radius: 50%; border: 6px solid #fff;
+  background: radial-gradient(circle at 35% 30%, #66bb6a, #2e7d32); color: #fff; font-size: 80px; line-height: 1; font-weight: 700;
+  box-shadow: 0 8px 0 #1b5e20, 0 10px 18px rgba(0,0,0,.3); pointer-events: none; cursor: pointer; touch-action: none;
+  opacity: 0; transform: scale(.3); transition: opacity .3s, transform .3s; font-family: system-ui, sans-serif; }
+.cc-arrow.show { opacity: 1; transform: scale(1); pointer-events: auto; animation: cc-arrow 1.2s ease-in-out infinite; }
+.cc-left { left: 18px; }
+.cc-right { right: 18px; }
+.cc-left.show { --dx: -10px; }
+.cc-right.show { --dx: 10px; }
+@keyframes cc-arrow { 0%,100% { transform: translateX(0) scale(1); } 50% { transform: translateX(var(--dx)) scale(1.08); } }
+.cc-arrow:active { box-shadow: 0 2px 0 #1b5e20; margin-top: -59px; }
+@media (max-width: 600px) { .cc-arrow { width: 100px; height: 100px; margin-top: -50px; font-size: 60px; } }

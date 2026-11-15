@@ -63,12 +63,15 @@ Then open http://localhost:8000
 - Things get in the way. The train always stops itself:
   - 🦆 ducks cross, 🚗 cars at a level crossing, 🚜 digger drives across (just wait).
   - 🚧 barrier down, 🐄🐑🐧🦀 animals on the line (tap them; a 👆 shows where).
+  - 💧 water tower (tap it to fill up), 🪨 rock on the line (tap, the crane lifts it off), 🚦 red signal (tap to make it green).
+- 🔀 Junctions: the line splits round a duck pond. Big ⬅ ➡ arrows: tap to pick the way (picks itself after a while).
+- Tap things in the world: 🐄 field animals jump and moo/baa/quack, 🏠 someone pops out and waves, 🌳 squirrel / 🍎 apple (🦉 at night), 🌴 coconut, 🌿 bunny, 🍄 frog, 🌼 butterflies, 🐟 fish in ponds, ☁️ clouds rain then make a 🌈.
 - 🐦 birds fly over now and then. Tap to spot them.
 - Every sticker flies to the row at the bottom.
 - 🚉 Each stretch ends at a station: "Well done!", passengers (animals) hop off and on.
 - Lands change at each station: meadow → forest → snowy (snowing) → town → seaside. Every 3rd stretch is at night (headlight, glowing windows).
 - Keyboard: Space = go, W = whistle.
-- Files: `world.js` (track, land, stations), `scenery.js`, `models.js` (train, animals, vehicles), `events.js`, `audio.js` (sounds + speech), `game.js`.
+- Files: `world.js` (track, land, stations, junctions), `scenery.js`, `models.js` (train, animals, vehicles), `events.js` (things on the line), `interact.js` (tap surprises), `audio.js` (sounds + speech), `game.js`.
 
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
