@@ -9,8 +9,9 @@ import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from '../race-track/track.js';
-import { makeCourse } from './course.js';
+import { makeCourse, smoothTrack } from './course.js';
 import { createRace, stepRace, standings, ITEMS, ITEM_LIST, zapAhead, boomAt } from './sim.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { aiInput } from './ai.js';
@@ -137,10 +138,10 @@ export function mount(stage) {
     const top = el(`<div class="kk-top">
       <div class="kk-themes">${THEME_IDS.map(t => `<button class="kk-theme ${t === S.theme ? 'on' : ''}" data-t="${t}" title="${THEMES[t].name}">${THEMES[t].icon}</button>`).join('')}</div>
       <div class="kk-tools">
-        ${S.net ? '' : '<button class="kk-btn kk-online" title="Race friends">🌍</button>'}
-        <button class="kk-btn kk-dice" title="Make me a track">🎲</button>
-        <button class="kk-btn kk-saved" title="Saved tracks">🖼️</button>
-        <button class="kk-btn kk-clear" title="Clear">🗑️</button>
+        ${S.net ? '' : `<button class="kk-btn kk-online" title="Race friends">${icon('globe')}</button>`}
+        <button class="kk-btn kk-dice" title="Make me a track">${icon('dice')}</button>
+        <button class="kk-btn kk-saved" title="Saved tracks">${icon('gallery')}</button>
+        <button class="kk-btn kk-clear" title="Clear">${icon('trash')}</button>
       </div></div>`);
     top.querySelectorAll('.kk-theme').forEach(b => click(b, () => { S.theme = b.dataset.t; savePrefs(); setCourse(); render(); }));
     click(top.querySelector('.kk-dice'), randomTrack);
@@ -152,18 +153,18 @@ export function mount(stage) {
     const bar = el(`<div class="kk-bar"></div>`);
     const pl = el(`<div class="kk-panel kk-players"></div>`);
     S.players.forEach((p, i) => {
-      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
+      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? `<button class="kk-x">${icon('close')}</button>` : ''}<i>🔧</i></div>`);
       click(card, () => openGarage(i));
       click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
       pl.appendChild(card);
     });
     if (S.players.length < 2) {
-      const add = el(`<button class="kk-player kk-add" title="Two players">➕<b>P2</b></button>`);
+      const add = el(`<button class="kk-player kk-add" title="Two players">${icon('plus')}<b>P2</b></button>`);
       click(add, () => { S.players.push({ id: 'p2', look: cleanLook(prefs.p2look, 1), controls: 'wasd' }); savePrefs(); openGarage(1); });
       pl.appendChild(add);
     }
     const bots = el(`<div class="kk-bots">
-      <div class="kk-botrow"><button class="kk-mini kk-bminus">➖</button><span class="kk-bcount">🤖<b>${S.bots}</b></span><button class="kk-mini kk-bplus">➕</button></div>
+      <div class="kk-botrow"><button class="kk-mini kk-bminus">${icon('minus')}</button><span class="kk-bcount">🤖<b>${S.bots}</b></span><button class="kk-mini kk-bplus">${icon('plus')}</button></div>
       <div class="kk-botrow"><button class="kk-mini kk-level" title="How fast are the robots?">${LEVELS[S.level]}</button><button class="kk-mini kk-laps" title="Laps">🏁<b>${S.laps}</b></button></div>
     </div>`);
     click(bots.querySelector('.kk-bminus'), () => { S.bots = Math.max(0, S.bots - 1); savePrefs(); render(); });
@@ -192,7 +193,7 @@ export function mount(stage) {
     click(go, () => { askTilt(); if (S.track) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     ui.appendChild(bar);
-    ui.appendChild(el(`<div class="kk-bin">🗑️</div>`));
+    ui.appendChild(el(`<div class="kk-bin">${icon('trash')}</div>`));
   }
 
   function showBin(on) { const b = $('.kk-bin'); if (b) b.classList.toggle('show', on); }
@@ -218,7 +219,7 @@ export function mount(stage) {
       else { x = cx + Math.sin(t) * 640 + Math.sin(t * 3) * 60; y = cy + Math.sin(2 * t) * 320 + Math.cos(t * 3) * 40; } // wavy 8
       raw.push({ x, y });
     }
-    const t = buildTrack(raw);
+    const t0 = buildTrack(raw), t = t0 && smoothTrack(t0);
     if (!t) return;
     S.track = t; S.modes = [];
     S.items = [];
@@ -257,11 +258,11 @@ export function mount(stage) {
 
   function savedUI() {
     const list = loadTracks();
-    const box = el(`<div class="kk-overlay"><div class="kk-card kk-saved-card"><button class="kk-btn kk-back">↩️</button><div class="kk-grid"></div></div></div>`);
+    const box = el(`<div class="kk-overlay"><div class="kk-card kk-saved-card"><button class="kk-btn kk-back">${icon('back')}</button><div class="kk-grid"></div></div></div>`);
     const grid = box.querySelector('.kk-grid');
     if (!list.length) grid.appendChild(el(`<div class="kk-empty">🏁 ➜ 🖼️</div>`));
     list.forEach(s => {
-      const card = el(`<div class="kk-saved-item ${s.fav ? 'fav' : ''}"><canvas width="240" height="150"></canvas><button class="kk-star">⭐</button><button class="kk-del">✖</button><button class="kk-del-yes">🗑️</button></div>`);
+      const card = el(`<div class="kk-saved-item ${s.fav ? 'fav' : ''}"><canvas width="240" height="150"></canvas><button class="kk-star">${icon('star')}</button><button class="kk-del">${icon('close')}</button><button class="kk-del-yes">${icon('trash')}</button></div>`);
       const track = trackFromJSON(s.pts);
       const items = resnapItems(s.items || [], track);
       const theme = THEME_IDS.includes(s.theme) ? s.theme : 'country';
@@ -289,7 +290,7 @@ export function mount(stage) {
       <div class="kk-gright">
         <div class="kk-tabs">${TABS.map(([id, ic]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}">${ic}</button>`).join('')}</div>
         <div class="kk-opts"></div>
-        <button class="kk-ok">✔️</button>
+        <button class="kk-ok">${icon('check')}</button>
       </div></div></div>`);
     if (preview) { box.querySelector('.kk-gview').appendChild(preview.canvas); preview.show(L); }
     const st = statsOf(L);
@@ -307,7 +308,7 @@ export function mount(stage) {
       row('🎨', swatches('color'));
       row('〰️', swatches('color2'));
       row('', iconBtns('decal', DECALS, DECAL_ICON));
-      if (L.decal === 'number') row('#️⃣', `<button class="kk-ob kk-numdown">➖</button><b class="kk-num">${L.num}</b><button class="kk-ob kk-numup">➕</button>`);
+      if (L.decal === 'number') row('#️⃣', `<button class="kk-ob kk-numdown">${icon('minus')}</button><b class="kk-num">${L.num}</b><button class="kk-ob kk-numup">${icon('plus')}</button>`);
     }
     if (S.gTab === 'wheels') {
       if (L.body === 'hover') row('', '<div class="kk-note">🛸 ✔️</div>');
@@ -421,8 +422,8 @@ export function mount(stage) {
       if (TOUCH && S.phase === 'race') {
         const p = S.players[i];
         const pad = el(`<div class="kk-pad">
-          <div><button class="kk-tb" data-p="${p.id}" data-k="left">◀</button><button class="kk-tb" data-p="${p.id}" data-k="right">▶</button></div>
-          <div><button class="kk-tb kk-tb-s" data-p="${p.id}" data-k="down">▼</button><button class="kk-tb kk-tb-fire" data-p="${p.id}" data-k="fire">💥</button></div>
+          <div><button class="kk-tb" data-p="${p.id}" data-k="left">${icon('left')}</button><button class="kk-tb" data-p="${p.id}" data-k="right">${icon('right')}</button></div>
+          <div><button class="kk-tb kk-tb-s" data-p="${p.id}" data-k="down">${icon('down')}</button><button class="kk-tb kk-tb-fire" data-p="${p.id}" data-k="fire">💥</button></div>
         </div>`);
         d.appendChild(pad);
         if (R.views.length === 1) {
@@ -446,7 +447,7 @@ export function mount(stage) {
     R.mini = mini;
     R.miniBg = null;
     const guest = S.net && !S.net.isHost;
-    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">${guest ? '🚪' : '⏸'}</button></div>`);
+    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">${icon(guest ? 'leave' : 'pause')}</button></div>`);
     click(top.querySelector('.kk-pause'), () => { if (guest) { leaveOnline(); return; } S.paused = !S.net; pauseUI(); });
     ui.appendChild(top);
     if (S.paused) pauseUI();
@@ -455,7 +456,7 @@ export function mount(stage) {
   function pauseUI() {
     if ($('.kk-pausebox')) return;
     const box = el(`<div class="kk-overlay kk-pausebox"><div class="kk-card"><div class="kk-actions">
-      <button class="kk-big-btn kk-resume">▶️</button><button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button>
+      <button class="kk-big-btn kk-resume">${icon('play')}</button><button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>
     </div></div></div>`);
     click(box.querySelector('.kk-resume'), () => { S.paused = false; box.remove(); });
     click(box.querySelector('.kk-again'), () => raceAgain());
@@ -467,7 +468,7 @@ export function mount(stage) {
     const list = standings(R.race);
     const guest = S.net && !S.net.isHost;
     const box = el(`<div class="kk-overlay"><div class="kk-card kk-results"><div class="kk-trophy">🏆</div><ol></ol>
-      <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : '<button class="kk-big-btn kk-again">🔁</button><button class="kk-big-btn kk-edit">✏️</button>'}</div></div></div>`);
+      <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : `<button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>`}</div></div></div>`);
     list.forEach((c, i) => {
       const hi = R.localIds.indexOf(c.id);
       const who = hi >= 0 ? pname(hi) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
@@ -720,7 +721,7 @@ export function mount(stage) {
   const picsHTML = code => `<div class="kk-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
   function badgeUI() {
     const list = roster().filter(r => !r.cpu);
-    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => `<figure>${kartImg(r.look)}${cleanName(r.name) ? `<b>${cleanName(r.name)}</b>` : ''}</figure>`).join('')}</div><button class="kk-btn kk-leave" title="Leave">🚪</button></div>`);
+    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => `<figure>${kartImg(r.look)}${cleanName(r.name) ? `<b>${cleanName(r.name)}</b>` : ''}</figure>`).join('')}</div><button class="kk-btn kk-leave" title="Leave">${icon('leave')}</button></div>`);
     click(b.querySelector('.kk-leave'), () => leaveOnline());
     ui.appendChild(b);
   }
@@ -733,13 +734,13 @@ export function mount(stage) {
     const bar = el(`<div class="kk-bar"><div class="kk-panel kk-players"></div><div class="kk-panel kk-lobby-info">${lobbyInfo()}</div></div>`);
     const pl = bar.querySelector('.kk-players');
     S.players.forEach((p, i) => {
-      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? '<button class="kk-x">✖</button>' : ''}<i>🔧</i></div>`);
+      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? `<button class="kk-x">${icon('close')}</button>` : ''}<i>🔧</i></div>`);
       click(card, () => openGarage(i));
       click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
       pl.appendChild(card);
     });
     if (S.players.length < 2) {
-      const add = el(`<button class="kk-player kk-add" title="Two players">➕<b>P2</b></button>`);
+      const add = el(`<button class="kk-player kk-add" title="Two players">${icon('plus')}<b>P2</b></button>`);
       click(add, () => { S.players.push({ id: 'p2', look: cleanLook(null, 1), controls: 'wasd' }); savePrefs(); openGarage(1); });
       pl.appendChild(add);
     }
@@ -752,7 +753,7 @@ export function mount(stage) {
         <button class="kk-choice kk-join"><div class="kk-blank kk-pics3">🐶🍎🚀</div><span>🔑</span></button>
       </div>
       ${S.track ? '' : '<div class="kk-hint">✏️ ➜ 🏠</div>'}
-      <button class="kk-btn kk-back">↩️</button>
+      <button class="kk-btn kk-back">${icon('back')}</button>
     </div></div>`);
     if (S.track) drawThumb(box.querySelector('canvas'), S.course, S.items, S.theme);
     click(box.querySelector('.kk-host'), () => { if (S.track) hostRoom(); });
@@ -765,7 +766,7 @@ export function mount(stage) {
     const box = el(`<div class="kk-overlay"><div class="kk-card">
       <div class="kk-code kk-slots">${slots}</div>
       <div class="kk-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="kk-actions"><button class="kk-btn kk-back">↩️</button><button class="kk-btn kk-del-pic">⌫</button></div>
+      <div class="kk-actions"><button class="kk-btn kk-back">${icon('back')}</button><button class="kk-btn kk-del-pic">${icon('backspace')}</button></div>
     </div></div>`);
     box.querySelectorAll('.kk-keypad button').forEach(b => click(b, () => {
       if (S.joinCode.length >= CODE_LEN) return;
@@ -1032,7 +1033,7 @@ export function mount(stage) {
   const onUp = e => {
     if (S.phase !== 'build') return;
     if (S.stroke) {
-      const t = buildTrack(S.stroke);
+      const t0 = buildTrack(S.stroke), t = t0 && smoothTrack(t0);
       S.stroke = null;
       if (t) { S.track = t; S.modes = []; setCourse(); sound.win(); render(); } else sound.bump();
     }

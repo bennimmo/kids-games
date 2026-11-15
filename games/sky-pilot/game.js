@@ -22,6 +22,7 @@ import { buildCockpit } from './cockpit.js';
 import { newPlaneState, placePlane, stepPlane, netState } from './physics.js';
 import { MISSIONS } from './missions.js';
 import { clamp, lerp, smooth } from './noise.js';
+import { icon } from '../../js/engine/icons.js';
 
 const GAME = 'sky-pilot';
 const PREFS_KEY = 'sky-pilot-v1';
@@ -747,7 +748,7 @@ export function mount(stage) {
         <div class="sp-tr">
           <canvas class="sp-map" width="320" height="320"></canvas>
           <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
-          <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause">⏸</button></div>
+          <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause" aria-label="Pause">${icon('pause')}</button></div>
         </div>
         <div class="sp-thrbar"><i></i><span>⚡</span></div>
         ${p.touch ? `<div class="sp-stick"><i></i></div>
@@ -1242,7 +1243,7 @@ export function mount(stage) {
         ${toggle('sound', '🔊', '🔇', 'Sound')}
       </div>
       ${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <button class="sp-help-btn">⌨️ ?</button>
+      <button class="sp-help-btn">${icon('keyboard')} ?</button>
     </div></div>`);
     click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
     wireToggles(box.querySelector('.sp-toggles'));
@@ -1276,7 +1277,7 @@ export function mount(stage) {
       <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
       <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
       <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>
-      <button class="sp-btn sp-ok">✔️</button>
+      <button class="sp-btn sp-ok" aria-label="OK">${icon('check')}</button>
     </div></div>`);
     click(box.querySelector('.sp-ok'), () => { S.help = false; box.remove(); });
     ui.appendChild(box);
@@ -1293,8 +1294,8 @@ export function mount(stage) {
       <div class="sp-row sp-colors">${LIVERIES.map((c, i) => `<button class="sp-col ${pl.color === i ? 'on' : ''}" data-c="${i}" style="background:#${new THREE.Color(c).getHexString()}"></button>`).join('')}</div>
       <div class="sp-row sp-starts">${starts.map(s => `<button class="sp-start ${prefs.start === s.id ? 'on' : ''}" data-s="${s.id}" title="${s.name}"><span>${s.icon}</span><small>${s.name}</small></button>`).join('')}</div>
       <div class="sp-row">
-        <button class="sp-btn sp-back">↩️</button>
-        <button class="sp-btn sp-fly">▶</button>
+        <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
+        <button class="sp-btn sp-fly" aria-label="Fly">${icon('play')}</button>
       </div>
       ${net.room ? `<div class="sp-code"><b>🔑</b>${codeToPics(net.code).map(p => `<span>${p}</span>`).join('')}</div><p class="sp-friends">${Object.values(net.players || {}).map(x => '🙂 ' + (cleanName(x && x.name) || '')).join(' &nbsp; ')}</p>` : ''}
     </div></div>`);
@@ -1314,7 +1315,7 @@ export function mount(stage) {
         <button class="sp-go sp-join"><span>🔑</span>Join a room</button>
       </div>
       ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <button class="sp-btn sp-back">↩️</button>
+      <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
     </div></div>`);
     click(box.querySelector('.sp-host'), () => { if (!S.busy) { S.mode = 'solo'; hostRoom(); } });
     click(box.querySelector('.sp-join'), () => { if (S.busy) return; sound.pop(); S.joinCode = ''; S.phase = 'join'; render(); });
@@ -1327,7 +1328,7 @@ export function mount(stage) {
       <div class="sp-code sp-slots">${slots}</div>
       ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
       <div class="sp-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="sp-row"><button class="sp-btn sp-del">⌫</button><button class="sp-btn sp-back">↩️</button></div>
+      <div class="sp-row"><button class="sp-btn sp-del" aria-label="Delete">${icon('backspace')}</button><button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button></div>
     </div></div>`);
     box.querySelectorAll('.sp-keypad button').forEach(b => click(b, () => {
       if (S.busy || S.joinCode.length >= CODE_LEN) return;
@@ -1346,7 +1347,7 @@ export function mount(stage) {
   }
   function pauseUI() {
     const box = el(`<div class="sp-overlay"><div class="sp-card sp-pausecard">
-      <h2>⏸</h2>
+      <h2>${icon('pause')}</h2>
       <div class="sp-row sp-toggles">
         <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
         ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
@@ -1355,12 +1356,12 @@ export function mount(stage) {
         ${toggle('sound', '🔊', '🔇', 'Sound')}
       </div>
       <div class="sp-row">
-        <button class="sp-btn sp-resume">▶</button>
-        <button class="sp-btn sp-respawn">🔁</button>
+        <button class="sp-btn sp-resume" aria-label="Keep flying">${icon('play')}</button>
+        <button class="sp-btn sp-respawn" aria-label="Start again">${icon('retry')}</button>
         <button class="sp-btn sp-plane">🛩️</button>
-        <button class="sp-btn sp-helpb">⌨️</button>
-        ${net.room ? '<button class="sp-btn sp-leave">🚪</button>' : ''}
-        <button class="sp-btn sp-quit">🏠</button>
+        <button class="sp-btn sp-helpb" aria-label="Keys">${icon('keyboard')}</button>
+        ${net.room ? `<button class="sp-btn sp-leave" aria-label="Leave">${icon('leave')}</button>` : ''}
+        <button class="sp-btn sp-quit" aria-label="Home">${icon('home')}</button>
       </div>
     </div></div>`);
     click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });

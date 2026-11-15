@@ -295,7 +295,7 @@ export function mount(stage) {
     // Hold-to-exit progress ring on the home button.
     if (homeBtn && holdT) {
       const p = Math.min(1, (performance.now() - holdStart) / (HOLD_TO_EXIT * 1000));
-      homeBtn.style.background = `conic-gradient(#fff ${p * 360}deg, #ff7043 0)`;
+      homeBtn.style.background = `conic-gradient(#ffd54f ${p * 360}deg, #ff6a3d 0)`;
     }
 
     for (const c of clouds) { c.x += c.v * dt; if (c.x > 1.2) c.x = -0.2; }

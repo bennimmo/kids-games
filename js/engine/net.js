@@ -54,6 +54,9 @@ function firebase() {
   return fbPromise;
 }
 
+// Shared Firebase connection (used by friends.js too): { D, db, uid, now }
+export const firebaseCore = () => firebase();
+
 // How long friends wait for a host whose connection dropped before giving up.
 const HOST_GRACE_MS = 30000;
 

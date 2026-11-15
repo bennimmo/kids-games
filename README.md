@@ -27,7 +27,8 @@ Then open http://localhost:8000
 1. Make `games/<my-game>/game.js` that exports `mount(stage, game)`.
    - `stage` is the full-screen element to draw in.
    - Return a function that tidies up (stop loops, remove listeners).
-2. Add it to the list in `js/games.js` (name, emoji icon, colour).
+2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / big).
+   - Optional: a drawn menu icon in `js/game-art.js`.
 
 ## Shared engine bits (`js/engine/`)
 - `canvas.js` – full-screen sharp canvas
@@ -35,6 +36,15 @@ Then open http://localhost:8000
 - `keys.js` – keyboard state (for 2 players on one keyboard)
 - `sound.js` – little beeps, no audio files needed
 - `coming-soon.js` – placeholder screen
+
+## 📞 Friends (on the menu)
+- Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
+- Up to 4 friends in a group. Anyone in the group can let more in.
+- Friend bubbles float on the side over every game. Drag them up/down or to the other side.
+- Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
+- 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
+- `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
+- Some networks block direct links: a TURN server would fix that (not added yet).
 
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
@@ -78,6 +88,7 @@ Then open http://localhost:8000
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
 - 8 themes (top bar): 🏙️ city, 🌳 countryside, 🏜️ desert, ❄️ snow (slippy, snowing), 🏖️ beach, 🌋 volcano, 🍭 candy, 🌙 moon (low gravity).
+- Drawn tracks are smoothed (wobbles from the finger/mouse removed) before the road is made.
 - Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
 - Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
 - Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).
@@ -150,7 +161,7 @@ Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - Your turn (45 s): ◀ ▶ drive (fuel runs out), 🎒 pick a weapon, drag back from your tank like a slingshot, let go to fire.
 - Keys: ← → drive, ↑ ↓ aim, hold Space for power, Q / E change weapon.
 - 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb.
-- Wind changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
+- 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
 - Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).

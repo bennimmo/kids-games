@@ -9,6 +9,7 @@ import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
+import { icon } from '../../js/engine/icons.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
@@ -32,7 +33,7 @@ const CONTROLS = {
 };
 const KEY_LABELS = { arrows: ['▲', '◀', '▼', '▶'], wasd: ['W', 'A', 'S', 'D'] };
 const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
-const TOUCH_ICON = { left: '◀', right: '▶', up: '▲', down: '▼', fire: '💥' };
+const TOUCH_ICON = { left: icon('left'), right: icon('right'), up: icon('up'), down: icon('down'), fire: '💥' };
 // phones: small screen, so the camera follows your car and there's no 2-player mode
 const PHONE = () => TOUCH && Math.min(innerWidth, innerHeight) < 520;
 // how you steer on a touch screen: 👆 finger on the track, 📱 tilt, 🎮 buttons
@@ -159,9 +160,9 @@ export function mount(stage) {
 
   function buildUI() {
     const top = el(`<div class="rt-top">
-      ${S.net ? '' : '<button class="rt-btn rt-online" title="Play with friends">🌍</button>'}
-      <button class="rt-btn rt-saved" title="Saved tracks">🖼️</button>
-      <button class="rt-btn rt-clear" title="Clear">🗑️</button></div>`);
+      ${S.net ? '' : `<button class="rt-btn rt-online" title="Play with friends">${icon('globe')}</button>`}
+      <button class="rt-btn rt-saved" title="Saved tracks">${icon('gallery')}</button>
+      <button class="rt-btn rt-clear" title="Clear">${icon('trash')}</button></div>`);
     click(top.querySelector('.rt-clear'), () => { S.track = null; S.items = []; sceneChanged(); render(); });
     click(top.querySelector('.rt-saved'), () => openSaved('build'));
     const on = top.querySelector('.rt-online');
@@ -176,7 +177,7 @@ export function mount(stage) {
         <div class="rt-player">
           <canvas width="120" height="72"></canvas>
           <div class="rt-keys">${keyHTML(p.controls)}</div>
-          ${i > 0 ? '<button class="rt-x">✖</button>' : ''}
+          ${i > 0 ? `<button class="rt-x">${icon('close')}</button>` : ''}
         </div>`);
       drawCarIcon(card.querySelector('canvas'), p);
       click(card, () => { S.customFor = S.customFor === p.id ? null : p.id; render(); });
@@ -185,7 +186,7 @@ export function mount(stage) {
       pl.appendChild(card);
     });
     if (cpuPlaying()) {
-      const bot = el(`<div class="rt-player rt-cpu"><canvas width="120" height="72"></canvas><div class="rt-robot">🤖</div><button class="rt-x">✖</button></div>`);
+      const bot = el(`<div class="rt-player rt-cpu"><canvas width="120" height="72"></canvas><div class="rt-robot">🤖</div><button class="rt-x">${icon('close')}</button></div>`);
       drawCarIcon(bot.querySelector('canvas'), cpuPlayer());
       click(bot.querySelector('.rt-x'), () => setCpu(false));
       pl.appendChild(bot);
@@ -196,7 +197,7 @@ export function mount(stage) {
       pl.appendChild(bot);
     }
     if (S.players.length < 2 && !PHONE()) {
-      const add = el(`<button class="rt-player rt-add"><canvas width="120" height="72"></canvas><div class="rt-plus">➕</div></button>`);
+      const add = el(`<button class="rt-player rt-add"><canvas width="120" height="72"></canvas><div class="rt-plus">${icon('plus')}</div></button>`);
       drawCarIcon(add.querySelector('canvas'), { color: '#bdbdbd', style: 'truck' });
       click(add, () => {
         const used = S.players.map(p => p.color);
@@ -232,7 +233,7 @@ export function mount(stage) {
     bar.appendChild(go);
     ui.appendChild(bar);
 
-    ui.appendChild(el(`<div class="rt-bin">🗑️</div>`));
+    ui.appendChild(el(`<div class="rt-bin">${icon('trash')}</div>`));
     const who = S.players.find(p => p.id === S.customFor);
     if (who) customise(who);
   }
@@ -249,7 +250,7 @@ export function mount(stage) {
       <div class="rt-opts rt-opt-colors"></div>
       <div class="rt-opts rt-opt-styles"></div>
       <div class="rt-opts rt-opt-decals"></div>
-      <button class="rt-ok">✔️</button>
+      <button class="rt-ok">${icon('check')}</button>
     </div>`);
     const set = (k, v) => { player[k] = v; savePlayers(S.players); syncMyPlayers(); render(); };
     COLORS.forEach(c => {
@@ -287,10 +288,10 @@ export function mount(stage) {
   function raceUI() {
     const guest = S.net && !S.net.isHost;
     const top = el(guest
-      ? `<div class="rt-top"><button class="rt-btn rt-leave" title="Leave">🚪</button></div>`
+      ? `<div class="rt-top"><button class="rt-btn rt-leave" title="Leave">${icon('leave')}</button></div>`
       : `<div class="rt-top">
-      <button class="rt-btn rt-again" title="Race again">🔁</button>
-      <button class="rt-btn rt-draw" title="Draw">✏️</button>
+      <button class="rt-btn rt-again" title="Race again">${icon('retry')}</button>
+      <button class="rt-btn rt-draw" title="Draw">${icon('edit')}</button>
     </div>`);
     if (guest) click(top.querySelector('.rt-leave'), () => leaveOnline());
     else {
@@ -476,7 +477,7 @@ export function mount(stage) {
       <div class="rt-podium"></div>
       <div class="rt-actions">${S.net && !S.net.isHost
         ? '<div class="rt-wait rt-wait-small">⏳</div>'
-        : '<button class="rt-big rt-again2">🔁</button><button class="rt-big rt-draw2">✏️</button>'}
+        : `<button class="rt-big rt-again2">${icon('retry')}</button><button class="rt-big rt-draw2">${icon('edit')}</button>`}
       </div></div></div>`);
     list.forEach((c, i) => {
       const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas>${c.name ? `<b class="rt-name">${c.name}</b>` : ''}</div>`);
@@ -497,7 +498,7 @@ export function mount(stage) {
         <button class="rt-choice rt-fresh"><div class="rt-blank"></div><span>✨</span></button>
         <button class="rt-choice rt-open"><div class="rt-blank rt-gallery">🖼️</div><span>⭐</span></button>
       </div>
-      <button class="rt-btn rt-back">↩️</button>
+      <button class="rt-btn rt-back">${icon('back')}</button>
     </div></div>`);
     R.thumb(box.querySelector('canvas'));
     click(box.querySelector('.rt-edit'), () => toBuild(false));
@@ -521,7 +522,7 @@ export function mount(stage) {
   function savedUI() {
     const list = loadSaved();
     const box = el(`<div class="rt-overlay"><div class="rt-card rt-saved-card">
-      <button class="rt-btn rt-back">↩️</button>
+      <button class="rt-btn rt-back">${icon('back')}</button>
       <div class="rt-gallery-grid"></div>
     </div></div>`);
     const grid = box.querySelector('.rt-gallery-grid');
@@ -529,9 +530,9 @@ export function mount(stage) {
     list.forEach(s => {
       const card = el(`<div class="rt-saved-item ${s.fav ? 'fav' : ''}">
         <canvas width="240" height="150"></canvas>
-        <button class="rt-star">⭐</button>
-        <button class="rt-del">✖</button>
-        <button class="rt-del-yes">🗑️</button>
+        <button class="rt-star">${icon('star')}</button>
+        <button class="rt-del">${icon('close')}</button>
+        <button class="rt-del-yes">${icon('trash')}</button>
       </div>`);
       const track = trackFromJSON(s.pts);
       const items = resnapItems(s.items, track);
@@ -861,7 +862,7 @@ export function mount(stage) {
   function badgeUI(watching) {
     const wait = S.net.status === 'waiting' ? '<span class="rt-badge-wait">📶⏳</span>' : '';
     const pen = watching ? '<span class="rt-badge-pen">✏️</span>' : '';
-    const b = el(`<div class="rt-badge">${picsHTML(S.net.code)}${carsHTML()}${pen}${wait}<button class="rt-btn rt-leave">🚪</button></div>`);
+    const b = el(`<div class="rt-badge">${picsHTML(S.net.code)}${carsHTML()}${pen}${wait}<button class="rt-btn rt-leave">${icon('leave')}</button></div>`);
     fillCars(b);
     click(b.querySelector('.rt-leave'), () => leaveOnline());
     ui.appendChild(b);
@@ -873,7 +874,7 @@ export function mount(stage) {
         <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
         <button class="rt-choice rt-join"><div class="rt-blank rt-gallery rt-pics3">🐶🍎🚀</div><span>🔑</span></button>
       </div>
-      <button class="rt-btn rt-back">↩️</button>
+      <button class="rt-btn rt-back">${icon('back')}</button>
     </div></div>`);
     if (S.track) R.thumb(box.querySelector('canvas'));
     click(box.querySelector('.rt-host'), () => { if (S.track) hostRoom(); });
@@ -887,8 +888,8 @@ export function mount(stage) {
     const box = el(`<div class="rt-overlay"><div class="rt-card">
       <div class="rt-code rt-slots">${slots}</div>
       <div class="rt-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <button class="rt-btn rt-del-pic">⌫</button>
-      <button class="rt-btn rt-back">↩️</button>
+      <button class="rt-btn rt-del-pic">${icon('backspace')}</button>
+      <button class="rt-btn rt-back">${icon('back')}</button>
     </div></div>`);
     box.querySelectorAll('.rt-keypad button').forEach(b => click(b, () => {
       if (S.joinCode.length >= CODE_LEN) return;

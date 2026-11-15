@@ -24,10 +24,11 @@
 .sd-msg.show { opacity: 1; }
 .sd-pad { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: space-between; padding: 0 14px; }
 .sd-pad div { display: flex; gap: 12px; }
-.sd-pad button { pointer-events: auto; touch-action: none; width: 76px; height: 76px; border-radius: 50%; border: 3px solid var(--pc) !important; background: rgba(10,8,30,.5); font-size: 30px; }
-.sd-pad button.on { background: var(--pc); }
+.sd-pad button { pointer-events: auto; touch-action: none; width: 76px; height: 76px; padding: 0; border-radius: 50%; border: 3px solid var(--pc) !important; background: rgba(10,8,30,.5); color: #fff !important; font-size: 36px; display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(0,0,0,.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.sd-pad button .ic { stroke-width: 3.2; }
+.sd-pad button.on { background: var(--pc); transform: scale(.93); }
 .sd-pad ~ .sd-speed, .sd-view:has(.sd-pad) .sd-speed { bottom: 100px; }
-.sd-tilt { position: absolute; right: 14px; top: 70px; width: 56px; height: 56px; border-radius: 50%; pointer-events: auto; touch-action: none; background: rgba(10,8,30,.6); border: 3px solid var(--pc) !important; font-size: 28px; }
+.sd-tilt { position: absolute; right: 14px; top: 70px; width: 56px; height: 56px; padding: 0; display: grid; place-items: center; border-radius: 50%; pointer-events: auto; touch-action: none; background: rgba(10,8,30,.6); border: 3px solid var(--pc) !important; font-size: 28px; }
 .sd-tilting .sd-pad > div:first-child { visibility: hidden; } /* tilt steers, so no ◀ ▶ */
 .sd-divider { position: absolute; background: #000; box-shadow: 0 0 12px #7b6cff; }
 
@@ -43,13 +44,17 @@
 .sd-style.on { background: #ffd54f !important; border-color: #ffd54f !important; color: #1a1240 !important; }
 .sd-style.off { opacity: .5; cursor: default; }
 .sd-levels > span { font-size: 30px; }
-.sd-level { width: 64px; height: 64px; border-radius: 50%; font-size: 32px; background: #1c1650; border: 3px solid #3a3190 !important; }
+.sd-level { width: 64px; height: 64px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: 32px; transition: transform .1s; background: #1c1650; border: 3px solid #3a3190 !important; }
 .sd-level.on { background: #39ffc4; border-color: #39ffc4 !important; }
-.sd-go { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px; border-radius: 20px; font-size: 17px; font-weight: 700; color: #2a1650 !important; background: linear-gradient(180deg, #ffe27a, #ffb43d); box-shadow: 0 6px 0 #b8741c; }
+.sd-go { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px; border-radius: 20px; font-size: 17px; font-weight: 700; color: #2a1650 !important; background: linear-gradient(180deg, #ffe27a, #ffb43d); box-shadow: inset 0 -4px 0 rgba(150,80,10,.25), inset 0 2px 0 rgba(255,255,255,.5), 0 10px 20px -8px rgba(255,180,61,.7); transition: transform .1s; }
 .sd-go span { font-size: 30px; }
-.sd-go:active, .sd-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,.3); }
+.sd-go:active, .sd-btn:active, .sd-keypad button:active, .sd-level:active, .sd-style:active { transform: scale(.93); }
+.sd-btn:active, .sd-keypad button:active { box-shadow: var(--btn-press); }
 .sd-keys { margin: 8px 0 0; color: #b3acdf; font-size: 14px; }
-.sd-btn { width: 72px; height: 72px; border-radius: 50%; font-size: 34px; background: #fff; color: #222 !important; box-shadow: 0 6px 0 rgba(0,0,0,.3); }
+.sd-btn { width: 72px; height: 72px; padding: 0; border-radius: 50%; font-size: 34px; background: var(--btn-face); color: #2a1650 !important; box-shadow: var(--btn-shadow), 0 0 0 3px rgba(255,255,255,.15); display: inline-grid; place-items: center; transition: transform .1s; }
+.sd-btn .ic { stroke-width: 2.9; }
+.sd-start, .sd-again { background: var(--btn-ok); color: #fff !important; }
+.sd-quit, .sd-leave { color: #e53935 !important; }
 .sd-btn.off { opacity: .35; pointer-events: none; }
 .sd-start { background: #43a047; color: #fff !important; font-size: 40px; width: 96px; height: 96px; }
 .sd-again { background: #ffd54f; }
@@ -67,8 +72,7 @@
 .sd-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
 .sd-code span { width: 76px; height: 76px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 48px; display: flex; align-items: center; justify-content: center; }
 .sd-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; justify-content: center; }
-.sd-keypad button { width: 72px; height: 72px; border-radius: 18px; font-size: 42px; background: #e3f2fd; box-shadow: 0 5px 0 rgba(0,0,0,.25); }
-.sd-keypad button:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.25); }
+.sd-keypad button { width: 72px; height: 72px; padding: 0; border-radius: 18px; font-size: 42px; background: linear-gradient(180deg, #f3f9ff, #dcecfb); box-shadow: var(--btn-shadow); }
 .sd-ships { display: flex; gap: 12px; justify-content: center; font-size: 44px; }
 .sd-ships span { position: relative; width: 72px; height: 72px; border-radius: 50%; border: 4px solid var(--pc, #555); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); }
 .sd-ships span b { position: absolute; bottom: -10px; right: -10px; font-size: 26px; }
