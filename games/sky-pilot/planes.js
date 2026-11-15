@@ -66,7 +66,7 @@ const M = {
   get dark() { return paint(0x2b2f33, { metalness: 0.3, roughness: 0.6, clearcoat: 0 }); },
   get metal() { return paint(0xc9ced3, { metalness: 0.95, roughness: 0.28, clearcoat: 0 }); },
   get rubber() { return paint(0x1a1a1a, { metalness: 0, roughness: 0.9, clearcoat: 0 }); },
-  get glass() { return paint(0x223040, { metalness: 0.9, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0 }); },
+  get glass() { return paint(0x0e1724, { metalness: 0.4, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.55 }); },
   get canopy() { return paint(0x8fb4d8, { metalness: 0.2, roughness: 0.02, transparent: true, opacity: 0.32, clearcoat: 1, depthWrite: false }); },
   get black() { return paint(0x0c0d0f, { metalness: 0.2, roughness: 0.5, clearcoat: 0 }); },
 };
@@ -74,9 +74,19 @@ const M = {
 // ---------------------------------------------------------------- shapes
 // body of revolution along z: pts = [[radius, z], ...] from nose (high z) to tail
 function lathe(pts, seg = 24, sy = 1, sx = 1) {
-  const g = new THREE.LatheGeometry(pts.map(([r, z]) => new THREE.Vector2(Math.max(r, 0.0001), z)), seg);
+  // points go tail -> nose so the faces point outwards
+  const g = new THREE.LatheGeometry(pts.slice().reverse().map(([r, z]) => new THREE.Vector2(Math.max(r, 0.0001), z)), seg);
   g.rotateX(Math.PI / 2);
   // LatheGeometry points go up the y axis; after the turn they run along z
+  g.scale(sx, sy, 1);
+  g.computeVertexNormals();
+  return g;
+}
+// a piece of the body's skin (between two angles round it), used for windows that follow the body shape.
+// angle 0 = bottom, PI = top, PI/2 = left side
+function skin(pts, a0, a1, sy = 1, sx = 1, grow = 1.025) {
+  const g = new THREE.LatheGeometry(pts.slice().reverse().map(([r, z]) => new THREE.Vector2(r * grow, z)), 12, a0, a1 - a0);
+  g.rotateX(Math.PI / 2);
   g.scale(sx, sy, 1);
   g.computeVertexNormals();
   return g;
@@ -168,21 +178,24 @@ export function buildPlane(type, color = PLANES[type].color) {
   root.add(body, outer);
   const parts = { props: [], ailL: null, ailR: null, elev: null, rudder: null, flapL: null, flapR: null, gear: [], gearDoors: [], lights: {}, flame: null, rotor: null, tailRotor: null, smoke: new THREE.Vector3(0, 0, -P.length / 2) };
   const C = paint(color), W = M.white;
-  const accent = paint(new THREE.Color(color).offsetHSL(0, 0, -0.18).getHex());
+  const accent = paint(new THREE.Color(color).offsetHSL(0, 0, -0.07).getHex());
 
   if (type === 'cub') {
     body.add(mesh(lathe([[0.001, 3.5], [0.22, 3.42], [0.42, 3.2], [0.55, 2.9], [0.6, 2.4], [0.62, 1.6], [0.62, 0.4], [0.58, -0.4], [0.42, -2.2], [0.22, -4.2], [0.08, -4.9], [0.001, -5]], 24, 1.25, 0.92), W));
     // stripe + cabin
     body.add(mesh(lathe([[0.63, 2.2], [0.64, 1.6], [0.64, 0.4], [0.6, -0.4], [0.44, -2.2], [0.24, -4.2]], 24, 0.5, 0.94), C, 0, -0.25, 0));
-    const cab = mesh(new THREE.SphereGeometry(0.66, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.glass, 0, 0.52, 0.65); cab.scale.set(0.95, 0.75, 1.7); body.add(cab);
+    // windscreen + side windows that follow the body
+    body.add(mesh(skin([[0.555, 2.9], [0.6, 2.4], [0.62, 2.0]], Math.PI - 0.75, Math.PI + 0.75, 1.25, 0.92), M.glass));
+    for (const [a0, a1] of [[Math.PI / 2 + 0.25, Math.PI - 0.3], [Math.PI + 0.3, Math.PI * 1.5 - 0.25]]) body.add(mesh(skin([[0.62, 1.9], [0.62, 0.9], [0.62, 0.4], [0.6, -0.1]], a0, a1, 1.25, 0.92), M.glass));
     // high wing with struts
     const ws = [{ p: [5.5, 1.35, 1.0], c: 1.35, t: 0.13 }, { p: [0.6, 1.4, 1.0], c: 1.5, t: 0.14 }, { p: [-0.6, 1.4, 1.0], c: 1.5, t: 0.14 }, { p: [-5.5, 1.35, 1.0], c: 1.35, t: 0.13 }];
     outer.add(mesh(loft(ws), W));
     outer.add(mesh(loft([{ p: [5.52, 1.34, 1.0], c: 1.35, t: 0.13 }, { p: [5.6, 1.34, 1.0], c: 1.35, t: 0.13 }]), C));
     outer.add(mesh(loft([{ p: [-5.52, 1.34, 1.0], c: 1.35, t: 0.13 }, { p: [-5.6, 1.34, 1.0], c: 1.35, t: 0.13 }]), C));
     for (const s of [1, -1]) {
-      const st = mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.3, 6), M.metal, s * 1.7, 0.5, 0.4);
-      st.rotation.z = s * 1.05; outer.add(st);
+      // strut: from the bottom of the body up and out to the wing
+      const st = mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.0, 6), M.metal, s * 1.75, 0.52, 0.4);
+      st.rotation.z = -s * 0.99; outer.add(st);
     }
     parts.ailL = pivot(outer, 4.1, 1.38, -0.42); parts.ailL.add(mesh(new THREE.BoxGeometry(2.6, 0.06, 0.4), C, 0, 0, -0.2));
     parts.ailR = pivot(outer, -4.1, 1.38, -0.42); parts.ailR.add(mesh(new THREE.BoxGeometry(2.6, 0.06, 0.4), C, 0, 0, -0.2));
@@ -213,12 +226,13 @@ export function buildPlane(type, color = PLANES[type].color) {
   if (type === 'splash') {
     body.add(mesh(lathe([[0.001, 3.9], [0.55, 3.8], [0.75, 3.5], [0.78, 3.0], [0.8, 2.0], [0.8, 0.5], [0.72, -1.5], [0.45, -4.0], [0.18, -6.2], [0.001, -6.5]], 24, 1.25, 0.95), C));
     body.add(mesh(lathe([[0.79, 3.0], [0.81, 2.0], [0.81, 0.5], [0.73, -1.5], [0.46, -4.0]], 24, 0.4, 0.96), W, 0, -0.38, 0));
-    const cab = mesh(new THREE.SphereGeometry(0.8, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.glass, 0, 0.62, 1.0); cab.scale.set(0.95, 0.65, 1.9); body.add(cab);
+    body.add(mesh(skin([[0.77, 3.05], [0.79, 2.6], [0.8, 2.2]], Math.PI - 0.8, Math.PI + 0.8, 1.25, 0.95), M.glass));
+    for (const [a0, a1] of [[Math.PI / 2 + 0.25, Math.PI - 0.32], [Math.PI + 0.32, Math.PI * 1.5 - 0.25]]) body.add(mesh(skin([[0.8, 2.1], [0.8, 1.0], [0.79, 0.2], [0.77, -0.4]], a0, a1, 1.25, 0.95), M.glass));
     // radial engine cowl
     body.add(mesh(cyl(0.82, 0.8, 0.9, 20), M.dark, 0, 0, 3.4));
     const ws = [{ p: [7.3, 1.55, 1.4], c: 1.7, t: 0.13 }, { p: [0.7, 1.62, 1.4], c: 1.9, t: 0.14 }, { p: [-0.7, 1.62, 1.4], c: 1.9, t: 0.14 }, { p: [-7.3, 1.55, 1.4], c: 1.7, t: 0.13 }];
     outer.add(mesh(loft(ws), C));
-    for (const s of [1, -1]) { const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.9, 6), M.metal, s * 2.1, 0.55, 0.7); st.rotation.z = s * 1.05; outer.add(st); }
+    for (const s of [1, -1]) { const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.85, 6), M.metal, s * 2.25, 0.55, 0.9); st.rotation.z = -s * 1.0; outer.add(st); }
     parts.ailL = pivot(outer, 5.6, 1.58, -0.35); parts.ailL.add(mesh(new THREE.BoxGeometry(3, 0.07, 0.5), W, 0, 0, -0.25));
     parts.ailR = pivot(outer, -5.6, 1.58, -0.35); parts.ailR.add(mesh(new THREE.BoxGeometry(3, 0.07, 0.5), W, 0, 0, -0.25));
     parts.flapL = pivot(outer, 2.4, 1.6, -0.38); parts.flapL.add(mesh(new THREE.BoxGeometry(3.2, 0.07, 0.5), C, 0, 0, -0.25));
@@ -294,13 +308,16 @@ export function buildPlane(type, color = PLANES[type].color) {
   if (type === 'zoom') {
     body.add(mesh(lathe([[0.001, 8.3], [0.18, 7.8], [0.42, 6.6], [0.7, 5.0], [0.9, 3.4], [1.0, 1.0], [1.05, -3.0], [0.95, -5.6], [0.72, -6.9], [0.66, -7.2]], 24, 0.9, 1.15), C));
     // intakes
-    for (const s of [1, -1]) body.add(mesh(new THREE.BoxGeometry(0.55, 0.8, 4.2), accent, s * 1.05, -0.15, 0.6));
+    for (const s of [1, -1]) {
+      body.add(mesh(lathe([[0.36, 2.6], [0.42, 2.2], [0.42, -0.6], [0.2, -1.8]], 16, 1.2, 0.8), C, s * 0.98, -0.2, 0.4));
+      body.add(mesh(new THREE.CircleGeometry(0.32, 16).scale(0.8, 1.2, 1), M.black, s * 0.98, -0.2, 3.0 + 0.01));
+    }
     const can = mesh(new THREE.SphereGeometry(0.62, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), M.canopy, 0, 0.62, 3.8); can.scale.set(0.9, 0.95, 2.6); body.add(can); parts.canopy = can;
     const canFrame = mesh(new THREE.TorusGeometry(0.56, 0.035, 6, 24, Math.PI), M.dark, 0, 0.62, 3.1); canFrame.scale.set(1, 1, 1); body.add(canFrame);
     // delta-ish wings
     const ws = [{ p: [5.0, 0.0, -3.3], c: 1.6, t: 0.05 }, { p: [1.0, 0.05, 1.8], c: 7.0, t: 0.06 }, { p: [-1.0, 0.05, 1.8], c: 7.0, t: 0.06 }, { p: [-5.0, 0.0, -3.3], c: 1.6, t: 0.05 }];
     outer.add(mesh(loft(ws), C));
-    for (const s of [1, -1]) outer.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 3, 8).rotateX(Math.PI / 2), M.grey, s * 5.05, 0, -3.2)); // wingtip rails
+    for (const s of [1, -1]) outer.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 8).rotateX(Math.PI / 2), M.grey, s * 5.02, 0, -4.0)); // wingtip rails
     parts.ailL = pivot(outer, 3.6, 0.0, -4.7); parts.ailL.add(mesh(new THREE.BoxGeometry(2.4, 0.06, 0.55), accent, 0, 0, -0.27));
     parts.ailR = pivot(outer, -3.6, 0.0, -4.7); parts.ailR.add(mesh(new THREE.BoxGeometry(2.4, 0.06, 0.55), accent, 0, 0, -0.27));
     parts.flapL = pivot(outer, 1.7, 0.0, -4.9); parts.flapL.add(mesh(new THREE.BoxGeometry(1.6, 0.06, 0.6), accent, 0, 0, -0.3));
@@ -332,7 +349,7 @@ export function buildPlane(type, color = PLANES[type].color) {
 
   if (type === 'whirly') {
     const cab = mesh(new THREE.SphereGeometry(1.25, 28, 18), C, 0, 0.3, 0.2); cab.scale.set(0.95, 1, 1.55); body.add(cab);
-    const bub = mesh(new THREE.SphereGeometry(1.27, 28, 14, -1.2, 2.4, 0.35, 1.25), M.glass, 0, 0.3, 0.25); bub.scale.set(0.96, 1.01, 1.56); body.add(bub);
+    const bub = mesh(new THREE.SphereGeometry(1.27, 28, 14, Math.PI / 2 - 1.15, 2.3, 0.35, 1.3), M.glass, 0, 0.3, 0.25); bub.scale.set(0.96, 1.01, 1.56); body.add(bub);
     body.add(mesh(lathe([[0.55, -1.2], [0.42, -3], [0.2, -6.4], [0.15, -6.8]], 16, 1.2), C, 0, 0.55, 0));
     body.add(mesh(new THREE.BoxGeometry(1.1, 0.45, 1.6), M.grey, 0, 1.55, -0.6)); // engine
     body.add(mesh(loft([{ p: [0, 0.6, -6.0], c: 1.0, t: 0.12 }, { p: [0, 2.2, -6.9], c: 0.6, t: 0.12 }], true), C));
@@ -363,7 +380,7 @@ export function buildPlane(type, color = PLANES[type].color) {
     navLight(outer, 0x20ff40, ...L.wingR, P.length > 20 ? 2.2 : 1.4),
     navLight(outer, 0xffffff, ...L.tail, 1.2),
   ];
-  parts.strobes = [navLight(outer, 0xffffff, ...L.wingL, 5), navLight(outer, 0xffffff, ...L.wingR, 5)];
+  parts.strobes = [navLight(outer, 0xffffff, ...L.wingL, P.length > 20 ? 4 : 2.6), navLight(outer, 0xffffff, ...L.wingR, P.length > 20 ? 4 : 2.6)];
   parts.beacons = [navLight(outer, 0xff3020, ...L.beacon, 2.2)];
   if (L.beacon2) parts.beacons.push(navLight(outer, 0xff3020, ...L.beacon2, 2.2));
   parts.landGlow = navLight(outer, 0xfff4d0, ...L.land, P.length > 20 ? 5 : 2.5);
