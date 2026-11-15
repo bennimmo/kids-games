@@ -154,3 +154,11 @@
 .sp-pilots button i { font-style: normal; }
 .sp-pilots p { margin: 0; padding: 8px 14px; border-radius: 14px; background: rgba(8,20,40,.8); font-size: 22px; }
 @media (max-height: 560px) { .sp-pilots { top: 110px; max-height: calc(100% - 120px); } .sp-pilots button { padding: 4px 10px; min-width: 180px; } }
+
+/* map extras */
+.sp-near { display: flex; align-items: center; gap: 6px; max-width: 240px; font-size: 14px; padding: 3px 10px; border-radius: 12px; background: rgba(8,20,40,.6); white-space: nowrap; pointer-events: none; }
+.sp-near-arrow { font-style: normal; display: inline-block; transition: transform .2s; }
+.sp-near-txt { overflow: hidden; text-overflow: ellipsis; }
+.sp-sky { font-size: 18px; }
+.sp-bigmap .sp-near { display: none; }
+@media (max-height: 560px) { .sp-near { display: none; } }

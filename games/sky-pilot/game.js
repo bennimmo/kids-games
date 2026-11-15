@@ -12,7 +12,7 @@ import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { createRoom, joinRoom, joinPublic, serverNow, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
-import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
+import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
 import { createTerrain } from './terrain.js';
 import { createScenery } from './scenery.js';
@@ -106,7 +106,7 @@ export function mount(stage) {
       if (!alive) return;
       scene = new THREE.Scene();
       const sky = createSky(scene, renderer, quality);
-      const terrain = await createTerrain(scene, sky, prog(0.35, 0.75, '🌲 🏜️ ❄️'));
+      const terrain = await createTerrain(scene, sky, prog(0.35, 0.75, '🌲 🏜️ ❄️'), quality);
       if (!alive) return;
       prog(0.75, 0.9, '🛫 🏙️')(0);
       await new Promise(r => setTimeout(r, 0));
@@ -175,28 +175,69 @@ export function mount(stage) {
     };
   }
 
-  // ---------------------------------------------------------------- minimap picture (once)
+  // ---------------------------------------------------------------- map picture (once): hill shading, height lines, sea depth, towns, roads, runways
   function makeMapImage() {
-    const S2 = 384, c = document.createElement('canvas'); c.width = c.height = S2;
-    const g = c.getContext('2d'), img = g.createImageData(S2, S2), n = GRID + 1;
+    const S2 = 1024, c = document.createElement('canvas'); c.width = c.height = S2;
+    const g = c.getContext('2d'), img = g.createImageData(S2, S2);
+    const W = HALF * 2, px = W / S2;
+    const H = new Float32Array(S2 * S2);
+    for (let j = 0; j < S2; j++) for (let i = 0; i < S2; i++) H[j * S2 + i] = terrainHeight(-HALF + (i + 0.5) * px, -HALF + (j + 0.5) * px);
+    const L = [-0.6, 0.7, -0.4], ll = Math.hypot(...L);
     for (let j = 0; j < S2; j++) for (let i = 0; i < S2; i++) {
-      const gi = Math.floor(i / S2 * GRID), gj = Math.floor(j / S2 * GRID), h = heights[gj * n + gi];
-      const x = -HALF + gi * CELL, z = -HALF + gj * CELL;
+      const k = j * S2 + i, h = H[k];
+      const x = -HALF + (i + 0.5) * px, z = -HALF + (j + 0.5) * px;
+      const hr = H[j * S2 + Math.min(S2 - 1, i + 1)], hd = H[Math.min(S2 - 1, j + 1) * S2 + i];
       let col;
-      if (h < 0.3) col = h > -12 ? [60, 170, 200] : [30, 100, 160];
-      else {
+      if (h < 0.3) {
+        const d = Math.min(1, -h / 40);
+        col = [40 + (1 - d) * 70, 120 + (1 - d) * 85, 175 + (1 - d) * 30];
+        if (hr >= 0.3 || hd >= 0.3) col = [235, 245, 245];                       // surf line
+      } else {
         const { wm, wd, ww } = regionWeights(x, z);
-        col = h > 1250 ? [245, 248, 252] : h < 5 ? [230, 215, 160] : wd > 0.5 ? [220, 170, 100] : wm > 0.5 ? [140, 130, 110] : ww > 0.5 ? [60, 120, 55] : [110, 165, 70];
-        const sh = gi > 0 ? (h - heights[gj * n + gi - 1]) * 0.02 : 0;
-        col = col.map(v => clamp(v * (1 + sh), 0, 255));
+        const snow = h > 1250;
+        col = snow ? [246, 249, 253] : h < 5 ? [236, 220, 168] : wd > 0.5 ? [224, 176, 110] : wm > 0.5 ? (h > 700 ? [150, 140, 128] : [120, 150, 90]) : ww > 0.5 ? [72, 128, 62] : [126, 178, 82];
+        // hill shading
+        const nx = (H[j * S2 + Math.max(0, i - 1)] - hr) / (2 * px), nz = (H[Math.max(0, j - 1) * S2 + i] - hd) / (2 * px);
+        const nl = Math.hypot(nx, 1, nz), sh = (nx * L[0] + L[1] + nz * L[2]) / (nl * ll);
+        const shade = 0.55 + 0.65 * Math.max(0, sh);
+        col = col.map(v => v * shade);
+        // height lines every 250 m
+        if (Math.floor(h / 250) !== Math.floor(hr / 250) || Math.floor(h / 250) !== Math.floor(hd / 250)) col = col.map(v => v * 0.78);
       }
-      const o = (j * S2 + i) * 4; img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+      const o = k * 4; img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
     }
     g.putImageData(img, 0, 0);
+    const P = (x, z) => [(x + HALF) / px, (z + HALF) / px];
+    // towns: grey blocks with streets
+    for (const t of TOWNS) {
+      g.save(); g.translate(...P(t.x, t.z)); g.rotate(-t.rot);
+      const w = t.w / px, d = t.d / px;
+      g.fillStyle = t.kind === 'city' ? 'rgba(170,166,158,.9)' : 'rgba(200,180,150,.75)'; g.fillRect(-w / 2, -d / 2, w, d);
+      g.strokeStyle = 'rgba(90,90,95,.6)'; g.lineWidth = 1;
+      const step = (t.kind === 'city' ? 130 : 60) / px;
+      for (let x = -w / 2; x <= w / 2; x += step) { g.beginPath(); g.moveTo(x, -d / 2); g.lineTo(x, d / 2); g.stroke(); }
+      for (let y = -d / 2; y <= d / 2; y += step) { g.beginPath(); g.moveTo(-w / 2, y); g.lineTo(w / 2, y); g.stroke(); }
+      g.restore();
+    }
+    // roads + railway
+    for (const r of ROADS) {
+      if (!r.path) continue;
+      const line = () => { g.beginPath(); r.path.forEach((p, i) => { const [a, b] = P(p[0], p[2]); i ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke(); };
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      if (r.kind === 'rail') { g.setLineDash([]); g.strokeStyle = '#5a4030'; g.lineWidth = 3; line(); g.setLineDash([4, 4]); g.strokeStyle = '#f0e6d0'; g.lineWidth = 1.5; line(); g.setLineDash([]); }
+      else { g.strokeStyle = '#6b5a3a'; g.lineWidth = 4; line(); g.strokeStyle = '#f6d684'; g.lineWidth = 2.2; line(); }
+    }
+    // runways + aprons
     for (const ap of AIRPORTS) {
       const [x1, z1] = runwayPoint(ap, -ap.len / 2), [x2, z2] = runwayPoint(ap, ap.len / 2);
-      g.strokeStyle = '#222'; g.lineWidth = 3; g.beginPath(); g.moveTo((x1 + HALF) / (HALF * 2) * S2, (z1 + HALF) / (HALF * 2) * S2); g.lineTo((x2 + HALF) / (HALF * 2) * S2, (z2 + HALF) / (HALF * 2) * S2); g.stroke();
+      g.lineCap = 'butt';
+      g.strokeStyle = ap.surface === 'grass' ? '#4f7a33' : '#3a3c40'; g.lineWidth = Math.max(4, ap.wid / px * 2.2);
+      g.beginPath(); g.moveTo(...P(x1, z1)); g.lineTo(...P(x2, z2)); g.stroke();
+      g.strokeStyle = '#fff'; g.lineWidth = 1; g.setLineDash([5, 4]);
+      g.beginPath(); g.moveTo(...P(x1, z1)); g.lineTo(...P(x2, z2)); g.stroke(); g.setLineDash([]);
     }
+    // carrier
+    g.save(); g.translate(...P(CARRIER.x, CARRIER.z)); g.rotate(CARRIER.hdg); g.fillStyle = '#4a5560'; g.fillRect(-4, -CARRIER.len / px / 2 - 2, 8, CARRIER.len / px + 4); g.restore();
     return c;
   }
 
@@ -704,7 +745,8 @@ export function mount(stage) {
         <div class="sp-warn"></div>
         <div class="sp-hint"></div>
         <div class="sp-tr">
-          <canvas class="sp-map" width="240" height="240"></canvas>
+          <canvas class="sp-map" width="320" height="320"></canvas>
+          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
           <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause">⏸</button></div>
         </div>
         <div class="sp-thrbar"><i></i><span>⚡</span></div>
@@ -714,7 +756,7 @@ export function mount(stage) {
       </div>`);
       hudEl.appendChild(v);
       const q = s => v.querySelector(s);
-      p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
+      p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), near: q('.sp-near'), nearTxt: q('.sp-near-txt'), nearArrow: q('.sp-near-arrow'), sky: q('.sp-sky'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
       click(q('.sp-cam'), () => cycleView(p));
       click(q('.sp-c-net'), () => togglePilots(p));
       click(q('.sp-pause'), () => pause(true));
@@ -827,32 +869,67 @@ export function mount(stage) {
     }
   }
 
+  const WEATHER_ICON = { clear: '☀️', sunny: '🌤️', cloudy: '☁️', rain: '🌧️', storm: '⛈️' };
   function drawMap(p) {
     const c = p.hud.map, g = c.getContext('2d'), W = c.width, s = p.s;
-    const range = p.mapBig ? 40000 : 9000;           // metres across
-    const k = W / range, img = world.mapImg, ik = img.width / (HALF * 2);
+    const big = !!p.mapBig;
+    const range = big ? 40000 : 9000;           // metres across
+    const k = W / range, img = world.mapImg;
+    const rot = big ? 0 : -s.heading;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const cx = big ? 0 : s.pos.x, cz = big ? 1500 : s.pos.z;     // big map: the whole island
+    const toS = (x, z) => { const dx = (x - cx) * k, dz = (z - cz) * k; return [W / 2 + dx * cr - dz * sr, W / 2 + dx * sr + dz * cr]; };
+    const inside = ([a, b], m = 6) => Math.hypot(a - W / 2, b - W / 2) < W / 2 - m;
     g.save();
     g.clearRect(0, 0, W, W);
     g.beginPath(); g.arc(W / 2, W / 2, W / 2, 0, 7); g.clip();
-    g.fillStyle = '#1e64a0'; g.fillRect(0, 0, W, W);
-    g.translate(W / 2, W / 2);
-    if (!p.mapBig) g.rotate(-s.heading);
-    g.scale(k, k);
-    g.translate(-s.pos.x, -s.pos.z);
+    g.fillStyle = '#2a70a8'; g.fillRect(0, 0, W, W);
+    g.save();
+    g.translate(W / 2, W / 2); g.rotate(rot); g.scale(k, k); g.translate(-cx, -cz);
     g.drawImage(img, -HALF, -HALF, HALF * 2, HALF * 2);
-    // carrier, airports
-    g.fillStyle = '#555'; g.fillRect(CARRIER.x - 150, CARRIER.z - 150, 300, 300);
-    const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(x, z, r / k, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5 / k; g.stroke(); };
-    for (const r of remotes.values()) dot(r.pos.x, r.pos.z, '#' + new THREE.Color(r.color).getHexString(), 5);
-    for (const q of players) if (q !== p) dot(q.s.pos.x, q.s.pos.z, '#' + new THREE.Color(q.color).getHexString(), 6);
     g.restore();
-    // me in the middle
-    g.save(); g.translate(W / 2, W / 2); if (p.mapBig) g.rotate(s.heading);
+    // labels stay upright
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const label = (pt, text, size, col = '#fff') => { g.font = `700 ${size}px Fredoka, Arial`; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.65)'; g.strokeText(text, pt[0], pt[1]); g.fillStyle = col; g.fillText(text, pt[0], pt[1]); };
+    const icon = (pt, ic, size) => { g.font = `${size}px sans-serif`; g.fillText(ic, pt[0], pt[1]); };
+    const fs = big ? 1 : 1.15;
+    for (const t of TOWNS) { const pt = toS(t.x, t.z); if (inside(pt) && (big || Math.hypot(t.x - s.pos.x, t.z - s.pos.z) < 6000)) label([pt[0], pt[1]], t.name, 13 * fs, '#ffe9a8'); }
+    for (const m of LANDMARKS) { const pt = toS(m.x, m.z); if (inside(pt)) { icon(pt, m.icon, 15 * fs); const crowded = AIRPORTS.concat(TOWNS).some(a => Math.hypot(a.x - m.x, a.z - m.z) < 1800); if (big && !crowded) label([pt[0], pt[1] + 13], m.name, 10); } }
+    { const pt = toS(LAKE.x, LAKE.z); if (inside(pt)) { icon(pt, '🦆', 14 * fs); if (big) label([pt[0], pt[1] + 13], 'Duck Lake', 10); } }
+    { const pt = toS(CARRIER.x, CARRIER.z); if (inside(pt)) { icon(pt, '⚓', 16 * fs); if (big) label([pt[0], pt[1] + 14], 'Carrier', 10); } }
+    for (const ap of AIRPORTS) {
+      const pt = toS(ap.x, ap.z);
+      if (!inside(pt, 4)) continue;
+      g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(pt[0], pt[1], 13 * fs, 0, 7); g.fill();
+      icon(pt, '🛫', 15 * fs);
+      label([pt[0], pt[1] + 20 * fs], ap.name, 12 * fs);
+    }
+    // other pilots
+    const dot = (x, z, col, name) => {
+      const pt = toS(x, z); if (!inside(pt, 3)) return;
+      g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(pt[0], pt[1], 6, 0, 7); g.fill(); g.stroke();
+      if (name) label([pt[0], pt[1] - 13], name, 11);
+    };
+    for (const r of remotes.values()) dot(r.pos.x, r.pos.z, '#' + new THREE.Color(r.color).getHexString(), r.name);
+    for (const q of players) if (q !== p) dot(q.s.pos.x, q.s.pos.z, '#' + new THREE.Color(q.color).getHexString(), '');
+    g.restore();
+    // me (in the middle of the small map)
+    g.save(); g.translate(...(big ? toS(s.pos.x, s.pos.z) : [W / 2, W / 2])); if (big) g.rotate(s.heading);
     g.fillStyle = '#ffd400'; g.strokeStyle = '#000'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
     g.restore();
-    if (!p.mapBig) { g.fillStyle = '#fff'; g.font = '700 22px Arial'; g.textAlign = 'center'; const a = -s.heading; g.fillText('N', W / 2 + Math.sin(a) * (W / 2 - 16), W / 2 - Math.cos(a) * (W / 2 - 16) + 8); }
-    g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, W / 2, W / 2 - 2, 0, 7); g.stroke();
+    if (!big) { g.fillStyle = '#fff'; g.font = '700 22px Arial'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const a = -s.heading; g.fillText('N', W / 2 + Math.sin(a) * (W / 2 - 16), W / 2 - Math.cos(a) * (W / 2 - 16) + 8); }
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, W / 2, W / 2 - 2, 0, 7); g.stroke();
+    // nearest airport, time and weather under the map
+    let near = null, nd = 1e9;
+    for (const ap of AIRPORTS) { const d = Math.hypot(ap.x - s.pos.x, ap.z - s.pos.z); if (d < nd) { nd = d; near = ap; } }
+    const st = world.sky.state;
+    const brg = Math.atan2(near.x - s.pos.x, -(near.z - s.pos.z)) - s.heading;
+    if (p.hud.near) {
+      p.hud.nearTxt.textContent = `${near.icon} ${near.name} · ${nd < 1000 ? Math.round(nd) + ' m' : (nd / 1000).toFixed(1) + ' km'}`;
+      p.hud.nearArrow.style.transform = `rotate(${brg}rad)`;
+      p.hud.sky.textContent = (st.night > 0.6 ? '🌙' : st.dusk > 0.4 ? '🌅' : '') + (st.weather.rainbow > 0.3 ? '🌈' : (WEATHER_ICON[st.weather.kind] || ''));
+    }
   }
 
   function layout() {
@@ -1087,6 +1164,7 @@ export function mount(stage) {
     scenery.update(dt, T, sky.state, cams.map(c => c.position));
     life.update(T, dt, cams.map(c => c.position));
     fx.update(dt, sky);
+    renderer.toneMappingExposure = lerp(1.0, 1.4, sky.state.night) + sky.state.weather.haze * 0.1;
     if (sky.state.thunder) thunder(sky.state.thunder);
     if (flying) rainSound(sky.state.weather.rain * (cams[0].position.y < 2200 ? 1 : 0.2));
     else rainSound(0);

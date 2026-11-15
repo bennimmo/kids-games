@@ -36,6 +36,7 @@ export const CARRIER = { x: -2500, z: 16500, hdg: Math.PI / 2 + 0.3, len: 320, w
 // Seaplane harbour (in the bay by the town) and helipads.
 export const HARBOUR = { x: -3400, z: 10900, hdg: Math.PI / 2 };
 export const HELIPADS = [];   // filled once the town is known (roof tops)
+export const LANDMARKS = [];  // { icon, name, x, z } for the map (filled by scenery.js)
 
 // Flat areas for towns.
 export const TOWNS = [

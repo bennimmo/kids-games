@@ -2,7 +2,7 @@
 // lighthouse, wind turbines, ferris wheel, pyramids, roads and railway.
 import * as THREE from '../../js/vendor/three.module.min.js';
 import {
-  AIRPORTS, TOWNS, CARRIER, HARBOUR, HELIPADS, LAKE, ROADS, roadPath, runwayPoint, runwayLocal, apronSide, dirOf,
+  AIRPORTS, TOWNS, CARRIER, HARBOUR, HELIPADS, LANDMARKS, LAKE, ROADS, roadPath, runwayPoint, runwayLocal, apronSide, dirOf,
   terrainHeight, terrainNormal, regionWeights, biomeAt, addRoof, surfaceAt, HALF, CELL, GRID, N,
 } from './island.js';
 import { rng, hash2, clamp, smooth, lerp } from './noise.js';
@@ -464,6 +464,7 @@ export function createScenery(scene, sky, quality, dpr) {
           hp.position.set(x, y0 + 30.1, z); hp.rotation.y = t.rot; root.add(hp);
           addRoof({ x, z, hw: 40, hd: 40, rot: t.rot, top: y0 + 30, pad: true });
           HELIPADS.push({ x, z, y: y0 + 30, hdg: t.rot + Math.PI, name: 'Hospital' });
+          LANDMARKS.push({ icon: '🏥', name: 'Hospital', x, z });
           townLights.push([x, y0 + 30.5, z + 14, 0.3, 1, 0.3, 1.5], [x + 14, y0 + 30.5, z, 0.3, 1, 0.3, 1.5], [x - 14, y0 + 30.5, z, 0.3, 1, 0.3, 1.5], [x, y0 + 30.5, z - 14, 0.3, 1, 0.3, 1.5]);
           continue;
         }
@@ -558,6 +559,7 @@ export function createScenery(scene, sky, quality, dpr) {
     const beam = new THREE.Group(); beam.position.set(x, y + 32, z); root.add(beam);
     for (const s of [1, -1]) { const b = new THREE.Mesh(new THREE.ConeGeometry(30, 600, 16, 1, true).rotateZ(s * Math.PI / 2).translate(s * 300, 0, 0), beamMat); beam.add(b); }
     beams.push({ obj: beam, mat: beamMat });
+    LANDMARKS.push({ icon: '🗼', name: 'Lighthouse', x, z });
     addRoof({ x, z, hw: 3.5, hd: 3.5, rot: 0, top: y + 36 });
   }
   // ferris wheel on the beach by town
@@ -582,6 +584,7 @@ export function createScenery(scene, sky, quality, dpr) {
     fw.rotation.y = TOWNS[0].rot;
     fw.traverse(o => { if (o.isMesh) o.castShadow = true; });
     spinners.push({ kind: 'ferris', obj: wheelG });
+    LANDMARKS.push({ icon: '🎡', name: 'Fair', x, z });
     // a pier
     const pier = new THREE.Mesh(new THREE.BoxGeometry(8, 1, 220), flatMat(0x8d6e4f)); pier.position.set(x + 70, 2.2, z + 120); root.add(pier);
     addRoof({ x, z, hw: 12, hd: 26, rot: TOWNS[0].rot + Math.PI / 2, top: y + 56 });
@@ -591,6 +594,7 @@ export function createScenery(scene, sky, quality, dpr) {
     const t = TOWNS[0], cst = findCoast(-0.5, [t.x, t.z]);
     const [sx, sz] = cst.sea;
     HARBOUR.x = sx - 120; HARBOUR.z = sz + 220; HARBOUR.hdg = Math.PI / 2;
+    LANDMARKS.push({ icon: '⛵', name: 'Harbour', x: sx - 60, z: sz + 30 });
     for (let i = 0; i < 3; i++) {
       const jet = new THREE.Mesh(new THREE.BoxGeometry(5, 1, 70), flatMat(0x8d6e4f));
       jet.position.set(sx - 60 + i * 40, 1.0, sz + 30); root.add(jet);
@@ -617,6 +621,7 @@ export function createScenery(scene, sky, quality, dpr) {
       tb.traverse(o => { o.castShadow = true; });
       spinners.push({ kind: 'turbine', obj: hub, speed: 0.8 + R() * 0.4 });
       TL.push([x, h + 74, z, 1, 0.1, 0.1, 2.2, R()]);
+      if (placed === 1) LANDMARKS.push({ icon: '🌬️', name: 'Wind farm', x, z });
       addRoof({ x, z, hw: 2.5, hd: 2.5, rot: 0, top: h + 72 });
     }
     lights.push(makeLights(TL, dpr, true));
@@ -630,6 +635,7 @@ export function createScenery(scene, sky, quality, dpr) {
       p.position.set(x, h + s * 0.32 - 2, z); p.rotation.y = Math.PI / 4; p.castShadow = true; p.receiveShadow = true; root.add(p);
       addRoof({ x, z, hw: s * 0.3, hd: s * 0.3, rot: 0, top: h + s * 0.45 });
     }
+    LANDMARKS.push({ icon: '🔺', name: 'Pyramids', x: t.x + 1100, z: t.z - 150 });
   }
   // radio mast on a mountain
   {
@@ -639,11 +645,24 @@ export function createScenery(scene, sky, quality, dpr) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.6, 90, 6), flatMat(0xd84315)); m.position.set(x, h + 45, z); m.castShadow = true; root.add(m);
     lights.push(makeLights([[x, h + 92, z, 1, 0.1, 0.1, 3, 0.1], [x, h + 50, z, 1, 0.1, 0.1, 2, 0.6]], dpr, true));
     addRoof({ x, z, hw: 2, hd: 2, rot: 0, top: h + 90 });
+    LANDMARKS.push({ icon: '📡', name: 'Peak', x, z });
   }
 
   // ------------------------------------------------------------ trees (instanced per chunk, only near you)
   const treeGeos = makeTreeGeos();
   const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: false });
+  const swayU = { swayT: { value: 0 }, swayW: { value: 0.3 } };
+  treeMat.onBeforeCompile = sh => {
+    sh.uniforms.swayT = swayU.swayT; sh.uniforms.swayW = swayU.swayW;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float swayT, swayW;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+        vec3 ip = instanceMatrix[3].xyz;
+        float bend = pow(max(transformed.y, 0.0) / 12.0, 1.6) * swayW;
+        transformed.x += sin(swayT * 1.7 + ip.x * 0.05 + ip.z * 0.03) * bend;
+        transformed.z += cos(swayT * 1.3 + ip.z * 0.05) * bend * 0.6;
+        #endif`);
+  };
   const TCH = 3000, treeChunks = [];
   const nearAirport = (x, z) => AIRPORTS.some(ap => { const l = runwayLocal(ap, x, z); return Math.abs(l.along) < ap.len / 2 + 450 && l.side > -ap.wid / 2 - 160 && l.side < apronSide(ap) + 60; });
   const inTown = (x, z) => TOWNS.some(t => { const c = Math.cos(t.rot), s = Math.sin(t.rot), dx = x - t.x, dz = z - t.z; return Math.abs(dx * c - dz * s) < t.w / 2 + 40 && Math.abs(dx * s + dz * c) < t.d / 2 + 40; });
@@ -701,6 +720,7 @@ export function createScenery(scene, sky, quality, dpr) {
       if (s.kind === 'ferris') { s.obj.rotation.z += dt * 0.08; s.obj.children.forEach(c => { if (c.userData.cab) c.rotation.z = -s.obj.rotation.z; }); }
       if (s.kind === 'sock') { const w = st.wind; s.obj.rotation.y = Math.atan2(w.x, w.z); s.obj.rotation.x = 0.9 - Math.min(0.85, st.weather.wind * 0.07); }
     }
+    swayU.swayT.value = T; swayU.swayW.value = 0.15 + st.weather.wind * 0.06;
     for (const b of beams) { b.obj.rotation.y = T * 0.9; b.mat.opacity = st.night * 0.18 * (1 - st.weather.haze * 0.3); b.obj.visible = st.night > 0.1; }
     // trees near any camera
     for (const c of treeChunks) {
