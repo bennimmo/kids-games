@@ -60,7 +60,7 @@ Then open http://localhost:8000
 - Barriers a little way off the road (you can go on the grass, not get lost). Arrows on the road show the way.
 - Driving: ▲ go, ▼ brake. Hold ▼ while turning fast = drift; let go for a mini turbo (blue/orange sparks). Steer in the air = trick, turbo when you land. Karts bash each other (heavy karts win).
 - 🤖 robots: 0–6, speed 🐢 / 🐇 / 🚀. Laps 1/2/3/5. 
-- 2 players = split screen (P1 arrows + Enter, P2 WASD + Space). Solo: either keys. Gamepads work (A go, B brake, X fire). Touch: ◀ ▶ ▼ 💥, goes by itself.
+- 2 players = split screen (P1 arrows + Enter, P2 WASD + Space). Solo: either keys. Gamepads work (A go, B brake, X fire). Touch: ◀ ▶ ▼ 💥, goes by itself. Tapping the item box (top left) also fires.
 - 📱 Tilt to steer (one player on a touch screen; on by default on phones). 📱/👆 button in the race switches it. Straight = how you hold it at GO. iPhone asks permission on the first 🏁 tap.
 - 🔧 Garage (tap your kart): 10 bodies (go-kart, F1, off-road, monster, NASA rover, rocket, tractor, hover, police, bath tub), colours, decals, wheels (slicks, knobbly, big, gold, neon), drivers (kid, astronaut, robot, cat, dog, bear, alien, dino), helmet, spoilers, toppers, boost flame colour. Bodies and wheels change the stat bars (speed, accel, turn, weight, off-road).
 - Saved tracks 🖼️ keep the theme and jump/bridge choices.

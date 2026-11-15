@@ -409,7 +409,7 @@ export function mount(stage) {
     R.views.forEach((v, i) => {
       const r = rects[i];
       const d = el(`<div class="kk-view" style="left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;--pc:${P_COLORS[i]}">
-        <div class="kk-item"><span></span></div>
+        <div class="kk-item" data-p="${S.players[i] ? S.players[i].id : ''}" data-k="fire"><span></span></div>
         <div class="kk-place"></div>
         <div class="kk-lap"></div>
         <div class="kk-msg"></div>
@@ -841,7 +841,7 @@ export function mount(stage) {
     ui.parentElement.querySelectorAll('.kk-tb').forEach(b => b.classList.toggle('on', on.some(t => t.p === b.dataset.p && t.k === b.dataset.k)));
   }
   const onPadDown = e => {
-    const b = e.target.closest && e.target.closest('.kk-tb');
+    const b = e.target.closest && e.target.closest('.kk-tb, .kk-item[data-p]');
     if (!b) return;
     e.preventDefault();
     touches.set(e.pointerId, { p: b.dataset.p, k: b.dataset.k });
