@@ -203,7 +203,6 @@ function renderPanel(s) {
       <div class="fsec">
         <div class="flabel">${icon('user')} My code</div>
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
-        <button class="fsmall fnew" aria-label="New code">${icon('refresh')}</button>
       </div>
       ${full ? '' : `<div class="fsec">
         <div class="flabel">${icon('people')} Friend's code</div>
@@ -223,7 +222,6 @@ function renderPanel(s) {
       <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
   const q = sel => panel.querySelector(sel);
-  q('.fnew').addEventListener('click', () => { sound.pop(); newCode(); });
   q('.fclose').addEventListener('click', () => { sound.pop(); closePanel(); });
   panel.querySelectorAll('.fpad button').forEach(b => b.addEventListener('click', () => {
     if (entry.length >= FRIEND_CODE_LEN) return;
