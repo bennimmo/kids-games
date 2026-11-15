@@ -10,7 +10,8 @@ import { CODE_LEN } from '../../js/engine/net.js';
 import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
-import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS } from './render.js';
+import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS, NAMES } from './render.js';
+import { myName } from '../../js/engine/profile.js';
 import { makeRoom, findRoom, connect, CODE_PICS, MAP_IDS } from './online.js';
 
 const TURN_TIME = 45;
@@ -44,6 +45,8 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- state
   let myLook = sanitizeLook(load(LOOK_KEY, null) || randomLook(0));
+  // my name from the main menu, unless I gave my tank a name of its own
+  if (myName() && (NAMES.includes(myLook.name) || myLook.name === 'Tank')) myLook.name = myName();
   const localSetup = (() => {
     const s = load(LOCAL_KEY, null);
     const slots = [0, 1, 2, 3].map(i => {

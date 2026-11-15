@@ -283,3 +283,7 @@
 .rt-item:empty { opacity: .45; }
 .rt-item.ready { background: #fff8e1; border: 2px solid #ffb300; animation: rt-pulse .8s infinite; }
 .rt-tb-fire { background: rgba(255,143,0,.75); }
+.rt-room-cars figure { margin: 0; display: flex; flex-direction: column; align-items: center; }
+.rt-name { font-size: 18px; font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-place .rt-name { font-size: 26px; min-width: 0; }
+.rt-badge .rt-name { font-size: 12px; max-width: 70px; }

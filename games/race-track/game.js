@@ -13,6 +13,7 @@ import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings, withAutoBoxes, boxesFromItems, PICKUPS } from './sim.js';
+import { myName, cleanName } from '../../js/engine/profile.js';
 import { aiInput } from './ai.js';
 import { createRenderer, drawCarIcon, drawItemIcon, drawTrackThumb, STYLES, DECALS } from './render.js';
 
@@ -109,10 +110,12 @@ export function mount(stage) {
   // the computer car joins when you play alone (not online)
   function cpuPlayer() {
     const used = S.players.map(p => p.color);
-    return { id: 'cpu', cpu: true, color: COLORS.find(c => !used.includes(c)) || '#757575', style: 'truck', decal: 'flames' };
+    return { id: 'cpu', cpu: true, name: '🤖', color: COLORS.find(c => !used.includes(c)) || '#757575', style: 'truck', decal: 'flames' };
   }
   const cpuPlaying = () => !S.net && S.players.length === 1 && S.cpuOn;
-  const racers = () => (S.net ? roster() : cpuPlaying() ? [...S.players, cpuPlayer()] : S.players);
+  // my name (from the main menu) goes on the first car; with a robot to race, everyone gets a tag
+  const named = () => S.players.map((p, i) => ({ ...p, name: i === 0 ? myName() : '' }));
+  const racers = () => (S.net ? roster() : cpuPlaying() ? [...named(), cpuPlayer()] : named());
   function setCpu(on) {
     S.cpuOn = on;
     try { localStorage.setItem(CPU_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
@@ -392,7 +395,7 @@ export function mount(stage) {
         : '<button class="rt-big rt-again2">🔁</button><button class="rt-big rt-draw2">✏️</button>'}
       </div></div></div>`);
     list.forEach((c, i) => {
-      const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas></div>`);
+      const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas>${c.name ? `<b class="rt-name">${c.name}</b>` : ''}</div>`);
       drawCarIcon(row.querySelector('canvas'), c);
       box.querySelector('.rt-podium').appendChild(row);
     });
@@ -516,7 +519,7 @@ export function mount(stage) {
         // two friends picked the same colour: the later one gets a free colour (same on every device)
         const color = used.has(p.color) ? (COLORS.find(c => !used.has(c)) || p.color) : p.color;
         used.add(color);
-        return { id, color, style: p.style, decal: p.decal };
+        return { id, color, style: p.style, decal: p.decal, name: cleanName(p.name) };
       });
   }
 
@@ -526,7 +529,7 @@ export function mount(stage) {
     S.players.forEach((p, i) => {
       const id = pidOf(p);
       now.add(id);
-      S.net.room.setPlayer(id, { color: p.color, style: p.style || 'truck', decal: p.decal || 'none', joined: S.net.joined + i });
+      S.net.room.setPlayer(id, { color: p.color, style: p.style || 'truck', decal: p.decal || 'none', name: i === 0 ? myName() : '', joined: S.net.joined + i });
     });
     S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
     S.net.synced = now;
@@ -723,7 +726,7 @@ export function mount(stage) {
     return `<div class="rt-code">${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
   }
   function carsHTML() {
-    return `<div class="rt-room-cars">${roster().map(() => '<canvas width="100" height="70"></canvas>').join('')}</div>`;
+    return `<div class="rt-room-cars">${roster().map(p => `<figure><canvas width="100" height="70"></canvas>${p.name ? `<b class="rt-name">${p.name}</b>` : ''}</figure>`).join('')}</div>`;
   }
   function fillCars(node) {
     const list = roster();

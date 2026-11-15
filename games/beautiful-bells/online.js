@@ -1,7 +1,8 @@
 // Playing with friends. Uses the shared rooms in js/engine/net.js:
-//   games/beautiful-bells/rooms/<code>/players/<pid> = { name, emoji, showoff }
+//   games/beautiful-bells/rooms/<code>/players/<pid> = { name, who, emoji, showoff }  (name = the girl, who = the player)
 //   games/beautiful-bells/rooms/<code>/live/<pid>    = { look, t }
 // Everyone makes their own girl; friends' girls are shown live (watch only).
+import { myName, cleanName as cleanWho } from '../../js/engine/profile.js';
 import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
 import { ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS, SKINS, TOP_COLORS, GIRLS } from './items.js';
 import { LOOK_VERSION, newLook } from './look.js';
@@ -95,7 +96,8 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
     else if (metaSeen && !closed) { closed = true; onClosed(); }
   }));
 
-  const sendInfo = () => room.setPlayer(pid, { name, emoji, showoff }).catch(() => {});
+  const who = myName(); // set on the main menu
+  const sendInfo = () => room.setPlayer(pid, { name, who, emoji, showoff }).catch(() => {});
   const flush = () => {
     timer = null;
     if (!pending || closed || lastStatus !== 'ok') return; // resent when back online
@@ -116,6 +118,7 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
         .map(([id, info]) => ({
           id,
           name: cleanName(info && info.name),
+          who: cleanWho(info && info.who),
           emoji: AVATARS.includes(info && info.emoji) ? info.emoji : '🙂',
           look: looks[id] && sanitizeLook(looks[id].look),
         }));
