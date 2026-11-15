@@ -53,6 +53,10 @@ export const sound = {
   win: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.2, 'triangle'), i * 120)),
   bump: () => tone(150, 0.15, 'square', 0.15, 80),
   splash: () => noise(0.45, 900, 0.35),
+  whoosh: () => { noise(0.5, 2600, 0.25); tone(300, 0.4, 'sawtooth', 0.06, 900); },
+  squelch: () => { noise(0.3, 350, 0.4); tone(120, 0.25, 'sine', 0.15, 60); },
+  tok: () => tone(900, 0.07, 'square', 0.12, 500),
+  cheer: () => { noise(1.4, 1300, 0.18); noise(1.1, 2400, 0.1); },
   tone,
   noise,
 };

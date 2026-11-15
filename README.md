@@ -38,7 +38,8 @@ Then open http://localhost:8000
 ## Games
 ### 🏎️ Raffy Race (`games/race-track/`)
 - Drag to draw a dirt track. It closes into a loop. Crossings become a bridge.
-- Drag extras onto the track: jump, water, tunnel. Drag to 🗑️ to remove.
+- Drag extras onto the track: jump, speed boost, water, mud, ice, tunnel. Scenery anywhere: cones (knock them over), tyre walls, trees (drive under), grandstand (crowd cheers). Drag to 🗑️ to remove.
+- A lap counts the moment you cross the line, as long as you've been round the other 3 quarters of the track.
 - Up to 2 players: arrows and WASD, or touch buttons on iPad/tablets.
 - Tap a car to customise: colour, type (monster truck, rally, buggy) and sticker. Choices are remembered.
 - If the end of your line overlaps the start, the extra bit is trimmed so the loop joins cleanly.

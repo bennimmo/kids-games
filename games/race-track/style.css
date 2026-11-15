@@ -243,3 +243,31 @@
   position: absolute; top: 90px; left: 14px; background: rgba(255,255,255,.9);
   padding: 6px 10px; border-radius: 999px; pointer-events: none;
 }
+
+/* more extras: smaller tiles that scroll */
+.rt-palette { overflow-x: auto; overflow-y: hidden; max-width: calc(100vw - 420px); scrollbar-width: thin; }
+.rt-palette .rt-extra { flex: 0 0 auto; width: 88px; height: 88px; border-radius: 16px; }
+.rt-palette .rt-extra canvas { width: 80px; height: 60px; }
+@media (max-width: 700px) { .rt-palette { max-width: calc(100vw - 16px); } }
+
+/* finish pop-up and end countdown */
+.rt-toast {
+  position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; background: #fff; padding: 8px 18px; border-radius: 999px;
+  box-shadow: 0 6px 0 rgba(0,0,0,.2); font-size: 56px; pointer-events: none;
+  animation: rt-toast 1.8s ease-out forwards;
+}
+.rt-toast canvas { width: 90px; height: 60px; }
+@keyframes rt-toast {
+  0% { transform: translateX(-50%) scale(0); }
+  15% { transform: translateX(-50%) scale(1.2); }
+  25%, 80% { transform: translateX(-50%) scale(1); opacity: 1; }
+  100% { transform: translateX(-50%) scale(1); opacity: 0; }
+}
+.rt-end {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%) scale(0);
+  background: rgba(255,255,255,.92); padding: 8px 20px; border-radius: 999px; font-size: 34px;
+  box-shadow: 0 5px 0 rgba(0,0,0,.18); transition: transform .2s; pointer-events: none;
+}
+.rt-end.show { transform: translateX(-50%) scale(1); }
+.rt-end b { display: inline-block; min-width: 1.2em; text-align: center; }
