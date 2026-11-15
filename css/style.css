@@ -150,6 +150,9 @@ html, body { overscroll-behavior: none; }
 .name-row .app-btn { width: 72px; height: 72px; font-size: 34px; }
 .name-ok { background: #a5d6a7 !important; }
 
+/* ---------- Version (bottom of the menu) ---------- */
+.version { margin-top: 24px; color: rgba(255,255,255,.75); font-size: 16px; font-weight: 700; }
+
 /* ---------- Friends ---------- */
 .friend-bar { margin: -8px 0 24px; min-height: 64px; }
 .fbar-btn {

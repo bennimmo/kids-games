@@ -1,4 +1,5 @@
 import { GAMES } from './games.js';
+import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX } from './engine/profile.js';
 import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
@@ -124,6 +125,7 @@ function showMenu() {
             <div class="name">${g.name}</div>
           </button>`).join('')}
       </div>
+      <div class="version">v${VERSION}</div>
     </div>`;
   wireAppButtons();
   refreshFriendBar();

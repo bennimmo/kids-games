@@ -2,7 +2,7 @@
 // and the floating friend bubbles that stay on top of every game.
 import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
-import { sound, resetAudio } from './engine/sound.js';
+import { sound } from './engine/sound.js';
 import {
   onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
@@ -85,7 +85,9 @@ function renderBubbles(s) {
     el.querySelector('.fb-face b').textContent = [...f.name][0] || '?';
     el.querySelector('.fb-name').textContent = f.name;
     const v = el.querySelector('video'), a = el.querySelector('audio');
-    if (v.srcObject !== (f.stream || null)) v.srcObject = f.stream || null;
+    // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
+    const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
+    if (v.srcObject !== vs) v.srcObject = vs;
     if (a.srcObject !== (f.stream || null)) { a.srcObject = f.stream || null; if (f.stream) a.play().catch(() => {}); }
     el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
   }
@@ -242,13 +244,8 @@ export function mountFriends({ editName }) {
   knockEl = layer.querySelector('.fk');
   shield(dock); shield(knockEl);
   wireDrag();
-  let wasAsking = false, micWas = 'off', needAudioReset = false;
-  const onMenu = () => !location.hash.replace(/^#\/?/, '');
-  addEventListener('hashchange', () => { if (needAudioReset && onMenu()) { needAudioReset = false; resetAudio(); } });
+  let wasAsking = false;
   onFriends(s => {
-    // mic just came on: fresh sound context (now, or when back on the menu so games keep theirs)
-    if (s.micStatus === 'on' && micWas !== 'on') { if (onMenu()) resetAudio(); else needAudioReset = true; }
-    micWas = s.micStatus;
     renderBubbles(s);
     renderKnock(s);
     renderBar(s);

@@ -1,6 +1,7 @@
 // Tiny sound effects made with Web Audio (no files needed).
-let ctx = null;
+let ctx = null, paused = false;
 function ac() {
+  if (paused) throw new Error('sound paused');
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
@@ -45,7 +46,15 @@ function noise(dur = 0.4, freq = 1000, vol = 0.3) {
 
 // Start sound again with a fresh context. iPad/Safari: turning the mic on changes the
 // sound hardware's speed, and an older context then plays too high/low.
+// pauseAudio() before the mic starts, resetAudio() once it's on.
+export function pauseAudio() {
+  paused = true;
+  const old = ctx;
+  ctx = null;
+  if (old) old.close().catch(() => {});
+}
 export function resetAudio() {
+  paused = false;
   const old = ctx;
   ctx = null;
   if (old) old.close().catch(() => {});

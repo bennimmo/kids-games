@@ -13,6 +13,7 @@
 
 import { firebaseCore } from './net.js';
 import { myName, cleanName } from './profile.js';
+import { pauseAudio, resetAudio } from './sound.js';
 
 export const FRIEND_CODE_LEN = 6;
 export const MAX_FRIENDS = 4;
@@ -66,6 +67,8 @@ export async function startMic() {
   if (mic || micStatus === 'asking') return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micStatus = 'denied'; emit(); return; }
   micStatus = 'asking'; emit();
+  // iPad: a sound context running while the mic starts makes voices play too high. Stop it first.
+  pauseAudio();
   try {
     const m = await getMic().catch(e => { // chosen mic gone (unplugged): use the normal one
       if (!savedMic()) throw e;
@@ -77,6 +80,7 @@ export async function startMic() {
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
     group.peers.forEach(addMic);
   } catch (e) { micStatus = 'denied'; }
+  resetAudio();
   emit();
 }
 const MIC_KEY = 'kg-mic';
