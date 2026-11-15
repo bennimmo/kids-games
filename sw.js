@@ -1,6 +1,8 @@
 // Service worker: lets the installed app open without internet.
 // Network first (so every push is live straight away), cache as a fallback.
-const CACHE = 'kids-games-v1';
+// Our own files skip the browser's short-term cache (GitHub Pages keeps files ~10 min),
+// so with internet you always get the newest version.
+const CACHE = 'kids-games-v2';
 const CACHE_HOSTS = [location.origin, 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://www.gstatic.com'];
 
 self.addEventListener('install', e => {
@@ -23,7 +25,8 @@ self.addEventListener('fetch', e => {
   if (url.hostname === 'www.gstatic.com' && !url.pathname.startsWith('/firebasejs/')) return;
   e.respondWith((async () => {
     try {
-      const res = await fetch(req);
+      const fresh = url.origin === location.origin ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : req;
+      const res = await fetch(fresh);
       if (res.ok || res.type === 'opaque') {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});

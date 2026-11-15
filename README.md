@@ -12,6 +12,7 @@ Every push to `main` deploys automatically (see `.github/workflows/deploy.yml`).
 - Android/Chrome/Edge: tap 📲 on the menu (or the install icon in the address bar).
 - ⛶ on the menu = full screen in a normal browser.
 - `manifest.webmanifest`, `icons/`, `sw.js` (network first, so pushes go live straight away; works offline for games already opened).
+- Updates: with internet, every load gets the newest files (our files skip the browser's ~10 min cache). An installed app that wakes up after 10+ min away reloads itself if it's on the menu (never mid-game).
 
 ## Run locally
 No build step. Just serve the folder:
