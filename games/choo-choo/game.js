@@ -45,7 +45,7 @@ export function mount(stage) {
     <div class="cc-hand cc-tap">👆</div>
     <div class="cc-go"><div class="cc-ring"></div><span>👆</span></div>
     <div class="cc-bubble">CHOO CHOO!</div>
-    <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done Wilf!</div><div class="cc-name"></div></div>
+    <div class="cc-done"><div class="cc-star">⭐</div><div class="cc-well">Well done!</div><div class="cc-name"></div></div>
     <div class="cc-confetti"></div>`;
   root.appendChild(ui);
   const $ = q => ui.querySelector(q);
@@ -337,7 +337,7 @@ export function mount(stage) {
         el.done.classList.add('show');
         sfx.yay();
         confetti();
-        say(`Well done Wilf! We made it to ${leg.name}!`);
+        say(`Well done! We made it to ${leg.name}!`);
         award('⭐', loco.group);
       });
       at(0.9, 'off', () => {
