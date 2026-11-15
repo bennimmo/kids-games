@@ -49,6 +49,7 @@ Then open http://localhost:8000
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
 3D flight simulator with an easy mode. Built with three.js.
+- Plane detail: pilots you can see through real window openings, painted liveries (registrations, stripes, panel lines, doors, "SUNNY AIR" + sun logo, jet star insignia and 77, "RESCUE" heli), antennas, pitot tubes, exhausts, radial engine cylinders, float rudders, flap fairings, wingtip missiles, ejection seat, rotor hub, searchlight, tail rotor guard.
 - 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast, carrier catapult + arrestor wire). 8 colours.
 - One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
 - 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
