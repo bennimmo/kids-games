@@ -9,6 +9,7 @@
 // area again in one go, with sync: 1. Only an area with sync counts as "here",
 // so half-written areas never make anyone's strokes disappear. If a friend
 // comes back, the host drops its copies so their undo works again.
+import { myName, cleanName } from '../../js/engine/profile.js';
 import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
 import { sanitizeOp } from './ops.js';
 
@@ -36,7 +37,7 @@ export function connect(room, { onChange, onBase, onClosed }) {
   const unsubs = [];
   const emit = () => { if (!closed) onChange(); };
 
-  room.setPlayer(pid, { emoji }).catch(() => {});
+  room.setPlayer(pid, { emoji, name: myName() }).catch(() => {});
 
   // My whole area in one write: on joining and every time we're back online.
   const writeAll = () => {
@@ -123,8 +124,8 @@ export function connect(room, { onChange, onBase, onClosed }) {
     emoji,
     now: room.now,
     ops: () => [...others.values()].map(o => o.op),
-    cursors: () => Object.entries(cursors).map(([id, op]) => ({ op, emoji: emojiOf(id) })),
-    players: () => Object.keys(players).map(id => ({ me: id === pid, emoji: emojiOf(id) })),
+    cursors: () => Object.entries(cursors).map(([id, op]) => ({ op, emoji: emojiOf(id), name: nameOf(id) })),
+    players: () => Object.keys(players).map(id => ({ me: id === pid, emoji: emojiOf(id), name: nameOf(id) })),
     add(op) {
       myIds.add(op.id);
       myOps.set(op.id, op);
@@ -148,6 +149,7 @@ export function connect(room, { onChange, onBase, onClosed }) {
     },
   };
 
+  function nameOf(id) { return cleanName(players[id] && players[id].name); }
   function emojiOf(id) {
     const e = players[id] && players[id].emoji;
     return AVATARS.includes(e) ? e : '🙂';

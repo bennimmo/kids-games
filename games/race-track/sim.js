@@ -57,7 +57,7 @@ export function createRace(track, players) {
     const p = track.pts[i];
     const side = (k % 2 === 0 ? -1 : 1) * 21;
     return {
-      id: pl.id, color: pl.color, style: pl.style || 'truck', decal: pl.decal || 'none',
+      id: pl.id, name: pl.name || '', color: pl.color, style: pl.style || 'truck', decal: pl.decal || 'none',
       x: p.x - Math.sin(p.a) * side, y: p.y + Math.cos(p.a) * side, a: p.a,
       vx: 0, vy: 0, idx: i, prog: -back, lap: 1, lapsDone: 0, started: false, seen: 0, near: true,
       boostT: 0, onBoost: false, inMud: false, onIce: false,

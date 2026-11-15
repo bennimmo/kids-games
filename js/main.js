@@ -1,5 +1,6 @@
 import { GAMES } from './games.js';
 import { sound } from './engine/sound.js';
+import { myName, setMyName, nameHTML, NAME_MAX } from './engine/profile.js';
 
 const app = document.getElementById('app');
 let cleanup = null;
@@ -76,9 +77,34 @@ function wireAppButtons() {
   });
 }
 
+// ---------- my name (used in every online game) ----------
+function nameButton() {
+  const n = myName();
+  return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span>👤</span>${n ? `<b>${nameHTML(n)}</b>` : '<b>✏️</b>'}</button>`;
+}
+
+function editName() {
+  const o = document.createElement('div');
+  o.className = 'app-help name-edit';
+  o.innerHTML = `<form class="app-help-card name-card">
+      <div class="name-face">👤</div>
+      <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
+      <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">⌫</button><button type="submit" class="app-btn name-ok" aria-label="Done">✔️</button></div>
+    </form>`;
+  const input = o.querySelector('input');
+  input.value = myName();
+  const close = () => { o.remove(); showMenu(); };
+  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); setMyName(input.value); sound.pop(); close(); });
+  o.querySelector('.name-clear').addEventListener('click', () => { input.value = ''; input.focus(); });
+  o.addEventListener('click', e => { if (e.target === o) close(); });
+  document.body.appendChild(o);
+  input.focus();
+}
+
 function showMenu() {
   app.innerHTML = `
     <div class="menu">
+      ${nameButton()}
       ${appButtons()}
       <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
       <div class="grid">
@@ -90,6 +116,7 @@ function showMenu() {
       </div>
     </div>`;
   wireAppButtons();
+  app.querySelector('.name-btn').addEventListener('click', () => { sound.pop(); editName(); });
   app.querySelectorAll('.tile').forEach(btn => {
     btn.addEventListener('click', () => {
       sound.pop();
