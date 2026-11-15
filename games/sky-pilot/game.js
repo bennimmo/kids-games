@@ -1086,11 +1086,16 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- main loop
-  let last = performance.now(), clock = 0, acc = 0, slowT = 0, slowN = 0;
+  let last = performance.now(), clock = 0, slowT = 0, slowN = 0;
+  const physOpts = { easy: true, noDie: true, wind: null };
+  let dtSmooth = 1 / 60;
   function frame(now) {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+    const rawDt = Math.min(0.1, (now - last) / 1000); last = now;
+    // even out tiny timing wobbles between frames (big changes still go straight through)
+    dtSmooth = Math.abs(rawDt - dtSmooth) > 0.02 ? rawDt : dtSmooth + (rawDt - dtSmooth) * 0.25;
+    const dt = dtSmooth; clock += dt;
     if (!world) return;
     localT += dt;
     const T = worldTime();
@@ -1124,11 +1129,10 @@ export function mount(stage) {
       if (pressed.includes('KeyT')) for (const p of players) teleportNext(p);
       if (pressed.includes('KeyM')) for (const p of players) { p.mapBig = !p.mapBig; p.hud.v.classList.toggle('sp-bigmap', p.mapBig); }
       // physics (fixed steps)
-      acc += dt;
-      const opts = { easy: prefs.easy, noDie: prefs.noDie, wind: sky.state.wind };
-      let n = 0;
-      while (acc >= STEP && n < 14) { for (const p of players) { p.s.T = T; stepPlane(p.s, STEP, opts); } acc -= STEP; n++; }
-      if (n >= 14) acc = 0;
+      // split this frame into equal small steps (smooth: every frame moves the plane by exactly its frame time)
+      const opts = physOpts; opts.easy = prefs.easy; opts.noDie = prefs.noDie; opts.wind = sky.state.wind;
+      const n = Math.min(14, Math.max(1, Math.ceil(dt / STEP))), h = dt / n;
+      for (let k = 0; k < n; k++) for (const p of players) { p.s.T = T; stepPlane(p.s, h, opts); }
       for (const p of players) {
         handleEvents(p);
         helpers(p, dt);

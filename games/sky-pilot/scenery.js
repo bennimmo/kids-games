@@ -799,7 +799,7 @@ export function createScenery(scene, sky, quality, dpr) {
   const dens = quality.trees;
   for (let cz = -HALF; cz < HALF; cz += TCH) for (let cx = -HALF; cx < HALF; cx += TCH) {
     const lists = { pine: [], leaf: [], palm: [], cactus: [], bush: [], rock: [], cow: [], sheep: [] };
-    const tries = Math.round(4200 * dens);
+    const tries = Math.round(3400 * dens);
     for (let i = 0; i < tries; i++) {
       const x = cx + R() * TCH, z = cz + R() * TCH;
       const h = terrainHeight(x, z);
@@ -846,7 +846,7 @@ export function createScenery(scene, sky, quality, dpr) {
         col.setRGB(0.85 + hash2(i, 1) * 0.3 + snow, 0.85 + hash2(i, 2) * 0.3 + snow, 0.85 + hash2(i, 3) * 0.2 + snow);
         im.setColorAt(i, col);
       });
-      im.castShadow = true; im.receiveShadow = true;
+      im.castShadow = !['bush', 'rock', 'cow', 'sheep'].includes(type); im.receiveShadow = true;
       im.computeBoundingSphere();
       group.add(im);
     }
@@ -898,7 +898,7 @@ export function createScenery(scene, sky, quality, dpr) {
     // trees near any camera
     for (const c of treeChunks) {
       let d = 1e9; for (const p of cams) d = Math.min(d, Math.hypot(p.x - c.x, p.z - c.z));
-      c.group.visible = d < 4200 + 2000 * quality.trees;
+      c.group.visible = d < 3600 + 1800 * quality.trees;
     }
   }
   // PAPI colours depend on where the viewer is: 4 white = too high, 4 red = too low, 2 + 2 = just right
@@ -961,7 +961,8 @@ function makeTreeGeos() {
   const palm = merge(palmParts);
   const cactus = merge([colorize(new THREE.CylinderGeometry(0.55, 0.6, 6, 8).translate(0, 3, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.35, 0.35, 2, 8).rotateZ(Math.PI / 2).translate(0.9, 2.6, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.33, 0.33, 2.2, 8).translate(1.8, 3.5, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8).translate(-1.4, 4, 0), [0.25, 0.5, 0.25]), colorize(new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8).rotateZ(Math.PI / 2).translate(-0.8, 3.3, 0), [0.25, 0.5, 0.25])]);
   for (const g of [pine, leaf, palm, cactus]) g.computeVertexNormals();
-  const bush = merge([blob(1.6, 0, 1.1, 0, [0.28, 0.45, 0.18]), blob(1.2, 1.1, 0.8, 0.4, [0.3, 0.5, 0.2]), blob(1.1, -0.9, 0.7, -0.3, [0.25, 0.42, 0.16])]);
+  const lowBlob = (r, x, y, z, c) => colorize(new THREE.IcosahedronGeometry(r, 0).scale(1, 0.8, 1).translate(x, y, z), c);
+  const bush = merge([lowBlob(1.6, 0, 1.1, 0, [0.28, 0.45, 0.18]), lowBlob(1.2, 1.1, 0.8, 0.4, [0.3, 0.5, 0.2])]);
   const rockG = new THREE.DodecahedronGeometry(2.2, 0); { const p = rockG.attributes.position; for (let i = 0; i < p.count; i++) { const s = 0.75 + Math.abs(Math.sin(p.getX(i) * 3.1 + p.getZ(i) * 1.7)) * 0.45; p.setXYZ(i, p.getX(i) * s * 1.2, p.getY(i) * s * 0.65, p.getZ(i) * s); } }
   const rock = merge([colorize(rockG.translate(0, 0.9, 0), [0.55, 0.52, 0.48])]);
   const animal = (bodyC, headC, wool) => {

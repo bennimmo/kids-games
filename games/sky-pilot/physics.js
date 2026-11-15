@@ -12,7 +12,9 @@ import { clamp, lerp, smooth } from './noise.js';
 const G = 9.81, D = Math.PI / 180;
 const V = THREE.Vector3, Q = THREE.Quaternion;
 const tv1 = new V(), tv2 = new V(), tv3 = new V(), tv4 = new V(), tq = new Q(), tq2 = new Q(), tm = new THREE.Matrix4(), te = new THREE.Euler();
-const FWD = new V(0, 0, 1), UPV = new V(0, 1, 0), LEFT = new V(1, 0, 0);
+const FWD = new V(0, 0, 1), UPV = new V(0, 1, 0), LEFT = new V(1, 0, 0), ZERO = new V();
+// reused every step (no garbage = no little pauses)
+const tF = new V(), tL = new V(), tT = new V();
 
 export function newPlaneState(type) {
   const P = PLANES[type];
@@ -131,7 +133,7 @@ function stepFixed(s, dt, opts) {
   const P = s.P, inp = s.input;
   const q = s.quat;
   const fwd = tv1.copy(FWD).applyQuaternion(q), up = tv2.copy(UPV).applyQuaternion(q), left = tv3.copy(LEFT).applyQuaternion(q);
-  const air = tv4.copy(s.vel).sub(opts.wind || new V());       // airflow relative to the plane
+  const air = tv4.copy(s.vel).sub(opts.wind || ZERO);       // airflow relative to the plane
   const v = air.length();
   const rho = 1.225 * Math.exp(-Math.max(0, s.pos.y) / 9000);
   const qd = 0.5 * rho * v * v;
@@ -151,11 +153,11 @@ function stepFixed(s, dt, opts) {
   s.stall = over > 0 && !s.onGround && v > 5;
   const cd = P.cd0 + flapsCD + P.k * cl * cl + s.gear * (P.gear === 'retract' ? 0.015 : 0) + (s.spoilers ? 0.05 : 0) + Math.abs(beta) * 0.3;
 
-  const F = new V(0, -P.mass * G, 0);
+  const F = tF.set(0, -P.mass * G, 0);
   if (v > 0.5) {
     const vd = tv4.copy(air).divideScalar(v);
     // lift: at right angles to the airflow, towards the plane's up
-    const liftDir = new V().copy(up).addScaledVector(vd, -up.dot(vd)).normalize();
+    const liftDir = tL.copy(up).addScaledVector(vd, -up.dot(vd)).normalize();
     F.addScaledVector(liftDir, qd * P.wing * cl);
     F.addScaledVector(vd, -qd * P.wing * cd);
     F.addScaledVector(left, -qd * P.wing * 0.5 * beta);   // side force
@@ -198,7 +200,7 @@ function stepFixed(s, dt, opts) {
   const [rr, pr, yr] = P.rates;
   // targets in rad/s. omega.x = pitch up rate, omega.z = roll right rate, omega.y = yaw right rate
   const easyRoll = opts.easy ? 1.4 : 1;
-  const target = new V(pi * pr * D * auth, yi * yr * D * auth, ri * rr * D * auth * easyRoll);
+  const target = tT.set(pi * pr * D * auth, yi * yr * D * auth, ri * rr * D * auth * easyRoll);
   // stability: the nose wants to follow the airflow
   const qn = clamp(qd / (0.5 * 1.225 * P.vr * P.vr), 0, 4);
   // easy mode: trim for a level turn (more lift when banked)
@@ -365,9 +367,9 @@ function stepHeli(s, dt, opts) {
     lift = P.mass * (G + (wantVs - s.vel.y) * 1.5) / Math.max(0.4, up.y);
     lift = clamp(lift, 0, P.mass * G * P.lift) * Math.min(1, s.rpm * 2.2);
   } else lift = P.mass * G * P.lift * s.throttle * Math.min(1, s.rpm * 1.2) * rho;
-  const F = new V(0, -P.mass * G, 0).addScaledVector(up, lift);
+  const F = tF.set(0, -P.mass * G, 0).addScaledVector(up, lift);
   // drag
-  const air = tv4.copy(s.vel).sub(opts.wind || new V());
+  const air = tv4.copy(s.vel).sub(opts.wind || ZERO);
   F.addScaledVector(air, -air.length() * P.mass * G / (P.vmax * P.vmax) * 1.0 - P.mass * 0.05);
   // rotation: cyclic tilts, pedals yaw
   let yi = inp.yaw;
@@ -384,7 +386,7 @@ function stepHeli(s, dt, opts) {
     tx = (inp.pitch * 40 * D - pitchA) * 1.3;
     tz = (inp.roll * 50 * D - bank) * 1.3;
   }
-  const target = new V(tx, yi * yr * D, tz);
+  const target = tT.set(tx, yi * yr * D, tz);
   // forward flight makes the nose follow the airflow a little
   s.omega.x += (target.x - s.omega.x) * Math.min(1, dt * 4);
   s.omega.y += (target.y - s.omega.y) * Math.min(1, dt * 3);

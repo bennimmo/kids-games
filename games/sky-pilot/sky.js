@@ -452,6 +452,7 @@ export function createSky(scene, renderer, quality) {
 
   // called before each view is drawn
   let sortT = 0;
+  const lightBasis = new THREE.Matrix4(), invBasis = new THREE.Matrix4(), lp = new THREE.Vector3(), ZERO3 = new THREE.Vector3(), UP3 = new THREE.Vector3(0, 1, 0);
   function beforeView(cam, viewIndex, dt) {
     const p = cam.position;
     dome.position.copy(p); stars.position.copy(p);
@@ -477,9 +478,15 @@ export function createSky(scene, renderer, quality) {
     if (viewIndex === 0) { sortT -= dt; if (sortT <= 0) { sortT = 0.4; sortClouds(p); } }
     // shadows follow this view
     if (shadows) {
-      sun.target.position.copy(p);
       const ld = sun.intensity > 0.01 ? (state.sunElev < -3 ? skyU.moonDir.value : state.sunDir) : state.sunDir;
-      sun.position.copy(p).addScaledVector(ld, 1500);
+      // move in whole shadow-map texels (in the light's own axes) so shadows stay still
+      const texel = 320 / quality.shadows;
+      lightBasis.lookAt(ld, ZERO3, UP3);
+      lp.copy(p).applyMatrix4(invBasis.copy(lightBasis).invert());
+      lp.x = Math.round(lp.x / texel) * texel; lp.y = Math.round(lp.y / texel) * texel;
+      lp.applyMatrix4(lightBasis);
+      sun.target.position.copy(lp);
+      sun.position.copy(lp).addScaledVector(ld, 1500);
       sun.target.updateMatrixWorld();
     }
     // rain or snow?
