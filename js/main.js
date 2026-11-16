@@ -5,7 +5,7 @@ import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX, myFace, setMyFace, FACES } from './engine/profile.js';
 import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
-import { nameChanged } from './engine/friends.js';
+import { nameChanged, setWhere } from './engine/friends.js';
 import { leftRoom } from './engine/together.js';
 
 const app = document.getElementById('app');
@@ -182,6 +182,7 @@ function route() {
   if (cleanup) { cleanup(); cleanup = null; }
   leftRoom(); // never keep inviting friends to a game you've left
   current = id;
+  setWhere(GAMES.some(g => g.id === id) ? id : ''); // friends see what I'm playing
   const game = GAMES.find(g => g.id === id);
   if (game) showGame(game);
   else { showMenu(); newCode(); } // a new friend code every visit

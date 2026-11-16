@@ -13,7 +13,7 @@
 
 import { icon } from './icons.js';
 import { myName, myFace, nameHTML, cleanFace, cleanName } from './profile.js';
-import { friendState, sendInvite, clearInvite, setPlaying, ensureCore } from './friends.js';
+import { friendState, onFriends, sendInvite, clearInvite, setPlaying, ensureCore } from './friends.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, '');
 const faceOf = p => cleanFace(p && p.face) || '🙂';
@@ -75,10 +75,19 @@ export function people(players, hostUid) {
   return [...seen.values()].sort((a, b) => (b.host - a.host));
 }
 
-// Friends in my group who haven't come into the room yet.
+// Friends in my group who said "no thanks" to this room's invite.
+export function saidNo(list = []) {
+  const s = friendState();
+  const here = new Set(list.map(p => p.uid));
+  const code = s.playing && s.playing.code;
+  const no = new Set(s.declines.filter(d => d.code === code).map(d => d.uid));
+  return s.friends.filter(f => no.has(f.uid) && !here.has(f.uid));
+}
+// Friends in my group who haven't come into the room yet (and haven't said no).
 export function coming(list) {
   const here = new Set(list.map(p => p.uid));
-  return friendState().friends.filter(f => f.status === 'on' && !here.has(f.uid));
+  const no = new Set(saidNo(list).map(f => f.uid));
+  return friendState().friends.filter(f => f.status === 'on' && !here.has(f.uid) && !no.has(f.uid));
 }
 
 // Everyone (except the host) has pressed I'm ready.
@@ -94,7 +103,28 @@ export function startLabel(list) {
 
 // The strip of people. hostDoing: what the host is busy with, e.g. 'building the track'.
 // myUid marks me. Shows friends still on their way too.
-export function lobbyHTML(list, { hostDoing = 'getting ready', myUid = null, showComing = true } = {}) {
+// Strips on screen are redrawn when friends change (someone says no / comes online),
+// so games don't have to listen for that themselves.
+const strips = new Map();
+let stripN = 0;
+onFriends(() => {
+  for (const [id, args] of strips) {
+    const el = document.querySelector(`.tg-strip[data-tg="${id}"]`);
+    if (!el) { strips.delete(id); continue; }
+    const t = document.createElement('div');
+    t.innerHTML = stripHTML(...args, id);
+    el.replaceWith(t.firstChild);
+  }
+});
+
+export function lobbyHTML(list, opts = {}) {
+  const id = ++stripN;
+  strips.set(id, [list, opts]);
+  if (strips.size > 20) strips.delete(strips.keys().next().value);
+  return stripHTML(list, opts, id);
+}
+
+function stripHTML(list, { hostDoing = 'getting ready', myUid = null, showComing = true } = {}, id = 0) {
   const chip = (face, name, status, cls) =>
     `<div class="tg-p ${cls}"><span class="tg-face">${face}</span><span class="tg-txt"><b>${nameHTML(name)}</b><small>${status}</small></span></div>`;
   const rows = list.map(p => {
@@ -102,8 +132,11 @@ export function lobbyHTML(list, { hostDoing = 'getting ready', myUid = null, sho
     if (p.host) return chip(p.face, p.name, esc(hostDoing), 'host' + me);
     return p.ready ? chip(p.face, p.name, `${icon('check')} Ready!`, 'ready' + me) : chip(p.face, p.name, 'getting ready…', 'busy' + me);
   });
-  if (showComing) for (const f of coming(list)) rows.push(chip(cleanFace(f.face) || '🙂', f.name, 'on the way…', 'coming'));
-  return `<div class="tg-strip">${rows.join('')}</div>`;
+  if (showComing) {
+    for (const f of coming(list)) rows.push(chip(cleanFace(f.face) || '🙂', f.name, 'on the way…', 'coming'));
+    for (const f of saidNo(list)) rows.push(chip(cleanFace(f.face) || '🙂', f.name, `${icon('close')} not this time`, 'said-no'));
+  }
+  return `<div class="tg-strip" data-tg="${id}">${rows.join('')}</div>`;
 }
 
 // For joiners: big "Kit is building the track…" + the I'm ready button.

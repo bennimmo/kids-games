@@ -9,14 +9,17 @@ import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, dismissInvite, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
+  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
 const DOCK_KEY = 'kg-bubbles';
 const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da', '#ec407a', '#8d6e63'];
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
-const picsHTML = c => codeToPics(c).map(p => `<span>${p}</span>`).join('');
+const picsHTML = c => codeToPics(c).map(p => `<span class="pic">${p}</span>`).join('');
+const gameOf = id => GAMES.find(g => g.id === id);
+// "Playing Kit's Karts" / "On the menu" / "Not on"
+const whereText = (online, game) => !online ? 'Not on' : (gameOf(game) ? `Playing ${gameOf(game).name}` : 'On the menu');
 
 let layer, dock, list, micBtn, hangBtn, badge, knockEl, inviteEl, panel = null;
 const quiet = new Set(); // friends I've muted (just on this device)
@@ -91,7 +94,7 @@ function renderBubbles(s) {
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><button class="fb-quiet" aria-label="Mute friend"></button><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><button class="fb-quiet" aria-label="Mute friend"></button><div class="fb-name"></div><div class="fb-where"></div><audio autoplay playsinline></audio>`;
       el.querySelector('.fb-quiet').addEventListener('click', () => {
         sound.pop();
         quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
@@ -105,6 +108,11 @@ function renderBubbles(s) {
     el.querySelector('.fb-face b').textContent = f.face || [...f.name][0] || '?';
     el.classList.toggle('has-face', !!f.face);
     el.querySelector('.fb-name').textContent = f.name;
+    const g = gameOf(f.game), gb = el.querySelector('.fb-game');
+    if (gb.dataset.g !== (f.game || '')) { gb.dataset.g = f.game || ''; gb.innerHTML = g ? (gameArt(g.id) || g.icon) : ''; gb.style.setProperty('--c', g ? g.color : '#fff'); }
+    gb.hidden = !g;
+    el.querySelector('.fb-where').textContent = whereText(true, f.game);
+    el.title = `${f.name}: ${whereText(true, f.game)}`;
     const v = el.querySelector('video'), a = el.querySelector('audio');
     // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
     const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
@@ -136,8 +144,9 @@ function renderKnock(s) {
   knockEl.hidden = !k;
   if (!k) return;
   knockEl.innerHTML = `<div class="app-help-card fk-card">
-      <div class="fk-ring">${icon('phone')}</div>
+      <div class="fk-ring${k.face ? ' face' : ''}">${k.face || icon('phone')}</div>
       <div class="fk-name">${nameHTML(k.name)}</div>
+      <div class="fi-says">${k.saved ? 'is calling you' : 'wants to be friends'}</div>
       <div class="name-row">
         <button class="app-btn fk-no" aria-label="No">${icon('close')}</button>
         <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>
@@ -174,7 +183,7 @@ function renderInvite(s) {
     closePanel();
     location.hash = `#/${v.game}?join=${v.code}`;
   });
-  inviteEl.querySelector('.fi-no').addEventListener('click', () => { sound.pop(); dismissInvite(v); });
+  inviteEl.querySelector('.fi-no').addEventListener('click', () => { sound.pop(); declineInvite(v); });
   sound.pop();
 }
 
@@ -187,7 +196,9 @@ function renderBar(s) {
   if (!bar) return;
   // Just a phone button (the code is in the panel). Little number = friends connected.
   let inner = s.codeStatus === 'offline' ? '📵' : icon('phone');
+  const on = s.contacts.filter(c => c.online && !c.inCall).length;
   if (s.friends.length) inner += `<span class="fbar-count">${s.friends.length}</span>`;
+  else if (on) inner += `<span class="fbar-count on">${on}</span>`;
   bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
@@ -198,6 +209,7 @@ function renderBar(s) {
 
 const OUT_MSG = {
   asking: n => `⏳ ${n ? nameHTML(n) : ''}…`,
+  away: () => '😴 Not on',
   no: () => '🙅 No',
   full: () => '👫 Full',
   none: () => '🤷 Not found',
@@ -206,9 +218,11 @@ const OUT_MSG = {
 };
 
 let entry = [];
-function openPanel() {
+let adding = false, editing = false;
+function openPanel(add = false) {
   if (panel) return;
-  entry = [];
+  entry = []; editing = false;
+  adding = add || !friendState().contacts.length; // no friends yet: straight to adding one
   panel = document.createElement('div');
   panel.className = 'app-help friend-panel';
   panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
@@ -223,27 +237,48 @@ function closePanel() {
   if (s.outgoing && s.outgoing.status !== 'asking') cancelAsk();
 }
 
+function friendRow(c, s) {
+  const full = s.friends.length >= MAX_FRIENDS;
+  let act = '';
+  if (editing) act = `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
+  else if (c.inCall) act = `<span class="frow-tag">${icon('phone')} In call</span>`;
+  else if (c.calling) act = `<button class="frow-btn fcancel calling" aria-label="Stop">${icon('close')}</button>`;
+  else if (c.online && !full) act = `<button class="frow-btn fring" data-call="${c.uid}" aria-label="Call">${icon('phone')}</button>`;
+  const said = c.said && c.said !== 'asking' && OUT_MSG[c.said] ? `<small class="frow-said">${OUT_MSG[c.said]()}</small>` : '';
+  const status = c.calling ? `Calling… ⏳` : whereText(c.online, c.game);
+  const g = gameOf(c.game);
+  return `<div class="frow${c.online ? ' on' : ''}${c.inCall ? ' incall' : ''}">
+      <span class="frow-face" style="--c:${colorFor(c.uid)}">${c.face || nameHTML(c.name).slice(0, 1)}<i></i></span>
+      <span class="frow-txt"><b>${nameHTML(c.name)}</b><small>${c.online && g ? `<span class="frow-game">${gameArt(g.id) || g.icon}</span>` : ''}${status}</small>${said}</span>
+      ${act}
+    </div>`;
+}
+
 function renderPanel(s) {
   if (!panel) return;
   const out = s.outgoing;
-  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot">${entry[i] != null ? CODE_PICS[entry[i]] : ''}</span>`).join('');
+  const newOut = out && out.code && out.code[0] !== 'h' ? out : null; // asking by code (not calling a saved friend)
+  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? CODE_PICS[entry[i]] : ''}</span>`).join('');
   const full = s.friends.length >= MAX_FRIENDS;
+  const list = s.contacts;
   panel.innerHTML = `<div class="app-help-card friend-card">
-      <div class="fsec">
-        <div class="flabel">${icon('user')} My code</div>
+      <div class="fhead"><h2>${icon('people')} My friends</h2>
+        ${list.length ? `<button class="fsmall fedit${editing ? ' on' : ''}" aria-label="Edit friends">${icon(editing ? 'check' : 'edit')}</button>` : ''}</div>
+      ${list.length ? `<div class="flistv">${list.map(c => friendRow(c, s)).join('')}</div>` : `<div class="fempty">No friends yet. Add one with their pictures!</div>`}
+      ${adding ? `<div class="fsec fadd">
+        <div class="flabel">${icon('user')} My pictures <small>(show your friend)</small></div>
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
-      </div>
-      ${full ? '' : `<div class="fsec">
-        <div class="flabel">${icon('people')} Friend's code</div>
+        ${full ? '' : `<div class="flabel">${icon('plus')} Friend's pictures</div>
         <div class="fslots">${slots}</div>
-        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}">${p}</button>`).join('')}</div>
+        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}" class="pic">${p}</button>`).join('')}</div>
         <div class="name-row">
           <button class="app-btn fback" aria-label="Delete">${icon('backspace')}</button>
-          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('phone')}</button>
+          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('check')}</button>
         </div>
-        ${out ? `<div class="fmsg">${OUT_MSG[out.status](out.name)}${out.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}
-      </div>`}
+        ${newOut ? `<div class="fmsg">${OUT_MSG[newOut.status](newOut.name)}${newOut.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}`}
+      </div>` : `<button class="tg-btn small fadd-btn">${icon('plus')}<span>Add a friend</span></button>`}
       ${s.friends.length ? `<div class="fsec">
+        <div class="flabel">${icon('phone')} In the call</div>
         <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${f.face ? f.face + ' ' : ''}${nameHTML(f.name)}</span>`).join('')}</div>
         <select class="fmic" aria-label="Microphone" hidden></select>
         <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">${icon('settings')}</button><button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button></div>
@@ -252,6 +287,14 @@ function renderPanel(s) {
     </div>`;
   const q = sel => panel.querySelector(sel);
   q('.fclose').addEventListener('click', () => { sound.pop(); closePanel(); });
+  q('.fadd-btn')?.addEventListener('click', () => { sound.pop(); adding = true; newCode(); renderPanel(friendState()); });
+  q('.fedit')?.addEventListener('click', () => { sound.pop(); editing = !editing; renderPanel(friendState()); });
+  panel.querySelectorAll('[data-call]').forEach(b => b.addEventListener('click', () => { sound.pop(); callFriend(b.dataset.call); }));
+  panel.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+    sound.pop();
+    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.innerHTML = icon('check'); return; }
+    removeFriend(b.dataset.rm);
+  }));
   panel.querySelectorAll('.fpad button').forEach(b => b.addEventListener('click', () => {
     if (entry.length >= FRIEND_CODE_LEN) return;
     sound.pop(); entry.push(+b.dataset.i); renderPanel(friendState());
@@ -263,7 +306,7 @@ function renderPanel(s) {
     askFriend(entry.map(i => i.toString(16)).join(''));
     entry = [];
   });
-  q('.fcancel')?.addEventListener('click', () => { sound.pop(); cancelAsk(); });
+  panel.querySelectorAll('.fcancel').forEach(b => b.addEventListener('click', () => { sound.pop(); cancelAsk(); }));
   q('.fleave')?.addEventListener('click', () => { sound.pop(); leaveGroup(); });
   q('.ftools')?.addEventListener('click', () => { sound.pop(); openVoiceTools(); });
   const sel = q('.fmic');

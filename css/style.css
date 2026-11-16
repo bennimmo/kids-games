@@ -421,3 +421,63 @@ html, body { overscroll-behavior: none; }
 button.tg-btn.tg-btn { color: #fff; border: 3px solid rgba(255,255,255,.9); background: var(--btn-ok); font-family: "Fredoka", system-ui, sans-serif; }
 button.tg-ready.tg-ready { color: #fff; border: 0; background: var(--btn-hot); font-family: "Fredoka", system-ui, sans-serif; }
 button.tg-ready.tg-ready.on { background: var(--btn-ok); }
+
+/* ---------- Friends list (panel) ---------- */
+.pic { font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif; }
+.fhead { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.fhead h2 { margin: 0; font-size: 26px; display: inline-flex; align-items: center; gap: 8px; }
+.fedit.on { background: var(--btn-ok); color: #fff; }
+.fempty { font-size: 18px; opacity: .7; padding: 6px 0; }
+.flistv { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.frow {
+  display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 8px; border-radius: 22px;
+  background: #f4f0ff; text-align: left;
+}
+.frow.incall { background: #d7f5e1; }
+.frow-face {
+  position: relative; width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 32px; line-height: 1; color: #fff; font-weight: 700; background: var(--c); filter: grayscale(.8) opacity(.6);
+}
+.frow.on .frow-face { filter: none; }
+.frow-face i { position: absolute; right: -1px; bottom: -1px; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #f4f0ff; background: #b0b0c0; }
+.frow.on .frow-face i { background: #22c55e; }
+.frow-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.frow-txt b { font-size: 21px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frow-txt small { font-size: 15px; font-weight: 600; opacity: .75; display: flex; align-items: center; gap: 5px; }
+.frow-game { width: 22px; height: 22px; display: inline-grid; place-items: center; font-size: 18px; }
+.frow-game .art { width: 22px; height: 22px; }
+.frow-said { color: #c2410c; opacity: 1 !important; }
+.frow-btn {
+  width: 54px; height: 54px; flex: none; border: 0; border-radius: 50%; padding: 0; cursor: pointer;
+  display: grid; place-items: center; font-size: 26px; color: #fff; background: var(--btn-ok);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), 0 5px 12px -4px rgba(20,90,50,.55);
+}
+.frow-btn:active { transform: scale(.92); }
+.frow-btn.fring { animation: tg-pulse 1.6s ease-in-out infinite; }
+.frow-btn.calling, .frow-btn.frm { background: var(--btn-no); box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), 0 5px 12px -4px rgba(180,40,30,.5); }
+.frow-btn.frm.sure { background: #b91c1c; }
+.frow-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; color: #1b7a43; padding-right: 6px; }
+.fadd { gap: 8px; }
+.flabel small { font-weight: 500; opacity: .8; }
+.fbar-count.on { background: #22c55e; color: #fff; }
+.fk-ring.face { background: #fff3c4; font-size: 58px; }
+
+/* friend bubbles: what they're playing */
+.fb-game {
+  position: absolute; left: -4px; top: 38px; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 16px; background: var(--c); border: 2px solid #fff;
+  box-shadow: 0 2px 5px rgba(0,0,0,.25); pointer-events: none;
+}
+.fb-game .art { width: 22px; height: 22px; }
+.fb-game[hidden] { display: none; }
+.fb { position: relative; }
+.fb-where {
+  display: none; position: absolute; top: 8px; right: calc(100% + 8px); white-space: nowrap;
+  padding: 6px 12px; border-radius: 14px; background: #fff; color: var(--ink); font-size: 15px; font-weight: 700;
+  box-shadow: 0 4px 12px -2px rgba(0,0,0,.3); pointer-events: none;
+}
+.fb-dock.left .fb-where { right: auto; left: calc(100% + 8px); }
+.fb:hover .fb-where, .fb-dock.open .fb-where { display: block; }
+
+.tg-p.said-no { opacity: .7; background: #ffe4e0; }
+.tg-p.said-no small { color: #c2410c; opacity: 1; }

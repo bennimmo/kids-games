@@ -38,6 +38,10 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## 📞 Friends (on the menu)
+- **My friends list**: add a friend once with pictures, after that they're saved on this device (`kg-friends`). The list shows who's on (green dot) and what they're playing; 📞 calls them wherever they are (pop-up "Kit is calling you"). ✏️ = remove friends. Everyone you've been in a call with is saved.
+- Each device keeps a "home" while the app is open (`games/friends/rooms/h<uid>`: name, face, on, game) so saved friends can see it and call it. Calling someone who's already in a call brings them into it.
+- Friend bubbles show a little game badge; hover/tap shows "Playing Kit's Karts".
+- Code pictures use the Noto emoji font (subset from Google Fonts) so they look the same on Windows, iPad and Android.
 - Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.
@@ -49,7 +53,7 @@ Then open http://localhost:8000
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
 2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
-3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games.
+3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games. ✖ shows "not this time" on the host's strip.
 4. Lobby strip shows everyone: host "building the track…", friends "getting ready…" / "✔ Ready!", friends not in yet "on the way…".
 5. Friends do up their kart/tank/car, then tap the big **I'm ready!**. The host's start button stays locked ("Waiting for Sam…") until everyone is ready.
 - Code: `js/engine/together.js` (button, invites, lobby strip, ready helpers). Invite = `players/<uid>_i` in the friend group (`friends.js`). Pop-up in `js/friends-ui.js`. Player entries in game rooms carry `{ name, face, ready }`.
