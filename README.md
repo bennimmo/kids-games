@@ -46,6 +46,14 @@ Then open http://localhost:8000
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
 - Some networks block direct links: a TURN server would fix that (not added yet).
 
+## 👫 Play together (the same in every game)
+1. Link up once on the menu (📞 + 6 pictures, above).
+2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
+3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games.
+4. Lobby strip shows everyone: host "building the track…", friends "getting ready…" / "✔ Ready!", friends not in yet "on the way…".
+5. Friends do up their kart/tank/car, then tap the big **I'm ready!**. The host's start button stays locked ("Waiting for Sam…") until everyone is ready.
+- Code: `js/engine/together.js` (button, invites, lobby strip, ready helpers). Invite = `players/<uid>_i` in the friend group (`friends.js`). Pop-up in `js/friends-ui.js`. Player entries in game rooms carry `{ name, face, ready }`.
+
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
 3D flight simulator with an easy mode. Built with three.js.
