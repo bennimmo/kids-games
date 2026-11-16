@@ -225,7 +225,7 @@ function openPanel(add = false) {
   adding = add || !friendState().contacts.length; // no friends yet: straight to adding one
   panel = document.createElement('div');
   panel.className = 'app-help friend-panel';
-  panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
+  panel.addEventListener('click', e => { if (e.target === panel) closePanel(); else panelClick(e); });
   shield(panel);
   document.body.appendChild(panel);
   renderPanel(friendState());
@@ -261,7 +261,7 @@ function renderPanel(s) {
   const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? picImg(entry[i]) : ''}</span>`).join('');
   const full = s.friends.length >= MAX_FRIENDS;
   const list = s.contacts;
-  panel.innerHTML = `<div class="app-help-card friend-card">
+  const html = `<div class="app-help-card friend-card">
       <div class="fhead"><h2>${icon('people')} My friends</h2>
         ${list.length ? `<button class="fsmall fedit${editing ? ' on' : ''}" aria-label="Edit friends">${icon(editing ? 'check' : 'edit')}</button>` : ''}</div>
       ${list.length ? `<div class="flistv">${list.map(c => friendRow(c, s)).join('')}</div>` : `<div class="fempty">No friends yet. Add one with their pictures!</div>`}
@@ -285,37 +285,62 @@ function renderPanel(s) {
       </div>` : ''}
       <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
+  // Only redraw what changed (rebuilding everything made the pictures flash on iPad).
+  const t = document.createElement('div');
+  t.innerHTML = html;
+  if (panel.firstChild) patch(panel.firstChild, t.firstChild); else panel.appendChild(t.firstChild);
   const q = sel => panel.querySelector(sel);
-  q('.fclose').addEventListener('click', () => { sound.pop(); closePanel(); });
-  q('.fadd-btn')?.addEventListener('click', () => { sound.pop(); adding = true; newCode(); renderPanel(friendState()); });
-  q('.fedit')?.addEventListener('click', () => { sound.pop(); editing = !editing; renderPanel(friendState()); });
-  panel.querySelectorAll('[data-call]').forEach(b => b.addEventListener('click', () => { sound.pop(); callFriend(b.dataset.call); }));
-  panel.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
-    sound.pop();
-    if (!b.classList.contains('sure')) { b.classList.add('sure'); b.innerHTML = icon('check'); return; }
-    removeFriend(b.dataset.rm);
-  }));
-  panel.querySelectorAll('.fpad button').forEach(b => b.addEventListener('click', () => {
-    if (entry.length >= FRIEND_CODE_LEN) return;
-    sound.pop(); entry.push(+b.dataset.i); renderPanel(friendState());
-  }));
-  q('.fback')?.addEventListener('click', () => { sound.pop(); entry.pop(); renderPanel(friendState()); });
-  q('.fcall')?.addEventListener('click', () => {
-    if (entry.length !== FRIEND_CODE_LEN) return;
-    sound.pop();
-    askFriend(entry.map(i => i.toString(16)).join(''));
-    entry = [];
-  });
-  panel.querySelectorAll('.fcancel').forEach(b => b.addEventListener('click', () => { sound.pop(); cancelAsk(); }));
-  q('.fleave')?.addEventListener('click', () => { sound.pop(); leaveGroup(); });
-  q('.ftools')?.addEventListener('click', () => { sound.pop(); openVoiceTools(); });
   const sel = q('.fmic');
-  if (sel && s.micStatus === 'on') listMics().then(mics => {
+  if (sel && s.micStatus === 'on' && !sel.dataset.filled) { sel.dataset.filled = '1'; listMics().then(mics => {
     if (!panel || !sel.isConnected || mics.length < 2) return;
     sel.innerHTML = mics.map(m => `<option value="${m.id.replace(/"/g, '')}"${m.chosen ? ' selected' : ''}>🎤 ${m.label.replace(/[<>&"]/g, '')}</option>`).join('');
     sel.hidden = false;
     sel.addEventListener('change', () => { sound.pop(); chooseMic(sel.value); });
-  });
+  }); }
+}
+
+// Make `cur` look like `want`, keeping nodes that haven't changed (so images don't reload).
+function patch(cur, want) {
+  if (cur.isEqualNode(want)) return;
+  if (cur.nodeName === 'SELECT' && want.nodeName === 'SELECT') return; // keep the mic list it filled in
+  if (cur.nodeType !== want.nodeType || cur.nodeName !== want.nodeName || cur.nodeType !== 1) {
+    cur.replaceWith(want); return;
+  }
+  for (const at of [...cur.attributes]) if (!want.hasAttribute(at.name)) cur.removeAttribute(at.name);
+  for (const at of [...want.attributes]) if (cur.getAttribute(at.name) !== at.value) cur.setAttribute(at.name, at.value);
+  const a = [...cur.childNodes], b = [...want.childNodes];
+  for (let k = 0; k < b.length; k++) {
+    if (k < a.length) patch(a[k], b[k]);
+    else cur.appendChild(b[k]);
+  }
+  for (let k = b.length; k < a.length; k++) a[k].remove();
+}
+
+// One click handler for the whole panel (the panel is patched, not rebuilt).
+function panelClick(e) {
+  const btn = e.target.closest('button');
+  if (!btn || !panel.contains(btn)) return;
+  const re = () => renderPanel(friendState());
+  if (btn.matches('.fclose')) { sound.pop(); closePanel(); }
+  else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; newCode(); re(); }
+  else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; re(); }
+  else if (btn.dataset.call) { sound.pop(); callFriend(btn.dataset.call); }
+  else if (btn.dataset.rm) {
+    sound.pop();
+    if (!btn.classList.contains('sure')) { btn.classList.add('sure'); btn.innerHTML = icon('check'); return; }
+    removeFriend(btn.dataset.rm);
+  } else if (btn.closest('.fpad')) {
+    if (entry.length >= FRIEND_CODE_LEN) return;
+    sound.pop(); entry.push(+btn.dataset.i); re();
+  } else if (btn.matches('.fback')) { sound.pop(); entry.pop(); re(); }
+  else if (btn.matches('.fcall')) {
+    if (entry.length !== FRIEND_CODE_LEN) return;
+    sound.pop();
+    askFriend(entry.map(i => i.toString(16)).join(''));
+    entry = [];
+  } else if (btn.matches('.fcancel')) { sound.pop(); cancelAsk(); }
+  else if (btn.matches('.fleave')) { sound.pop(); leaveGroup(); }
+  else if (btn.matches('.ftools')) { sound.pop(); openVoiceTools(); }
 }
 
 // ------------------------------------------------------------ start
