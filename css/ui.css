@@ -282,3 +282,8 @@ button.tg-ready.tg-ready { font-family: var(--font); font-weight: 900; border-ra
   .ui-panel { padding: 22px 16px 18px; border-radius: 24px; }
 }
 @media (max-width: 560px) { .menu { padding-top: 0; } }
+
+/* full-picture covers (js/game-covers.js) */
+.tile .icon.has-cover { background: #000; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+.tile .cover { width: 100%; height: 100%; display: block; transition: transform .35s ease; }
+.tile:hover .cover { transform: scale(1.05); }

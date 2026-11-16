@@ -1,5 +1,6 @@
 import { GAMES, AGES } from './games.js';
 import { gameArt } from './game-art.js';
+import { gameCover } from './game-covers.js';
 import { icon } from './engine/icons.js';
 import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
@@ -142,7 +143,7 @@ function showMenu() {
         <div class="grid">
           ${list.map(g => `
             <button class="tile" style="--c:${g.color}" data-id="${g.id}">
-              <div class="icon">${gameArt(g.id) || g.icon}</div>
+              ${gameCover(g.id) ? `<div class="icon has-cover">${gameCover(g.id)}</div>` : `<div class="icon">${gameArt(g.id) || g.icon}</div>`}
               <div class="name">${g.name}</div>
             </button>`).join('')}
         </div>
