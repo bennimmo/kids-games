@@ -1,6 +1,6 @@
 // Sky Pilot: the 3D ground (chunks with 3 levels of detail) and the sea.
 import * as THREE from '../../js/vendor/three.module.min.js';
-import { GRID, HALF, CELL, heights, regionWeights, N, AIRPORTS, TOWNS, runwayLocal, apronSide, LAKE } from './island.js';
+import { GRID, HALF, CELL, heights, regionWeights, N, AIRPORTS, TOWNS, VILLAGES, townMask, runwayLocal, apronSide, LAKE } from './island.js';
 import { clamp, smooth, lerp, hash2, makeNoise } from './noise.js';
 
 const CHUNKS = 12;                 // chunks across
@@ -50,6 +50,13 @@ function groundColor(x, z, h, ny, out) {
   if (beach > 0) mix3(c, SAND, beach * (1 - wm), c);
   // under the sea: sand getting darker
   if (h < 0.6) mix3(SAND, WET, smooth(0, -30, h), c);
+  // towns and hamlets: gardens, yards and paths (a bit browner/greyer)
+  for (const t of TOWNS) {
+    if (Math.abs(x - t.x) > t.w * 1.2 || Math.abs(z - t.z) > t.w * 1.2) continue;
+    const m = townMask(t, x, z);
+    if (m < 1.1) mix3(c, t.kind === 'city' ? [0.55, 0.55, 0.5] : t.kind === 'adobe' || t.kind === 'resort' ? [0.82, 0.72, 0.55] : [0.5, 0.52, 0.36], smooth(1.1, 0.6, m) * (t.kind === 'city' ? 0.6 : 0.4), c);
+  }
+  for (const vv of VILLAGES) { const d = Math.hypot(x - vv.x, z - vv.z); if (d < vv.r * 1.3) mix3(c, [0.52, 0.5, 0.36], smooth(vv.r * 1.3, vv.r * 0.4, d) * 0.35, c); }
   // fine noise so it isn't flat
   const k = 0.92 + v2 * 0.08;
   out[0] = c[0] * k; out[1] = c[1] * k; out[2] = c[2] * k;
@@ -57,14 +64,19 @@ function groundColor(x, z, h, ny, out) {
 }
 
 // ---------------------------------------------------------------- textures
+// noise that repeats every `period` (blends 4 copies so the edges match)
+function tileNoise(n, x, y, period, oct) {
+  const u = x / period, v = y / period;
+  const f = (a, b) => n.fbm(a, b, oct);
+  return f(x, y) * (1 - u) * (1 - v) + f(x - period, y) * u * (1 - v) + f(x, y - period) * (1 - u) * v + f(x - period, y - period) * u * v;
+}
 function detailTexture() {
   const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d'), img = g.createImageData(S, S);
   const n = makeNoise(99);
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     // tileable: sample on a torus
-    const a = x / S * Math.PI * 2, b = y / S * Math.PI * 2;
-    const v = n.fbm(Math.cos(a) * 3 + 10, Math.sin(a) * 3 + Math.cos(b) * 3, 4) * 0.6 + n.fbm(Math.sin(b) * 6, Math.cos(a) * 6 + 3, 3) * 0.4;
+    const v = tileNoise(n, x / 32, y / 32, S / 32, 4) * 0.6 + tileNoise(n, x / 12 + 40, y / 12, S / 12, 3) * 0.4;
     const k = Math.round(clamp(165 + (v - 0.5) * 150 + (Math.random() - 0.5) * 26, 0, 255));
     const o = (y * S + x) * 4; img.data[o] = img.data[o + 1] = img.data[o + 2] = k; img.data[o + 3] = 255;
   }
@@ -72,6 +84,24 @@ function detailTexture() {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// bumpy normal map for the ground (tileable)
+function groundNormals() {
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), img = g.createImageData(S, S), n = makeNoise(321);
+  const H = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    H[y * S + x] = tileNoise(n, x / 40, y / 40, S / 40, 5);
+  }
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = H[y * S + (x + 1) % S] - H[y * S + (x - 1 + S) % S], dy = H[((y + 1) % S) * S + x] - H[((y - 1 + S) % S) * S + x];
+    const k = 6, l = Math.hypot(dx * k, dy * k, 1), o = (y * S + x) * 4;
+    img.data[o] = (-dx * k / l * 0.5 + 0.5) * 255; img.data[o + 1] = (-dy * k / l * 0.5 + 0.5) * 255; img.data[o + 2] = (1 / l * 0.5 + 0.5) * 255; img.data[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
   return t;
 }
 
@@ -97,7 +127,8 @@ export function waterNormals() {
 }
 
 // ---------------------------------------------------------------- build
-export async function createTerrain(scene, sky, progress) {
+export async function createTerrain(scene, sky, progress, quality = {}) {
+  if (quality.name === 'high') { LOD_DIST[0] = 6000; LOD_DIST[1] = 14000; }
   const n = GRID + 1;
   // colours + normals for every grid point (once)
   const cols = new Float32Array(n * n * 3), nors = new Float32Array(n * n * 3);
@@ -112,12 +143,20 @@ export async function createTerrain(scene, sky, progress) {
       const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
       nors.set([nx, ny, nz], k * 3);
       groundColor(-HALF + i * CELL, -HALF + j * CELL, h, ny, out);
+      // valleys a bit darker, ridges a bit lighter (looks like soft shadows)
+      if (h > 0.5) {
+        const at = (di, dj) => heights[Math.min(n - 1, Math.max(0, j + dj)) * n + Math.min(n - 1, Math.max(0, i + di))];
+        const near = (hl + hr + hu + hd) / 4 - h;
+        const far = (at(-5, 0) + at(5, 0) + at(0, -5) + at(0, 5) + at(-4, -4) + at(4, 4) + at(-4, 4) + at(4, -4)) / 8 - h;
+        const k2 = clamp(1 - near * 0.012 - far * 0.0035, 0.62, 1.12);
+        out[0] *= k2; out[1] *= k2; out[2] *= k2;
+      }
       cols.set(out, k * 3);
     }
     if (performance.now() - t0 > 30) { progress && progress(j / n); await new Promise(r => setTimeout(r, 0)); t0 = performance.now(); }
   }
 
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: detailTexture(), roughness: 0.95, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: detailTexture(), normalMap: groundNormals(), normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.95, metalness: 0 });
   // two scales of detail so the pattern doesn't repeat
   mat.onBeforeCompile = sh => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
@@ -188,12 +227,29 @@ export async function createTerrain(scene, sky, progress) {
   const wn = waterNormals();
   wn.repeat.set(1, 1);
   const waterMat = new THREE.MeshStandardMaterial({ color: 0x0f4f78, roughness: 0.06, metalness: 0.0, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), transparent: true, opacity: 0.88, envMapIntensity: 1.2 });
-  const wU = { wtime: { value: 0 } };
+  // how deep the sea is everywhere (0 = shore, 1 = 40 m+): turquoise shallows and foam at the beach
+  const depthData = new Uint8Array(n * n);
+  for (let k = 0; k < n * n; k++) depthData[k] = Math.round(clamp(-heights[k] / 40, 0, 1) * 255);
+  const depthTex = new THREE.DataTexture(depthData, n, n, THREE.RedFormat, THREE.UnsignedByteType);
+  depthTex.magFilter = depthTex.minFilter = THREE.LinearFilter; depthTex.needsUpdate = true;
+  const wU = { wtime: { value: 0 }, depthTex: { value: depthTex }, span: { value: HALF * 2 } };
   waterMat.onBeforeCompile = sh => {
-    sh.uniforms.wtime = wU.wtime;
+    sh.uniforms.wtime = wU.wtime; sh.uniforms.depthTex = wU.depthTex; sh.uniforms.span = wU.span;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float wtime;\nvarying vec3 vWPos;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float wtime, span;\nuniform sampler2D depthTex;\nvarying vec3 vWPos;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 duv = vWPos.xz / span + 0.5;
+        float dep = (duv.x < 0.0 || duv.y < 0.0 || duv.x > 1.0 || duv.y > 1.0) ? 1.0 : texture2D(depthTex, duv).r;
+        vec3 shallow = vec3(0.12, 0.62, 0.6);
+        diffuseColor.rgb = mix(shallow, diffuseColor.rgb, smoothstep(0.0, 0.45, dep));
+        diffuseColor.a = mix(0.5, opacity, smoothstep(0.0, 0.2, dep));
+        float foamLine = smoothstep(0.06, 0.0, dep);
+        float ripple = 0.55 + 0.45 * sin(wtime * 1.6 - dep * 160.0 + sin(vWPos.x * 0.03 + vWPos.z * 0.02) * 3.0);
+        float foam = foamLine * ripple;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95), foam * 0.85);
+        diffuseColor.a = max(diffuseColor.a, foam);
+      `)
       .replace('#include <normal_fragment_maps>', `
         vec2 wuv = vWPos.xz / 70.0;
         vec3 n1 = texture2D(normalMap, wuv + vec2(wtime * 0.013, wtime * 0.008)).xyz * 2.0 - 1.0;

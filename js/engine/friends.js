@@ -23,6 +23,7 @@ let lastEcho = voiceOpts().echo;
 onVoiceOpts(o => {
   soundsBack();
   if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
+  if (group) group.peers.forEach(p => { try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
 });
 export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
@@ -32,7 +33,23 @@ const AREA = 'games/friends/rooms';
 const KEEP_KEY = 'kg-group';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
-const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
+// STUN finds a direct path. TURN = relay for when devices can't link directly (free public
+// Open Relay server: may be slow or down; swap for a paid/own one if it's unreliable).
+const ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  {
+    urls: [
+      'turn:staticauth.openrelay.metered.ca:80',
+      'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
+      'turn:staticauth.openrelay.metered.ca:443',
+      'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
+const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const randomHex = n => [...bytes(n)].map(b => (b & 15).toString(16)).join('');
@@ -95,6 +112,8 @@ export async function startMic() {
     mic = m; micStatus = 'on';
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
     group.peers.forEach(addMic);
+    // Chrome (Android) hides local addresses until the mic is allowed: look for a link again now.
+    group.peers.forEach(p => { if (p.status !== 'on') p.retry(); });
   } catch (e) { micStatus = 'denied'; }
   soundsBack();
   emit();
@@ -339,6 +358,9 @@ async function joinGroup(id) {
       .filter(([pid, i]) => pid.endsWith('_i') && i && i.game && i.code && seen.has(pid.slice(0, -2)) && fb.now() - (i.at || 0) < INVITE_MS)
       .map(([pid, i]) => ({ uid: pid.slice(0, -2), name: cleanName(i.name) || '?', face: cleanFace(i.face), game: String(i.game), code: String(i.code), at: i.at }))
       .sort((a, b) => b.at - a.at);
+    // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
+    if (!g.peers.size && !g.aloneTimer) g.aloneTimer = setTimeout(() => { if (group === g && !g.peers.size) leaveGroup(); }, ALONE_MS);
+    if (g.peers.size && g.aloneTimer) { clearTimeout(g.aloneTimer); g.aloneTimer = null; }
     readSignals(g);
     emit();
   }));
@@ -357,6 +379,7 @@ export async function leaveGroup() {
   group = null;
   forget();
   clearInterval(g.timer);
+  clearTimeout(g.aloneTimer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
   stopMic();
@@ -387,7 +410,7 @@ function readSignals(g) {
 function makePeer(g, theirUid, theirSid) {
   const { D } = fb;
   const polite = fb.uid > theirUid;
-  const pc = new RTCPeerConnection({ iceServers: ICE });
+  const pc = new RTCPeerConnection(iceConfig());
   const out = ref(`${g.id}/live/${fb.uid}_m/${theirUid}`);
   let n = 0, makingOffer = false, ignoreOffer = false, closed = false, chain = Promise.resolve();
   const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set() };
@@ -406,6 +429,9 @@ function makePeer(g, theirUid, theirSid) {
     } catch (e) { /* try again on next change */ } finally { makingOffer = false; }
   };
   pc.onicecandidate = e => { if (e.candidate) send({ c: e.candidate.toJSON() }); };
+  // Not linked yet: try again every 15 s (new network paths, e.g. once the mic is allowed).
+  peer.retry = () => { if (!closed && pc.signalingState !== 'closed') { try { pc.restartIce(); } catch (e) { /* */ } } };
+  const watchdog = setInterval(() => { if (closed) clearInterval(watchdog); else if (peer.status !== 'on') peer.retry(); }, 15000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
@@ -450,6 +476,7 @@ function makePeer(g, theirUid, theirSid) {
   peer.close = () => {
     if (closed) return;
     closed = true;
+    clearInterval(watchdog);
     try { pc.close(); } catch (e) { /* already */ }
     D.remove(out).catch(() => {});
   };

@@ -188,12 +188,13 @@ export function createLife(scene, sky, quality, dpr) {
         });
       }
     } else {
+      for (const [trainOff, trainCol] of [[0, 0x263238], [span * 0.9, 0x8e1b1b]]) {
       // train: engine + 5 carriages
       const cars = [];
       const tm = [0xc62828, 0x2e7d32, 0x1565c0, 0xf9a825, 0x6a1b9a, 0xef6c00];
       for (let i = 0; i < 6; i++) {
         const g = new THREE.Group();
-        const b = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.2, 12), mat(i ? tm[i] : 0x263238)); b.position.y = 2.2; g.add(b);
+        const b = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.2, 12), mat(i ? tm[i] : trainCol)); b.position.y = 2.2; g.add(b);
         const rf = new THREE.Mesh(new THREE.BoxGeometry(3, 0.3, 12.2), mat(0xeeeeee)); rf.position.y = 3.9; g.add(rf);
         if (!i) { const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2, 8), mat(0x111111)); ch.position.set(0, 4.6, 3.5); g.add(ch); }
         g.traverse(o => { if (o.isMesh) o.castShadow = true; });
@@ -202,7 +203,7 @@ export function createLife(scene, sky, quality, dpr) {
       const hl = { x: 0, y: 0, z: 0 }; headL.push(hl);
       movers.push({
         update(T) {
-          const base = T * 16;
+          const base = T * 18 + trainOff;
           cars.forEach((g, i) => {
             const p = along(road.path, base - (along(road.path, base).back ? -1 : 1) * i * 13);
             g.position.set(p.x, p.y, p.z); g.rotation.y = Math.atan2(p.dx, p.dz);
@@ -210,6 +211,7 @@ export function createLife(scene, sky, quality, dpr) {
           });
         },
       });
+      }
     }
   }
   const head = makeLights(headL.map(() => [0, 0, 0, 1, 0.95, 0.8, 1.3]), dpr);

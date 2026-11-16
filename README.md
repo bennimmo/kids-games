@@ -57,12 +57,16 @@ Then open http://localhost:8000
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
 3D flight simulator with an easy mode. Built with three.js.
-- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast, carrier catapult + arrestor wire). 8 colours.
+- Plane detail: pilots you can see through real window openings, painted liveries (registrations, stripes, panel lines, doors, "SUNNY AIR" + sun logo, jet star insignia and 77, "RESCUE" heli), antennas, pitot tubes, exhausts, radial engine cylinders, float rudders, flap fairings, wingtip missiles, ejection seat, rotor hub, searchlight, tail rotor guard.
+- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast and agile: loops and rolls, in easy mode only above ~1000 ft; carrier catapult + arrestor wire). 8 colours.
+- Towns are blob shaped with street grids (tall in the middle, houses at the edges): Sunny Town, Snow Village, Oasis, Farm Village, Palm Bay, Fishport, Lakeside, plus ~30 hamlets and a castle on a hill. Roads and the railway (Forest Farm - Sunny Town - Oasis - Desert Strip) are carved into the ground with gentle slopes: cuttings, embankments, bridges over deep dips, tunnels through big hills.
 - One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
 - 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
 - Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
-- Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
+- Life: boats with wakes, moored boats, beach umbrellas, cows and sheep in the fields, rocks and bushes, cars + 2 trains, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
 - Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
+- Graphics: soft valley shadows + ridge highlights on the ground, bumpy ground detail, turquoise shallows + beach foam, clouds lit on the sunny side with silver linings, sun glare, swaying trees, brighter nights.
+- Map: hill shading, height lines, sea depth, towns with streets, roads, railway, runways, carrier, names and landmark icons (🗼 🎡 ⛵ 🏥 🔺 📡 🌬️ 🦆), other pilots with names. Under it: nearest airport (arrow + distance) and time/weather icons. Tap it (or M) for the whole island.
 - Views (just two): 🎥 behind the plane and 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet). Drag to look, wheel/pinch to zoom, double-tap to reset.
 - 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.

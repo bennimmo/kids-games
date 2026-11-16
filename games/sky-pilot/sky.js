@@ -127,6 +127,9 @@ const cloudVert = `
 #include <logdepthbuf_pars_vertex>
 attribute vec3 offset;
 attribute vec3 info; // size, shade (0 bottom .. 1 top), threshold
+attribute vec3 lofs; // direction from the middle of its cloud
+uniform vec3 sunDir;
+varying float vSun;
 uniform vec2 drift;
 uniform float span;
 uniform vec3 camPos;
@@ -138,6 +141,7 @@ void main() {
   o.xz = mod(o.xz + drift + span * 0.5, span) - span * 0.5;
   vUv = uv;
   vShade = info.y;
+  vSun = dot(normalize(lofs + vec3(0.0, 0.35, 0.0)), sunDir) * 0.5 + 0.5;
   vVis = 1.0 - smoothstep(cover - 0.06, cover, info.z);
   vec4 mv = viewMatrix * vec4(o, 1.0);
   float size = info.x * (0.85 + cover * 0.3);
@@ -155,13 +159,16 @@ uniform vec3 lit, dark, fogCol;
 uniform float opacity, fogDensity;
 varying vec2 vUv;
 varying float vShade, vFade, vDist, vVis;
+varying float vSun;
+uniform vec3 sunCol;
 void main() {
   vec4 t = texture2D(map, vUv);
   #include <logdepthbuf_fragment>
   float a = t.a * opacity * vFade * vVis;
   if (a < 0.01) discard;
-  float shade = clamp(vShade * 0.8 + (1.0 - vUv.y) * 0.35, 0.0, 1.0);
+  float shade = clamp(vShade * 0.55 + vSun * 0.45 + (1.0 - vUv.y) * 0.25, 0.0, 1.0);
   vec3 col = mix(dark, lit, shade);
+  col += sunCol * pow(vSun, 6.0) * 0.25 * shade;   // silver lining on the sunny side
   float f = 1.0 - exp(-fogDensity * fogDensity * vDist * vDist * 0.35);
   col = mix(col, fogCol, f);
   gl_FragColor = vec4(col, a);
@@ -230,6 +237,13 @@ export function createSky(scene, renderer, quality) {
   const stars = new THREE.Points(sg, starMat); stars.frustumCulled = false; stars.renderOrder = -9;
   group.add(stars);
 
+  // sun glare (a soft glow that hides behind mountains and clouds)
+  const glareTex = glowTexture();
+  const glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTex, color: 0xfff2d8, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+  glare.renderOrder = 7; group.add(glare);
+  const glare2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTex, color: 0xffb070, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, opacity: 0.35 }));
+  glare2.renderOrder = 7; group.add(glare2);
+
   // lights
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x5a5040, 1.2);
@@ -259,26 +273,28 @@ export function createSky(scene, renderer, quality) {
     const w = (300 + r() * 500) * big, hgt = (120 + r() * 200) * big;
     const n = Math.round((8 + r() * 10) * big);
     clusters.push({ x: cx, y: cy + hgt * 0.4, z: cz, r: w * 0.7, thr });
+    const cc = [cx, cy + hgt * 0.3, cz];
     for (let i = 0; i < n; i++) {
       const a = r() * Math.PI * 2, d = Math.sqrt(r());
       const px = cx + Math.cos(a) * d * w, pz = cz + Math.sin(a) * d * w * 0.7;
       const top = 1 - d * 0.6;
       const py = cy + r() * hgt * top;
-      puffs.push([px, py, pz, (180 + r() * 220) * big * (0.6 + top * 0.6), (py - cy) / hgt, thr]);
+      const lx = px - cc[0], ly = (py - cc[1]) * 2, lz = pz - cc[2], ll = Math.hypot(lx, ly, lz) || 1;
+      puffs.push([px, py, pz, (180 + r() * 220) * big * (0.6 + top * 0.6), (py - cy) / hgt, thr, lx / ll, ly / ll, lz / ll]);
     }
   }
   const cg = new THREE.InstancedBufferGeometry();
   cg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]), 3));
   cg.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2));
   cg.setIndex([0, 1, 2, 0, 2, 3]);
-  const offA = new Float32Array(puffs.length * 3), infoA = new Float32Array(puffs.length * 3);
-  const offAttr = new THREE.InstancedBufferAttribute(offA, 3), infoAttr = new THREE.InstancedBufferAttribute(infoA, 3);
-  offAttr.setUsage(THREE.DynamicDrawUsage); infoAttr.setUsage(THREE.DynamicDrawUsage);
-  cg.setAttribute('offset', offAttr); cg.setAttribute('info', infoAttr);
+  const offA = new Float32Array(puffs.length * 3), infoA = new Float32Array(puffs.length * 3), lofA = new Float32Array(puffs.length * 3);
+  const offAttr = new THREE.InstancedBufferAttribute(offA, 3), infoAttr = new THREE.InstancedBufferAttribute(infoA, 3), lofAttr = new THREE.InstancedBufferAttribute(lofA, 3);
+  offAttr.setUsage(THREE.DynamicDrawUsage); infoAttr.setUsage(THREE.DynamicDrawUsage); lofAttr.setUsage(THREE.DynamicDrawUsage);
+  cg.setAttribute('offset', offAttr); cg.setAttribute('info', infoAttr); cg.setAttribute('lofs', lofAttr);
   cg.instanceCount = puffs.length;
   const cloudU = {
     map: { value: puffTexture() }, lit: { value: C(1, 1, 1) }, dark: { value: C(0.6, 0.65, 0.72) }, fogCol: { value: C(0.7, 0.8, 0.9) },
-    opacity: { value: 0.9 }, fogDensity: { value: 4e-5 }, drift: { value: new THREE.Vector2() }, span: { value: SPAN }, cover: { value: 0.3 }, camPos: { value: new THREE.Vector3() },
+    opacity: { value: 0.9 }, fogDensity: { value: 4e-5 }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: C(1, 0.9, 0.75) }, drift: { value: new THREE.Vector2() }, span: { value: SPAN }, cover: { value: 0.3 }, camPos: { value: new THREE.Vector3() },
   };
   const cloudMesh = new THREE.Mesh(cg, new THREE.ShaderMaterial({ uniforms: cloudU, vertexShader: cloudVert, fragmentShader: cloudFrag, transparent: true, depthWrite: false, fog: false }));
   cloudMesh.frustumCulled = false; cloudMesh.renderOrder = 5;
@@ -289,8 +305,8 @@ export function createSky(scene, renderer, quality) {
     const wrap = v => ((v + h) % SPAN + SPAN) % SPAN - h;
     const dist = puffs.map(p => { const x = wrap(p[0] + dx) - cam.x, z = wrap(p[2] + dz) - cam.z, y = p[1] - cam.y; return x * x + y * y + z * z; });
     order.sort((a, b) => dist[b] - dist[a]);
-    order.forEach((pi, i) => { const p = puffs[pi]; offA.set([p[0], p[1], p[2]], i * 3); infoA.set([p[3], p[4], p[5]], i * 3); });
-    offAttr.needsUpdate = true; infoAttr.needsUpdate = true;
+    order.forEach((pi, i) => { const p = puffs[pi]; offA.set([p[0], p[1], p[2]], i * 3); infoA.set([p[3], p[4], p[5]], i * 3); lofA.set([p[6], p[7], p[8]], i * 3); });
+    offAttr.needsUpdate = true; infoAttr.needsUpdate = true; lofAttr.needsUpdate = true;
   }
 
   // rain + snow
@@ -386,6 +402,8 @@ export function createSky(scene, renderer, quality) {
     cloudU.lit.value.setRGB(cl, cl * lerp(1, 0.75, set), cl * lerp(1, 0.6, set)).multiplyScalar(1 - w.storm * 0.45 - w.rain * 0.2);
     cloudU.dark.value.copy(cloudU.lit.value).multiplyScalar(0.62 - w.storm * 0.15);
     cloudU.fogCol.value.copy(hor);
+    cloudU.sunDir.value.copy(s.elev < -3 ? skyU.moonDir.value : s.dir);
+    cloudU.sunCol.value.copy(skyU.sunCol.value).multiplyScalar(day * (1 - w.haze));
 
     // lightning
     state.flash = Math.max(0, state.flash - dt * 6);
@@ -434,9 +452,14 @@ export function createSky(scene, renderer, quality) {
 
   // called before each view is drawn
   let sortT = 0;
+  const lightBasis = new THREE.Matrix4(), invBasis = new THREE.Matrix4(), lp = new THREE.Vector3(), ZERO3 = new THREE.Vector3(), UP3 = new THREE.Vector3(0, 1, 0);
   function beforeView(cam, viewIndex, dt) {
     const p = cam.position;
     dome.position.copy(p); stars.position.copy(p);
+    const ga = skyU.sunAmt.value * (1 - state.weather.haze * 0.9);
+    glare.visible = glare2.visible = ga > 0.02;
+    glare.position.copy(p).addScaledVector(state.sunDir, 30000); glare.scale.setScalar(5200); glare.material.opacity = ga * 0.9;
+    glare2.position.copy(glare.position); glare2.scale.setScalar(16000); glare2.material.opacity = ga * 0.25 * (0.5 + state.dusk);
     // fly-through-cloud fog
     let inside = 0;
     const cv = cloudU.cover.value, dx = cloudU.drift.value.x, dz = cloudU.drift.value.y, h = SPAN / 2;
@@ -455,9 +478,15 @@ export function createSky(scene, renderer, quality) {
     if (viewIndex === 0) { sortT -= dt; if (sortT <= 0) { sortT = 0.4; sortClouds(p); } }
     // shadows follow this view
     if (shadows) {
-      sun.target.position.copy(p);
       const ld = sun.intensity > 0.01 ? (state.sunElev < -3 ? skyU.moonDir.value : state.sunDir) : state.sunDir;
-      sun.position.copy(p).addScaledVector(ld, 1500);
+      // move in whole shadow-map texels (in the light's own axes) so shadows stay still
+      const texel = 320 / quality.shadows;
+      lightBasis.lookAt(ld, ZERO3, UP3);
+      lp.copy(p).applyMatrix4(invBasis.copy(lightBasis).invert());
+      lp.x = Math.round(lp.x / texel) * texel; lp.y = Math.round(lp.y / texel) * texel;
+      lp.applyMatrix4(lightBasis);
+      sun.target.position.copy(lp);
+      sun.position.copy(lp).addScaledVector(ld, 1500);
       sun.target.updateMatrixWorld();
     }
     // rain or snow?

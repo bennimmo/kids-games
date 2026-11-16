@@ -218,19 +218,20 @@ html, body { overscroll-behavior: none; }
 .version { margin-top: 24px; color: rgba(255,255,255,.75); font-size: 16px; font-weight: 700; }
 
 /* ---------- Friends ---------- */
-.friend-bar { margin: -8px 0 24px; min-height: 64px; }
+.top-left { position: fixed; top: 12px; left: 12px; z-index: 5; display: flex; gap: 10px; align-items: center; max-width: calc(100vw - 100px); }
+.top-left .name-btn { position: static; max-width: calc(100vw - 180px); min-width: 0; }
+.friend-bar { flex: none; }
 .fbar-btn {
-  height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 22px; border: 0; border-radius: 32px;
-  background: var(--btn-face); font-family: inherit; font-size: 24px; color: var(--ink); cursor: pointer;
-  box-shadow: var(--btn-shadow);
+  position: relative; width: 60px; height: 60px; border: 0; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; font-size: 28px; color: #fff; cursor: pointer;
+  background: var(--btn-ok); box-shadow: var(--btn-shadow);
 }
 .fbar-btn:active { transform: scale(.95); box-shadow: var(--btn-press); }
-.fbar-ico {
-  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none;
-  font-size: 22px; color: #fff; background: var(--btn-ok);
+.fbar-count {
+  position: absolute; top: -4px; right: -4px; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px;
+  background: #fff; color: #1b7a43; font-size: 15px; font-weight: 700; display: grid; place-items: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
 }
-.fbar-name { display: inline-flex; gap: 6px; font-size: 26px; color: #7c4dff; }
-.fbar-count { display: inline-flex; align-items: center; gap: 6px; background: #d7f5e1; color: #1b7a43; border-radius: 20px; padding: 2px 12px; }
 .fcode { display: inline-flex; gap: 4px; font-size: 30px; letter-spacing: 0; }
 .fcode.big { font-size: clamp(30px, 9vw, 44px); gap: 6px; justify-content: center; }
 .fcode-wait { opacity: .6; }
@@ -316,6 +317,25 @@ html, body { overscroll-behavior: none; }
 .vt-info div { display: flex; gap: 8px; justify-content: space-between; }
 .vt-info span { text-align: right; overflow-wrap: anywhere; }
 .vt-close { align-self: center; }
+
+/* bubble buttons: show on hover (mouse) or after a tap on the bubbles */
+.fb-tools { display: none; flex-direction: column; gap: 8px; align-items: center; }
+.fb-dock.open .fb-tools { display: flex; }
+@media (hover: hover) { .fb-dock:hover .fb-tools { display: flex; } .fb-dock:hover .fb-quiet { display: flex; } .fb-dock:hover .fb-badge { display: none; } }
+.fb-hang {
+  width: 48px; height: 48px; border: 3px solid #fff; border-radius: 50%; background: var(--btn-no); color: #fff; font-size: 22px; cursor: pointer;
+  box-shadow: 0 4px 10px -2px rgba(0,0,0,.35); padding: 0; display: grid; place-items: center;
+}
+.fb-hang.sure { background: linear-gradient(180deg, #ffd54f, #ffb300); animation: bob .6s ease-in-out infinite; }
+.fb-badge { font-size: 17px; color: #fff; background: var(--btn-no); border: 2px solid #fff; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px -2px rgba(0,0,0,.35); }
+.fb-badge[hidden], .fb-dock.open .fb-badge { display: none; }
+.fb { position: relative; }
+.fb-quiet {
+  display: none; position: absolute; top: -6px; right: -2px; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+  background: #fff; font-size: 16px; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.2);
+}
+.fb-dock.open .fb-quiet, .fb.quiet .fb-quiet { display: flex; }
+.fb.quiet .fb-face { filter: grayscale(.7); }
 
 /* ---------- Phones: two tiles a row, room for the top buttons ---------- */
 @media (max-width: 560px) {

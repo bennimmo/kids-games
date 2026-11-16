@@ -18,7 +18,15 @@ const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da'
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
 const picsHTML = c => codeToPics(c).map(p => `<span>${p}</span>`).join('');
 
-let layer, dock, list, micBtn, knockEl, inviteEl, panel = null;
+let layer, dock, list, micBtn, hangBtn, badge, knockEl, inviteEl, panel = null;
+const quiet = new Set(); // friends I've muted (just on this device)
+let openTimer = null;
+function openDock(on) {
+  clearTimeout(openTimer);
+  dock.classList.toggle('open', on);
+  if (on) openTimer = setTimeout(() => openDock(false), 5000);
+  else { hangBtn.classList.remove('sure'); hangBtn.innerHTML = icon('hangup'); }
+}
 let onEditName = () => {};
 
 // Keep taps on our things away from the game underneath.
@@ -58,6 +66,7 @@ function wireDrag() {
   });
   const end = e => {
     if (!start || e.pointerId !== start.id) return;
+    if (!start.moved && !e.target.closest('button')) openDock(!dock.classList.contains('open')); // tap = show buttons
     if (start.moved) {
       dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight };
       try { localStorage.setItem(DOCK_KEY, JSON.stringify(dockPos)); } catch (er) { /* */ }
@@ -82,7 +91,13 @@ function renderBubbles(s) {
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><button class="fb-quiet" aria-label="Mute friend"></button><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.querySelector('.fb-quiet').addEventListener('click', () => {
+        sound.pop();
+        quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
+        openDock(true);
+        renderBubbles(friendState());
+      });
       list.appendChild(el);
       sound.pop();
     }
@@ -94,12 +109,19 @@ function renderBubbles(s) {
     // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
     const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
     if (v.srcObject !== vs) v.srcObject = vs;
-    playVoice(a, f.stream);
+    const q = quiet.has(f.uid);
+    playVoice(a, f.stream, q);
+    el.classList.toggle('quiet', q);
+    el.querySelector('.fb-quiet').textContent = q ? '🔈' : '🔊';
     el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
   }
-  tidyVoices(new Set(s.friends.map(f => f.stream).filter(Boolean)));
-  micBtn.innerHTML = s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
+  for (const u of quiet) if (!want.has(u)) quiet.delete(u);
+  tidyVoices(new Set(s.friends.filter(f => !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
+  micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
+  badge.hidden = !(s.muted || s.micStatus === 'denied');
+  badge.innerHTML = s.micStatus === 'denied' ? '🚫' : icon('micOff');
+  if (!s.friends.length) openDock(false);
   dock.hidden = !s.friends.length;
   placeDock();
 }
@@ -163,13 +185,10 @@ export function friendBarHTML() { return '<div class="friend-bar"></div>'; }
 function renderBar(s) {
   const bar = document.querySelector('.friend-bar');
   if (!bar) return;
-  let inner;
-  if (s.codeStatus === 'noname') inner = `<span class="fbar-ico">${icon('phone')}</span><b class="fbar-name">${icon('user')}${icon('edit')}</b>`;
-  else if (s.codeStatus === 'offline') inner = '<span class="fbar-ico">📵</span>';
-  else if (s.codeStatus === 'ok') inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode">${picsHTML(s.code)}</span>`;
-  else inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode fcode-wait">⏳</span>`;
-  if (s.friends.length) inner += `<span class="fbar-count">${icon('people')} ${s.friends.length}</span>`;
-  bar.innerHTML = `<button class="fbar-btn" aria-label="Friends">${inner}</button>`;
+  // Just a phone button (the code is in the panel). Little number = friends connected.
+  let inner = s.codeStatus === 'offline' ? '📵' : icon('phone');
+  if (s.friends.length) inner += `<span class="fbar-count">${s.friends.length}</span>`;
+  bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
     if (s.codeStatus === 'noname') onEditName();
@@ -213,7 +232,6 @@ function renderPanel(s) {
       <div class="fsec">
         <div class="flabel">${icon('user')} My code</div>
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
-        <button class="fsmall fnew" aria-label="New code">${icon('refresh')}</button>
       </div>
       ${full ? '' : `<div class="fsec">
         <div class="flabel">${icon('people')} Friend's code</div>
@@ -233,7 +251,6 @@ function renderPanel(s) {
       <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
   const q = sel => panel.querySelector(sel);
-  q('.fnew').addEventListener('click', () => { sound.pop(); newCode(); });
   q('.fclose').addEventListener('click', () => { sound.pop(); closePanel(); });
   panel.querySelectorAll('.fpad button').forEach(b => b.addEventListener('click', () => {
     if (entry.length >= FRIEND_CODE_LEN) return;
@@ -264,14 +281,24 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><button class="fb-mic" aria-label="Microphone">${icon('mic')}</button><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
   micBtn = layer.querySelector('.fb-mic');
+  hangBtn = layer.querySelector('.fb-hang');
+  badge = layer.querySelector('.fb-badge');
+  // Hang up: tap twice (first tap asks "sure?") so a stray tap doesn't end the call.
+  hangBtn.addEventListener('click', () => {
+    sound.pop();
+    if (hangBtn.classList.contains('sure')) { openDock(false); leaveGroup(); return; }
+    hangBtn.classList.add('sure'); hangBtn.innerHTML = icon('check');
+    openDock(true);
+  });
   micBtn.addEventListener('click', () => {
     const s = friendState();
     sound.pop();
+    openDock(true);
     if (s.micStatus === 'on') setMuted(!s.muted);
     else { setMuted(false); startMic(); }
   });
