@@ -497,12 +497,13 @@ export function mount(stage) {
         e.preventDefault();
         drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, placedKey: placedEl.dataset.placed, el: placedEl };
       } else if (onDoll && active) {
+        // Holding something: brushes and scissors work as you rub; everything else goes on where you tap.
         e.preventDefault();
         drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: true, item: active, fromDoll: true };
-        drag.ghost = makeGhost(active, true);
+        drag.ghost = makeGhost(active, isTool(active));
         moveGhost(drag.ghost, e.clientX, e.clientY);
         if (hover) hover.style.display = 'none';
-        toolMove(drag, e.clientX, e.clientY);
+        if (isTool(active)) toolMove(drag, e.clientX, e.clientY);
       }
     };
     const onMove = e => {
@@ -567,7 +568,7 @@ export function mount(stage) {
         if (!d.used && !d.fromDoll) toast(d.item.action === 'cut' ? 'Swipe the scissors across her hair ✂️' : 'Rub it on her face! 🖌️');
         return;
       }
-      if (inside) applyItem(d.item, clampPt(svgPoint(e.clientX, e.clientY)), e.clientX, e.clientY);
+      if (inside) applyItem(d.item, clampPt(svgPoint(e.clientX, e.clientY)), e.clientX, e.clientY, d.fromDoll);
     };
     const onCancel = e => {
       if (!drag || e.pointerId !== drag.id) return;
@@ -591,16 +592,17 @@ export function mount(stage) {
         return;
       }
       if (active && active.id === item.id) { setActive(null); sound.pop(); return; }
-      el.classList.remove('bb-shake'); void el.offsetWidth; el.classList.add('bb-shake');
-      sound.tone(420, .08, 'sine', .12);
-      toast(item.action === 'cut' ? 'Drag the scissors onto her hair! ✂️'
-        : item.action === 'paint' ? 'Drag it onto her face and rub! 🖌️'
-          : 'Drag it onto her! 👆');
+      // Tap to pick it up: your finger (or mouse) becomes it.
+      setActive(item);
+      sound.tone(700, .08, 'sine', .14, 1000);
+      toast(item.action === 'cut' ? 'Swipe across her hair ✂️'
+        : item.action === 'paint' ? 'Rub it on her! 🖌️'
+          : 'Tap her to put it on 👆');
     }
 
-    function applyItem(item, p, sx, sy) {
+    function applyItem(item, p, sx, sy, keepHolding = false) {
       const look = store.get();
-      setActive(null);
+      if (!keepHolding) setActive(null);
       if (item.action === 'slot') {
         if (look[item.key] === item.value) { sparkle(sx, sy); return; }
         // Putting on a top or bottoms takes the dress off.
