@@ -129,13 +129,15 @@ export function mount(stage) {
     const saved = loadGallery();
     root.innerHTML = `
       <div class="bb-pick">
-        <h1 class="bb-title">Beautiful Bells</h1>
+        <div class="bb-head">
+          <div class="ui-kicker">Beautiful Bells</div>
+          <h1 class="ui-title">Pick your girl</h1>
+        </div>
         ${net ? `
           <div class="bb-roombar">
             <span class="bb-roombar-f">${stripHtml()}</span>
-            <button class="bb-leave">${icon('leave')}Leave</button>
-          </div>` : togetherButton()}
-        <p class="bb-sub">Pick your girl!</p>
+            <button class="ui-btn small danger bb-leave">${icon('leave')}Leave</button>
+          </div>` : `<div class="bb-tg">${togetherButton()}</div>`}
         <div class="bb-girls">
           ${GIRLS.map(g => `
             <button class="bb-card" data-girl="${g.id}">
@@ -144,7 +146,7 @@ export function mount(stage) {
             </button>`).join('')}
         </div>
         ${saved.length ? `
-          <h2 class="bb-sub">💖 My girls</h2>
+          <h2 class="ui-label bb-label">My girls</h2>
           <div class="bb-girls bb-saved">
             ${saved.map(s => `
               <div class="bb-card-wrap">
@@ -195,19 +197,19 @@ export function mount(stage) {
       const look = store.get();
       root.innerHTML = `
         <div class="bb-setup">
-          <button class="bb-back" aria-label="Back">${icon('back')}</button>
+          <button class="ui-btn round bb-back" aria-label="Back">${icon('back')}</button>
           <div class="bb-setup-pic">
-            <h1 class="bb-title">${look.name}</h1>
+            <div class="bb-head"><div class="ui-kicker">Beautiful Bells</div><h1 class="ui-title">${look.name}</h1></div>
             <div class="bb-setup-girl">${renderGirl(look)}</div>
           </div>
           <div class="bb-setup-panel">
-            <h3>Hair colour</h3>
+            <h3 class="ui-label">Hair colour</h3>
             <div class="bb-row">
               ${Object.entries(HAIR_COLORS).map(([k, c]) => `
                 <button class="bb-dot ${look.hairColor === k ? 'on' : ''}" data-set="hairColor" data-v="${k}"
                   style="background:linear-gradient(135deg, ${c.light}, ${c.base} 55%, ${c.shade})" aria-label="${c.name}"></button>`).join('')}
             </div>
-            <h3>Hair length</h3>
+            <h3 class="ui-label">Hair length</h3>
             <div class="bb-row">
               ${Object.entries(HAIR_LENGTHS).map(([k, l]) => `
                 <button class="bb-len ${look.hairLength === k ? 'on' : ''}" data-set="hairLength" data-v="${k}">
@@ -215,14 +217,14 @@ export function mount(stage) {
                   <span>${l.name}</span>
                 </button>`).join('')}
             </div>
-            <h3>Eye colour</h3>
+            <h3 class="ui-label">Eye colour</h3>
             <div class="bb-row">
               ${Object.entries(EYE_COLORS).map(([k, c]) => `
                 <button class="bb-dot bb-eyedot ${look.eyeColor === k ? 'on' : ''}" data-set="eyeColor" data-v="${k}" aria-label="${k}">
                   <svg viewBox="0 0 40 40"><ellipse cx="20" cy="20" rx="18" ry="13" fill="#fff"/><circle cx="20" cy="20" r="10" fill="${c}"/><circle cx="20" cy="20" r="4.5" fill="#1f1a1a"/><circle cx="23" cy="17" r="2.6" fill="#fff"/></svg>
                 </button>`).join('')}
             </div>
-            <button class="bb-go">Let's go! ✨</button>
+            <button class="ui-btn primary big bb-go">Let's go ${icon('next')}</button>
           </div>
         </div>`;
       root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); pickScreen(); });
@@ -247,13 +249,13 @@ export function mount(stage) {
     root.innerHTML = `
       <div class="bb-salon ${net ? 'mp' : ''}">
         <div class="bb-stage">
-          <h1 class="bb-title bb-title-small">Beautiful Bells</h1>
+          <div class="ui-kicker bb-title-small">Beautiful Bells</div>
           <div class="bb-tools">
-            <button data-tool="undo" aria-label="Undo">${icon('undo')}</button>
-            <button data-tool="wipe" aria-label="Wipe off">${icon('eraser')}</button>
-            <button data-tool="random" aria-label="Surprise me">${icon('dice')}</button>
-            <button data-tool="setup" aria-label="Hair and eyes">👧</button>
-            <button data-tool="girls" aria-label="My girls">👭</button>
+            <button class="ui-hud-btn" data-tool="undo" aria-label="Undo">${icon('undo')}</button>
+            <button class="ui-hud-btn" data-tool="wipe" aria-label="Wipe off">${icon('eraser')}</button>
+            <button class="ui-hud-btn" data-tool="random" aria-label="Surprise me">${icon('dice')}</button>
+            <button class="ui-hud-btn" data-tool="setup" aria-label="Hair and eyes">👧</button>
+            <button class="ui-hud-btn" data-tool="girls" aria-label="My girls">👭</button>
           </div>
           <div class="bb-dolls">
             <div class="bb-doll">${net ? `<div class="bb-me-name">${net.emoji} ${store.get().name} (you)</div>` : ''}</div>
@@ -261,14 +263,14 @@ export function mount(stage) {
           </div>
           <div class="bb-held" hidden>
             <div class="bb-held-pic"></div>
-            <button class="bb-held-x" aria-label="Put down">${icon('close')}</button>
+            <button class="ui-btn round small danger bb-held-x" aria-label="Put down">${icon('close')}</button>
           </div>
           <button class="bb-photo" aria-label="Save picture">${icon('camera')}<span>Save</span></button>
           ${net ? '<button class="bb-showoff" aria-label="Show off">🎉<span>Show off</span></button>' : ''}
           <div class="bb-toast" hidden></div>
         </div>
         <div class="bb-panel">
-          <div class="bb-views">
+          <div class="bb-views ui-seg">
             <button data-view="face">😊 Face</button>
             <button data-view="body">👗 Clothes</button>
           </div>

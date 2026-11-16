@@ -64,7 +64,7 @@ export function mount(stage) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.name !== 'low', powerPreference: 'high-performance', logarithmicDepthBuffer: true });
   } catch (e) {
-    ui.innerHTML = '<div class="sp-overlay"><div class="sp-card"><h2>😢 No 3D</h2><p>This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
+    ui.innerHTML = '<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">No 3D here</h2><p class="ui-sub">This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
     return () => css.remove();
   }
   let DPR = Math.min(devicePixelRatio || 1, quality.dpr);
@@ -99,7 +99,7 @@ export function mount(stage) {
   const worldTime = () => (FORCE_T === null && (prefs.shared || net.room) ? ((clockFn() / 1000) % PERIOD) : localT % PERIOD);
 
   // ---------------------------------------------------------------- loading screen
-  ui.innerHTML = '<div class="sp-overlay sp-loading"><div class="sp-card"><h1>Sky <b>Pilot</b></h1><div class="sp-plane-anim">✈️</div><div class="sp-bar"><i></i></div><p class="sp-loadtxt">🏝️</p></div></div>';
+  ui.innerHTML = '<div class="ui-overlay sp-loading"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h1 class="ui-title">Getting the island ready</h1><div class="sp-bar"><i></i></div><p class="ui-sub sp-loadtxt">🏝️</p></div></div>';
   const bar = ui.querySelector('.sp-bar i'), loadTxt = ui.querySelector('.sp-loadtxt');
   const prog = (a, b, txt) => f => { if (bar) bar.style.width = ((a + (b - a) * f) * 100) + '%'; if (txt && loadTxt) loadTxt.textContent = txt; };
 
@@ -127,7 +127,7 @@ export function mount(stage) {
       if (inviteCode) tryJoin(inviteCode);
     } catch (e) {
       console.error(e);
-      ui.innerHTML = `<div class="sp-overlay"><div class="sp-card"><h2>😢</h2><p>${String(e.message || e).slice(0, 120)}</p></div></div>`;
+      ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">Something went wrong</h2><p class="ui-sub">${String(e.message || e).slice(0, 120)}</p></div></div>`;
     }
   })();
 
@@ -1245,33 +1245,44 @@ export function mount(stage) {
     }
   }
 
-  const toggle = (key, on, off, label) => `<button class="sp-tog ${prefs[key] ? 'on' : ''}" data-k="${key}"><span>${prefs[key] ? on : off}</span>${label}</button>`;
-  function wireToggles(box, after) {
-    box.querySelectorAll('.sp-tog').forEach(b => click(b, () => { sound.pop(); prefs[b.dataset.k] = !prefs[b.dataset.k]; savePrefs(); after ? after(b.dataset.k) : render(); }));
+  // Settings: one row per switch, a segmented Off/On control on the right.
+  const SETTINGS = {
+    easy: ['Flying', '🧑‍✈️ Real', '🐣 Easy'],
+    noDie: ['Crashes', '💥 On', '🛡️ Off'],
+    shared: ['Sky', '🏝️ Just me', '🌍 Shared'],
+    guide: ['Landing hoops', 'Off', '🟢 On'],
+    sound: ['Sound', '🔇 Off', '🔊 On'],
+  };
+  const settingsHTML = keys => `<div class="sp-settings">${keys.map(k => {
+    const [label, off, on] = SETTINGS[k];
+    return `<div class="sp-set"><span>${label}</span><div class="ui-seg" data-k="${k}"><button data-v="0" class="${prefs[k] ? '' : 'on'}">${off}</button><button data-v="1" class="${prefs[k] ? 'on' : ''}">${on}</button></div></div>`;
+  }).join('')}</div>`;
+  function wireSettings(box, after) {
+    box.querySelectorAll('.sp-settings .ui-seg button').forEach(b => click(b, () => {
+      const k = b.parentNode.dataset.k, v = b.dataset.v === '1';
+      if (prefs[k] === v) return;
+      sound.pop(); prefs[k] = v; savePrefs(); after ? after(k) : render();
+    }));
   }
 
   function menuUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card sp-menu">
-      <h1>Sky <b>Pilot</b></h1>
-      <div class="sp-row sp-play">
-        <button class="sp-go" data-m="solo"><span>🙂</span>Fly</button>
-        ${MISSIONS.length ? '<button class="sp-go" data-m="missions"><span>🎯</span>Missions</button>' : ''}
+    const box = el(`<div class="ui-overlay sp-menuov"><div class="ui-panel sp-menu">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h1 class="ui-title">Ready for take-off</h1>
+      <p class="ui-sub">Fly anywhere on the island</p>
+      <div class="ui-row sp-play">
+        <button class="ui-btn primary big sp-go" data-m="solo">${icon('play')}<span>Fly</span></button>
+        ${MISSIONS.length ? '<button class="ui-btn big sp-go" data-m="missions">🎯<span>Missions</span></button>' : ''}
+        ${togetherButton()}
       </div>
-      <div class="sp-row sp-toggles">
-        <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
-        ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
-        ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
-        ${toggle('sound', '🔊', '🔇', 'Sound')}
-      </div>
-      <div class="sp-row">${togetherButton()}</div>
-      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}${S.gone > clock ? '<p class="sp-sad">That game has finished 👋</p>' : ''}
-      <button class="sp-help-btn">${icon('keyboard')} ?</button>
+      ${S.busy ? '<p class="ui-sub">Joining… ⏳</p>' : ''}${S.sad > clock ? '<p class="ui-sub">Couldn\'t join that game 😢</p>' : ''}${S.gone > clock ? '<p class="ui-sub">That game has finished 👋</p>' : ''}
+      <div class="ui-label">Settings</div>
+      ${settingsHTML(['easy', 'noDie', 'shared', 'sound'])}
+      <div class="ui-row sp-foot"><button class="ui-btn ghost small sp-help-btn">${icon('keyboard')}<span>Controls</span></button></div>
     </div></div>`);
-    click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
-    wireToggles(box.querySelector('.sp-toggles'));
+    wireSettings(box);
     box.querySelectorAll('.sp-go').forEach(b => click(b, () => {
       sound.pop();
-      const m = b.dataset.m;
       S.mode = 'solo';
       if (TOUCH && prefs.tilt) askTilt();
       S.phase = 'hangar'; S.who = 0; render();
@@ -1282,8 +1293,9 @@ export function mount(stage) {
   }
 
   function helpUI() {
-    const box = el(`<div class="sp-overlay sp-helpov"><div class="sp-card sp-help">
-      <h2>⌨️ Controls</h2>
+    const box = el(`<div class="ui-overlay sp-helpov"><div class="ui-panel wide sp-help">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h2 class="ui-title">Controls</h2>
       <table>
         <tr><td>⬆️⬇️ Nose up / down</td><td>W S &nbsp;or&nbsp; ↑ ↓</td></tr>
         <tr><td>⬅️➡️ Roll</td><td>A D &nbsp;or&nbsp; ← →</td></tr>
@@ -1295,11 +1307,13 @@ export function mount(stage) {
         <tr><td>🎥 Camera</td><td>C</td></tr>
         <tr><td>💨 Smoke</td><td>X</td></tr>
       </table>
-      <p>🌍 Tap the 🌍 button (or T) to jump in right behind another pilot and fly together.</p>
-      <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
-      <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
-      <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>
-      <button class="sp-btn sp-ok" aria-label="OK">${icon('check')}</button>
+      <div class="sp-tips">
+        <p>🌍 Tap the 🌍 button (or T) to jump in right behind another pilot and fly together.</p>
+        <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
+        <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
+        <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>
+      </div>
+      <div class="ui-row"><button class="ui-btn go sp-ok" aria-label="OK">${icon('check')}<span>Got it</span></button></div>
     </div></div>`);
     click(box.querySelector('.sp-ok'), () => { S.help = false; box.remove(); });
     ui.appendChild(box);
@@ -1311,15 +1325,20 @@ export function mount(stage) {
     showHangarPlane(pl.type, pl.color);
     const starts = startsFor(pl.type);
     if (!starts.find(s => s.id === prefs.start)) prefs.start = starts[0].id;
-    const box = el(`<div class="sp-overlay sp-hangar"><div class="sp-card sp-hcard">
-      <div class="sp-planes">${PLANE_ORDER.map(t => `<button class="sp-pcard ${pl.type === t ? 'on' : ''}" data-t="${t}"><span>${PLANES[t].icon}</span><b>${PLANES[t].name}</b><small>${'⭐'.repeat(PLANES[t].stars)}</small></button>`).join('')}</div>
-      <div class="sp-row sp-colors">${LIVERIES.map((c, i) => `<button class="sp-col ${pl.color === i ? 'on' : ''}" data-c="${i}" style="background:#${new THREE.Color(c).getHexString()}"></button>`).join('')}</div>
-      <div class="sp-row sp-starts">${starts.map(s => `<button class="sp-start ${prefs.start === s.id ? 'on' : ''}" data-s="${s.id}" title="${s.name}"><span>${s.icon}</span><small>${s.name}</small></button>`).join('')}</div>
-      <div class="sp-row">
-        <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
-        <button class="sp-btn sp-fly" aria-label="Fly">${icon('play')}</button>
+    const box = el(`<div class="ui-overlay sp-hangar"><div class="ui-panel wide left sp-hcard">
+      <div class="sp-hhead"><div><div class="ui-kicker">Sky Pilot · Hangar</div><h2 class="ui-title">Choose your plane</h2></div>
+        ${net.room ? `<div class="sp-strip sp-hstrip">${stripHtml()}</div>` : ''}</div>
+      <div class="ui-choices tight sp-planes">${PLANE_ORDER.map(t => `<button class="ui-choice sp-pcard ${pl.type === t ? 'on' : ''}" data-t="${t}"><span class="i">${PLANES[t].icon}</span>${PLANES[t].name}<small>${'★'.repeat(PLANES[t].stars)}${'☆'.repeat(Math.max(0, 3 - PLANES[t].stars))}</small></button>`).join('')}</div>
+      <div class="sp-hrow">
+        <div class="sp-hcol"><div class="ui-label">Colour</div>
+          <div class="sp-colors">${LIVERIES.map((c, i) => `<button class="sp-col ${pl.color === i ? 'on' : ''}" data-c="${i}" aria-label="Colour ${i + 1}" style="background:#${new THREE.Color(c).getHexString()}"></button>`).join('')}</div></div>
+        <div class="sp-hcol"><div class="ui-label">Start at</div>
+          <div class="sp-starts">${starts.map(s => `<button class="ui-choice sp-start ${prefs.start === s.id ? 'on' : ''}" data-s="${s.id}" title="${s.name}"><span class="i">${s.icon}</span><small>${s.name}</small></button>`).join('')}</div></div>
       </div>
-      ${net.room ? `<div class="sp-strip sp-hstrip">${stripHtml()}</div>` : ''}
+      <div class="ui-row sp-foot">
+        <button class="ui-btn ghost sp-back" aria-label="Back">${icon('back')}<span>Back</span></button>
+        <button class="ui-btn primary big sp-fly" aria-label="Fly">${icon('play')}<span>Fly</span></button>
+      </div>
     </div></div>`);
     box.querySelectorAll('.sp-pcard').forEach(b => click(b, () => { sound.pop(); pl.type = b.dataset.t; savePrefs(); render(); }));
     box.querySelectorAll('.sp-col').forEach(b => click(b, () => { sound.pop(); pl.color = +b.dataset.c; savePrefs(); render(); }));
@@ -1335,26 +1354,25 @@ export function mount(stage) {
     render();
   }
   function pauseUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card sp-pausecard">
-      <h2>${icon('pause')}</h2>
-      <div class="sp-row sp-toggles">
-        <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
-        ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
-        ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
-        ${toggle('guide', '🟢', '⚪', 'Hoops')}
-        ${toggle('sound', '🔊', '🔇', 'Sound')}
+    const box = el(`<div class="ui-overlay"><div class="ui-panel sp-pausecard">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h2 class="ui-title">Paused</h2>
+      <div class="ui-row sp-pbtns">
+        <button class="ui-btn primary big sp-resume" aria-label="Keep flying">${icon('play')}<span>Resume</span></button>
+        <button class="ui-btn sp-respawn" aria-label="Start again">${icon('retry')}<span>Start again</span></button>
+        <button class="ui-btn sp-plane">🛩️<span>Change plane</span></button>
       </div>
-      <div class="sp-row">
-        <button class="sp-btn sp-resume" aria-label="Keep flying">${icon('play')}</button>
-        <button class="sp-btn sp-respawn" aria-label="Start again">${icon('retry')}</button>
-        <button class="sp-btn sp-plane">🛩️</button>
-        <button class="sp-btn sp-helpb" aria-label="Keys">${icon('keyboard')}</button>
-        ${net.room ? `<button class="sp-btn sp-leave" aria-label="Leave">${icon('leave')}</button>` : ''}
-        <button class="sp-btn sp-quit" aria-label="Home">${icon('home')}</button>
+      <div class="ui-label">Settings</div>
+      ${settingsHTML(['easy', 'noDie', 'shared', 'guide', 'sound'])}
+      <div class="ui-row sp-foot">
+        <div class="ui-row">
+          <button class="ui-btn ghost sp-quit" aria-label="Quit">${icon('home')}<span>Quit</span></button>
+          ${net.room ? `<button class="ui-btn ghost sp-leave" aria-label="Leave">${icon('leave')}<span>Leave friends</span></button>` : ''}
+        </div>
+        <button class="ui-btn ghost small sp-helpb" aria-label="Keys">${icon('keyboard')}<span>Controls</span></button>
       </div>
     </div></div>`);
-    click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
-    wireToggles(box.querySelector('.sp-toggles'), k => {
+    wireSettings(box, k => {
       if (k === 'shared') { if (prefs.shared) goPublic(); else leavePublic(); }
       if (k === 'sound') players.forEach(p => { if (p.engine) p.engine.stop(); p.engine = makeEngine(p.type, players.length); });
       render();

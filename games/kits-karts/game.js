@@ -127,8 +127,8 @@ export function mount(stage) {
     if (S.net && (S.phase === 'build' || S.phase === 'lobby')) stripUI();
     if (S.note && S.time < S.note.until) ui.appendChild(el(`<div class="kk-note">${S.note.text}</div>`));
     if (S.net && S.net.status === 'waiting') ui.appendChild(el(`<div class="kk-netwait">📶⏳</div>`));
-    if (S.busy) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">⏳</div></div>`));
-    if (S.time < S.sad) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">😢</div></div>`));
+    if (S.busy) ui.appendChild(el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-mini-panel"><div class="kk-wait">⏳</div><p class="ui-sub">One moment…</p></div></div>`));
+    if (S.time < S.sad) ui.appendChild(el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-mini-panel"><div class="kk-wait">😢</div><p class="ui-sub">That didn't work</p></div></div>`));
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
     if (S.garage) garageUI();
@@ -139,9 +139,9 @@ export function mount(stage) {
       <div class="kk-themes">${THEME_IDS.map(t => `<button class="kk-theme ${t === S.theme ? 'on' : ''}" data-t="${t}" title="${THEMES[t].name}">${THEMES[t].icon}</button>`).join('')}</div>
       <div class="kk-tools">
         ${S.net ? '' : togetherButton('Play with friends', 'small')}
-        <button class="kk-btn kk-dice" title="Make me a track">${icon('dice')}</button>
-        <button class="kk-btn kk-saved" title="Saved tracks">${icon('gallery')}</button>
-        <button class="kk-btn kk-clear" title="Clear">${icon('trash')}</button>
+        <button class="kk-btn ui-hud-btn kk-dice" title="Make me a track">${icon('dice')}</button>
+        <button class="kk-btn ui-hud-btn kk-saved" title="Saved tracks">${icon('gallery')}</button>
+        <button class="kk-btn ui-hud-btn kk-clear" title="Clear">${icon('trash')}</button>
       </div></div>`);
     top.querySelectorAll('.kk-theme').forEach(b => click(b, () => { S.theme = b.dataset.t; savePrefs(); setCourse(); render(); }));
     click(top.querySelector('.kk-dice'), randomTrack);
@@ -192,7 +192,7 @@ export function mount(stage) {
     // online: locked until every friend has pressed I'm ready
     const list = S.net ? people(S.net.players, S.net.room.uid) : [];
     const locked = S.net && list.length > 1 && !allReady(list);
-    const go = el(`<button class="kk-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">🏁</button>`);
+    const go = el(`<button class="kk-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">${icon('flag')}<span>Race</span></button>`);
     click(go, () => { askTilt(); if (S.track && !locked) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     if (locked) ui.appendChild(el(`<div class="kk-waitfor">⏳ ${startLabel(list)}</div>`));
@@ -262,9 +262,12 @@ export function mount(stage) {
 
   function savedUI() {
     const list = loadTracks();
-    const box = el(`<div class="kk-overlay"><div class="kk-card kk-saved-card"><button class="kk-btn kk-back">${icon('back')}</button><div class="kk-grid"></div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay"><div class="ui-panel wide kk-saved-card">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Saved tracks</h2><p class="ui-sub">Tap a track to race it again. ⭐ keeps it.</p>
+      <div class="kk-grid"></div>
+      <div class="ui-row kk-foot"><button class="ui-btn ghost kk-back">${icon('back')}<span>Back</span></button></div></div></div>`);
     const grid = box.querySelector('.kk-grid');
-    if (!list.length) grid.appendChild(el(`<div class="kk-empty">🏁 ➜ 🖼️</div>`));
+    if (!list.length) grid.appendChild(el(`<div class="kk-empty ui-sub">No tracks yet. Draw one and race it!</div>`));
     list.forEach(s => {
       const card = el(`<div class="kk-saved-item ${s.fav ? 'fav' : ''}"><canvas width="240" height="150"></canvas><button class="kk-star">${icon('star')}</button><button class="kk-del">${icon('close')}</button><button class="kk-del-yes">${icon('trash')}</button></div>`);
       const track = trackFromJSON(s.pts);
@@ -284,18 +287,21 @@ export function mount(stage) {
   // ------------------------------------------------------------ garage
   function openGarage(i) { S.garage = { i }; render(); }
 
-  const TABS = [['body', '🚗'], ['paint', '🎨'], ['wheels', '🛞'], ['driver', '🧑'], ['extras', '✨']];
+  const TABS = [['body', '🚗', 'Kart'], ['paint', '🎨', 'Paint'], ['wheels', '🛞', 'Wheels'], ['driver', '🧑', 'Driver'], ['extras', '✨', 'Extras']];
   function garageUI() {
     const p = S.players[S.garage.i];
     if (!p) { S.garage = null; return; }
     const L = p.look;
-    const box = el(`<div class="kk-overlay kk-garage-wrap"><div class="kk-garage" style="--pc:${P_COLORS[S.garage.i]}">
-      <div class="kk-gleft"><div class="kk-gname">${pname(S.garage.i)} 🔧</div><div class="kk-gview"></div><div class="kk-stats"></div></div>
-      <div class="kk-gright">
-        <div class="kk-tabs">${TABS.map(([id, ic]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}">${ic}</button>`).join('')}</div>
-        <div class="kk-opts"></div>
-        <button class="kk-ok">${icon('check')}</button>
-      </div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay kk-garage-wrap"><div class="ui-panel wide left kk-garage" style="--pc:${P_COLORS[S.garage.i]}">
+      <div class="kk-ghead"><div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">${pname(S.garage.i)}'s kart</h2></div>
+      <div class="kk-gbody">
+        <div class="kk-gleft"><div class="kk-gview"></div><div class="kk-stats"></div></div>
+        <div class="kk-gright">
+          <div class="ui-seg kk-tabs">${TABS.map(([id, ic, name]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}"><span>${ic}</span><span class="kk-tabname">${name}</span></button>`).join('')}</div>
+          <div class="kk-opts"></div>
+        </div>
+      </div>
+      <div class="ui-row end kk-foot"><button class="ui-btn go kk-ok">${icon('check')}<span>Done</span></button></div></div></div>`);
     if (preview) { box.querySelector('.kk-gview').appendChild(preview.canvas); preview.show(L); }
     const st = statsOf(L);
     box.querySelector('.kk-stats').innerHTML = [['⚡', 'Speed'], ['🚀', 'Pick-up'], ['🌀', 'Turning'], ['🏋️', 'Weight'], ['🌲', 'Off-road']].map(([ic, name], k) => `<div class="kk-stat"><span>${ic}</span><em>${name}</em><i>${Array.from({ length: 6 }, (_, j) => `<b class="${j < Math.round(st[k]) ? 'on' : ''}"></b>`).join('')}</i></div>`).join('');
@@ -315,7 +321,7 @@ export function mount(stage) {
       if (L.decal === 'number') row('#️⃣', `<button class="kk-ob kk-numdown">${icon('minus')}</button><b class="kk-num">${L.num}</b><button class="kk-ob kk-numup">${icon('plus')}</button>`);
     }
     if (S.gTab === 'wheels') {
-      if (L.body === 'hover') row('', '<div class="kk-note">🛸 ✔️</div>');
+      if (L.body === 'hover') row('', '<div class="ui-sub kk-hovernote">🛸 Hover karts float, so no wheels needed.</div>');
       else row('', WHEELS.map(w => `<button class="kk-ob kk-obig ${L.wheels === w.id ? 'on' : ''}" data-k="wheels" data-v="${w.id}">${kartImg({ ...L, wheels: w.id })}<small>${w.icon}</small></button>`).join(''));
     }
     if (S.gTab === 'driver') {
@@ -451,7 +457,7 @@ export function mount(stage) {
     R.mini = mini;
     R.miniBg = null;
     const guest = S.net && !S.net.isHost;
-    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">${icon(guest ? 'leave' : 'pause')}</button></div>`);
+    const top = el(`<div class="kk-racetop"><button class="kk-btn ui-hud-btn kk-pause" title="${guest ? 'Leave' : 'Pause'}">${icon(guest ? 'leave' : 'pause')}</button></div>`);
     click(top.querySelector('.kk-pause'), () => { if (guest) { leaveOnline(); return; } S.paused = !S.net; pauseUI(); });
     ui.appendChild(top);
     if (S.paused) pauseUI();
@@ -459,9 +465,13 @@ export function mount(stage) {
 
   function pauseUI() {
     if ($('.kk-pausebox')) return;
-    const box = el(`<div class="kk-overlay kk-pausebox"><div class="kk-card"><div class="kk-actions">
-      <button class="kk-big-btn kk-resume">${icon('play')}</button><button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>
-    </div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay kk-pausebox"><div class="ui-panel">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Paused</h2>
+      <div class="kk-stack">
+        <button class="ui-btn primary big kk-resume">${icon('play')}<span>Resume</span></button>
+        <button class="ui-btn kk-again">${icon('retry')}<span>Restart race</span></button>
+        <button class="ui-btn ghost kk-edit">${icon('edit')}<span>Back to the track</span></button>
+      </div></div></div>`);
     click(box.querySelector('.kk-resume'), () => { S.paused = false; box.remove(); });
     click(box.querySelector('.kk-again'), () => raceAgain());
     click(box.querySelector('.kk-edit'), () => toBuild());
@@ -471,8 +481,9 @@ export function mount(stage) {
   function resultsUI() {
     const list = standings(R.race);
     const guest = S.net && !S.net.isHost;
-    const box = el(`<div class="kk-overlay"><div class="kk-card kk-results"><div class="kk-trophy">🏆</div><ol></ol>
-      <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : `<button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>`}</div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-results">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Results</h2><ol></ol>
+      ${guest ? '<p class="ui-sub">⏳ Waiting for the next race…</p>' : `<div class="ui-row kk-foot"><button class="ui-btn ghost kk-edit">${icon('edit')}<span>Track</span></button><button class="ui-btn primary big kk-again">${icon('retry')}<span>Race again</span></button></div>`}</div></div>`);
     list.forEach((c, i) => {
       const hi = R.localIds.indexOf(c.id);
       const who = hi >= 0 ? pname(hi) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
@@ -730,7 +741,7 @@ export function mount(stage) {
   // who's in the room and what they're doing (same strip in every game, together.js)
   function stripUI() {
     const list = people(S.net.players, (S.net.meta && S.net.meta.hostUid) || (S.net.isHost ? S.net.room.uid : ''));
-    const b = el(`<div class="kk-strip ${S.phase === 'lobby' ? 'up' : ''}">${lobbyHTML(list, { hostDoing: 'building the track', myUid: S.net.room.uid })}<button class="kk-btn kk-leave" title="Leave">${icon('leave')}</button></div>`);
+    const b = el(`<div class="kk-strip ${S.phase === 'lobby' ? 'up' : ''}">${lobbyHTML(list, { hostDoing: 'building the track', myUid: S.net.room.uid })}<button class="ui-btn danger round small kk-leave" title="Leave">${icon('leave')}</button></div>`);
     click(b.querySelector('.kk-leave'), () => leaveOnline());
     ui.appendChild(b);
   }
@@ -746,7 +757,7 @@ export function mount(stage) {
     const wait = card.querySelector('.tg-wait');
     const karts = el(`<div class="kk-mykarts"></div>`);
     S.players.forEach((p, i) => {
-      const b = el(`<button class="kk-mykart" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>🔧 ${i ? 'P2 kart' : 'My kart'}</b>${i ? `<span class="kk-x">${icon('close')}</span>` : ''}</button>`);
+      const b = el(`<button class="kk-mykart" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${icon('edit')} ${i ? 'P2 kart' : 'My kart'}</b>${i ? `<span class="kk-x">${icon('close')}</span>` : ''}</button>`);
       click(b, e => { if (e.target.closest('.kk-x')) { S.players.splice(i, 1); savePrefs(); render(); return; } openGarage(i); });
       karts.appendChild(b);
     });

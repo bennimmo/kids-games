@@ -32,15 +32,15 @@ export function mount(stage) {
   const root = document.createElement('div');
   root.className = 'pt';
   root.innerHTML = `
-    <div class="pt-tools">${TOOLS.map(t => `<button data-tool="${t.id}" aria-label="${t.label}">${t.icon}</button>`).join('')}</div>
+    <div class="pt-tools">${TOOLS.map(t => `<button class="ui-hud-btn" data-tool="${t.id}" aria-label="${t.label}">${t.icon}</button>`).join('')}</div>
     <div class="pt-top"></div>
     <div class="pt-wrap"><div class="pt-paper"><canvas class="pt-main"></canvas><canvas class="pt-over"></canvas></div></div>
     <div class="pt-actions">
-      <button data-act="undo" aria-label="Undo">${icon('undo')}</button>
-      <button data-act="redo" aria-label="Redo">${icon('redo')}</button>
-      <button data-act="clear" aria-label="Clear">${icon('trash')}</button>
-      <button data-act="download" aria-label="Download">${icon('save')}</button>
-      <button data-act="gallery" aria-label="My drawings">${icon('gallery')}</button>
+      <button class="ui-hud-btn" data-act="undo" aria-label="Undo">${icon('undo')}</button>
+      <button class="ui-hud-btn" data-act="redo" aria-label="Redo">${icon('redo')}</button>
+      <button class="ui-hud-btn" data-act="clear" aria-label="Clear">${icon('trash')}</button>
+      <button class="ui-hud-btn" data-act="download" aria-label="Download">${icon('save')}</button>
+      <button class="ui-hud-btn" data-act="gallery" aria-label="My drawings">${icon('gallery')}</button>
     </div>
     <div class="pt-palette"></div>`;
   stage.appendChild(root);
@@ -351,7 +351,7 @@ export function mount(stage) {
     const html = net ? `
       <div class="pt-room">
         ${lobbyHTML(net.people().map(p => ({ ...p, host: true })), { hostDoing: 'drawing', myUid: net.uid })}
-        <button class="pt-leave" aria-label="Leave">${icon('leave')}</button>
+        <button class="ui-btn round small danger pt-leave" aria-label="Leave">${icon('leave')}</button>
       </div>` : `<div class="pt-together">${togetherButton('Play with friends', 'small')}</div>`;
     if (html === lastTop) return;
     lastTop = html;
@@ -398,8 +398,8 @@ export function mount(stage) {
   function modal(html) {
     closeModal();
     const m = document.createElement('div');
-    m.className = 'pt-modal';
-    m.innerHTML = `<div class="pt-card"><button class="pt-x" aria-label="Close">${icon('close')}</button>${html}</div>`;
+    m.className = 'ui-overlay pt-modal';
+    m.innerHTML = `<div class="ui-panel wide pt-card"><button class="ui-btn round ghost pt-x" aria-label="Close">${icon('close')}</button>${html}</div>`;
     m.addEventListener('pointerdown', e => { if (e.target === m) { sound.pop(); closeModal(); } });
     m.querySelector('.pt-x').addEventListener('click', () => { sound.pop(); closeModal(); });
     root.appendChild(m);
@@ -453,7 +453,9 @@ export function mount(stage) {
     saveNow();
     const pics = loadGallery();
     const m = modal(`
-      <h2>My drawings</h2>
+      <div class="ui-kicker">Paint Party</div>
+      <h2 class="ui-title">My drawings</h2>
+      <p class="ui-sub">Tap one to keep drawing, or start a new one.</p>
       <div class="pt-gallery">
         <button class="pt-pic pt-new" aria-label="New drawing">${icon('plus')}</button>
         ${pics.map(p => `
