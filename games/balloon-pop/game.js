@@ -295,7 +295,7 @@ export function mount(stage) {
     // Hold-to-exit progress ring on the home button.
     if (homeBtn && holdT) {
       const p = Math.min(1, (performance.now() - holdStart) / (HOLD_TO_EXIT * 1000));
-      homeBtn.style.background = `conic-gradient(#ffd54f ${p * 360}deg, #ff6a3d 0)`;
+      homeBtn.style.background = `conic-gradient(#ffd54f ${p * 360}deg, rgba(16,18,38,.6) 0)`;
     }
 
     for (const c of clouds) { c.x += c.v * dt; if (c.x > 1.2) c.x = -0.2; }
@@ -731,7 +731,7 @@ export function mount(stage) {
       ctx.save();
       ctx.translate(W() / 2, H() * 0.45);
       ctx.scale(s, s);
-      ctx.font = `700 ${Math.min(120, W() * 0.16)}px Nunito, system-ui, sans-serif`;
+      ctx.font = `900 ${Math.min(120, W() * 0.16)}px Nunito, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 10;

@@ -151,8 +151,8 @@ export function mount(stage) {
     if (S.phase === 'lobby') lobbyUI();
     if (S.net && S.phase === 'build') badgeUI();
     if (S.net && S.net.status === 'waiting' && S.phase !== 'build' && S.phase !== 'lobby') ui.appendChild(el(`<div class="rt-netwait">📶⏳</div>`));
-    if (S.busy) ui.appendChild(el(`<div class="rt-overlay"><div class="rt-wait">⏳</div></div>`));
-    if (S.time < S.sad) ui.appendChild(el(`<div class="rt-overlay rt-sad"><div class="rt-wait">😢</div>${S.msg ? `<div class="rt-msg">${S.msg}</div>` : ''}</div>`));
+    if (S.busy) ui.appendChild(el(`<div class="ui-overlay rt-overlay"><div class="ui-panel rt-mini-panel"><div class="rt-wait">⏳</div><p class="ui-sub">One moment…</p></div></div>`));
+    if (S.time < S.sad) ui.appendChild(el(`<div class="ui-overlay rt-overlay rt-sad"><div class="ui-panel rt-mini-panel"><div class="rt-wait">😢</div><p class="ui-sub">${S.msg || "That didn't work"}</p></div></div>`));
     if (!S.rotateOk) { // only shows on a phone held upright (CSS); tap to carry on anyway
       const r = el(`<div class="rt-rotate"><span>📱</span></div>`);
       r.addEventListener('click', () => { S.rotateOk = true; r.remove(); });
@@ -163,8 +163,8 @@ export function mount(stage) {
   function buildUI() {
     const top = el(`<div class="rt-top">
       ${S.net ? '' : togetherButton('Play with friends', 'small')}
-      <button class="rt-btn rt-saved" title="Saved tracks">${icon('gallery')}</button>
-      <button class="rt-btn rt-clear" title="Clear">${icon('trash')}</button></div>`);
+      <button class="rt-btn ui-hud-btn rt-saved" title="Saved tracks">${icon('gallery')}</button>
+      <button class="rt-btn ui-hud-btn rt-clear" title="Clear">${icon('trash')}</button></div>`);
     click(top.querySelector('.rt-clear'), () => { S.track = null; S.items = []; sceneChanged(); render(); });
     click(top.querySelector('.rt-saved'), () => openSaved('build'));
     const on = top.querySelector('[data-together]');
@@ -231,7 +231,7 @@ export function mount(stage) {
     bar.appendChild(pal);
 
     const locked = S.net && notReady(netPeople()).length > 0; // a friend is still getting ready
-    const go = el(`<button class="rt-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">🏁</button>`);
+    const go = el(`<button class="rt-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">${icon('flag')}<span>Race</span></button>`);
     click(go, () => { if (S.track && !locked) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     ui.appendChild(bar);
@@ -249,12 +249,14 @@ export function mount(stage) {
   // Pick colour, car type and sticker. Icons only.
   function customise(player) {
     const used = S.players.filter(p => p !== player).map(p => p.color);
-    const pop = el(`<div class="rt-custom" style="--c:${player.color}">
-      <div class="rt-opts rt-opt-colors"></div>
-      <div class="rt-opts rt-opt-styles"></div>
-      <div class="rt-opts rt-opt-decals"></div>
-      <button class="rt-ok">${icon('check')}</button>
-    </div>`);
+    const wrap = el(`<div class="ui-overlay rt-overlay rt-custom-wrap"><div class="ui-panel wide left rt-custom" style="--c:${player.color}">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">My car</h2>
+      <div class="ui-label">Colour</div><div class="rt-opts rt-opt-colors"></div>
+      <div class="ui-label">Car</div><div class="rt-opts rt-opt-styles"></div>
+      <div class="ui-label">Sticker</div><div class="rt-opts rt-opt-decals"></div>
+      <div class="ui-row end rt-foot"><button class="ui-btn go rt-ok">${icon('check')}<span>Done</span></button></div>
+    </div></div>`);
+    const pop = wrap.querySelector('.rt-custom');
     const set = (k, v) => { player[k] = v; savePlayers(S.players); syncMyPlayers(); render(); };
     COLORS.forEach(c => {
       const sw = el(`<button class="rt-swatch ${used.includes(c) ? 'taken' : ''} ${c === player.color ? 'on' : ''}" style="background:${c}"></button>`);
@@ -274,7 +276,8 @@ export function mount(stage) {
       pop.querySelector('.rt-opt-decals').appendChild(b);
     });
     click(pop.querySelector('.rt-ok'), () => { S.customFor = null; render(); });
-    ui.appendChild(pop);
+    wrap.addEventListener('click', e => { if (e.target === wrap) { S.customFor = null; render(); } });
+    ui.appendChild(wrap);
   }
 
   function showBin(on) {
@@ -291,10 +294,10 @@ export function mount(stage) {
   function raceUI() {
     const guest = S.net && !S.net.isHost;
     const top = el(guest
-      ? `<div class="rt-top"><button class="rt-btn rt-leave" title="Leave">${icon('leave')}</button></div>`
+      ? `<div class="rt-top"><button class="rt-btn ui-hud-btn rt-leave" title="Leave">${icon('leave')}</button></div>`
       : `<div class="rt-top">
-      <button class="rt-btn rt-again" title="Race again">${icon('retry')}</button>
-      <button class="rt-btn rt-draw" title="Draw">${icon('edit')}</button>
+      <button class="rt-btn ui-hud-btn rt-again" title="Race again">${icon('retry')}</button>
+      <button class="rt-btn ui-hud-btn rt-draw" title="Pause">${icon('pause')}</button>
     </div>`);
     if (guest) click(top.querySelector('.rt-leave'), () => leaveOnline());
     else {
@@ -475,13 +478,13 @@ export function mount(stage) {
 
   function resultsUI() {
     const list = standings(S.race);
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-trophy">🏆</div>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel rt-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Results</h2>
       <div class="rt-podium"></div>
-      <div class="rt-actions">${S.net && !S.net.isHost
-        ? '<div class="rt-wait rt-wait-small">⏳</div>'
-        : `<button class="rt-big rt-again2">${icon('retry')}</button><button class="rt-big rt-draw2">${icon('edit')}</button>`}
-      </div></div></div>`);
+      ${S.net && !S.net.isHost
+        ? '<p class="ui-sub">⏳ Waiting for the next race…</p>'
+        : `<div class="ui-row rt-foot"><button class="ui-btn ghost rt-draw2">${icon('edit')}<span>Track</span></button><button class="ui-btn primary big rt-again2">${icon('retry')}<span>Race again</span></button></div>`}
+      </div></div>`);
     list.forEach((c, i) => {
       const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas>${c.name ? `<b class="rt-name">${c.name}</b>` : ''}</div>`);
       drawCarIcon(row.querySelector('canvas'), c);
@@ -495,18 +498,20 @@ export function mount(stage) {
   }
 
   function chooseUI() {
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-actions">
-        <button class="rt-choice rt-edit"><canvas width="240" height="150"></canvas><span>✏️</span></button>
-        <button class="rt-choice rt-fresh"><div class="rt-blank"></div><span>✨</span></button>
-        <button class="rt-choice rt-open"><div class="rt-blank rt-gallery">🖼️</div><span>⭐</span></button>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel wide rt-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Paused</h2>
+      <div class="ui-choices rt-choices">
+        <button class="ui-choice rt-choice rt-edit"><canvas width="240" height="150"></canvas><span>${icon('edit')} Change this track</span></button>
+        <button class="ui-choice rt-choice rt-fresh"><div class="rt-blank"></div><span>${icon('plus')} New track</span></button>
+        <button class="ui-choice rt-choice rt-open"><div class="rt-blank rt-gallery">${icon('gallery')}</div><span>${icon('star')} Saved tracks</span></button>
       </div>
-      <button class="rt-btn rt-back">${icon('back')}</button>
+      <div class="ui-row rt-foot"><button class="ui-btn ghost rt-restart">${icon('retry')}<span>Restart race</span></button><button class="ui-btn primary big rt-back">${icon('play')}<span>Resume</span></button></div>
     </div></div>`);
     R.thumb(box.querySelector('canvas'));
     click(box.querySelector('.rt-edit'), () => toBuild(false));
     click(box.querySelector('.rt-fresh'), () => toBuild(true));
     click(box.querySelector('.rt-open'), () => openSaved('choose'));
+    click(box.querySelector('.rt-restart'), () => { S.paused = false; raceAgain(); });
     click(box.querySelector('.rt-back'), () => {
       S.paused = false;
       S.phase = S.race && S.race.phase === 'done' ? 'results' : 'race';
@@ -524,12 +529,13 @@ export function mount(stage) {
 
   function savedUI() {
     const list = loadSaved();
-    const box = el(`<div class="rt-overlay"><div class="rt-card rt-saved-card">
-      <button class="rt-btn rt-back">${icon('back')}</button>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel wide rt-saved-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Saved tracks</h2><p class="ui-sub">Tap a track to race it again. ⭐ keeps it.</p>
       <div class="rt-gallery-grid"></div>
+      <div class="ui-row rt-foot"><button class="ui-btn ghost rt-back">${icon('back')}<span>Back</span></button></div>
     </div></div>`);
     const grid = box.querySelector('.rt-gallery-grid');
-    if (!list.length) grid.appendChild(el(`<div class="rt-empty">🏁 ➜ 🖼️</div>`));
+    if (!list.length) grid.appendChild(el(`<div class="rt-empty ui-sub">No tracks yet. Draw one and race it!</div>`));
     list.forEach(s => {
       const card = el(`<div class="rt-saved-item ${s.fav ? 'fav' : ''}">
         <canvas width="240" height="150"></canvas>
@@ -866,7 +872,7 @@ export function mount(stage) {
     const list = netPeople();
     const wait = S.net.status === 'waiting' ? '<span class="rt-badge-wait">📶⏳</span>' : '';
     const label = S.net.isHost && notReady(list).length ? `<div class="rt-golabel">${startLabel(list)}</div>` : '';
-    const b = el(`<div class="rt-badge">${lobbyHTML(list, { hostDoing: HOST_DOING, myUid: S.net.room.uid })}${wait}<button class="rt-btn rt-leave" title="Leave">${icon('leave')}</button>${label}</div>`);
+    const b = el(`<div class="rt-badge">${lobbyHTML(list, { hostDoing: HOST_DOING, myUid: S.net.room.uid })}${wait}<button class="ui-btn danger round small rt-leave" title="Leave">${icon('leave')}</button>${label}</div>`);
     click(b.querySelector('.rt-leave'), () => leaveOnline());
     ui.appendChild(b);
   }

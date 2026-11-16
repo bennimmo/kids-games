@@ -85,17 +85,17 @@
 .sp-hcard { gap: 12px; padding: 18px 20px; }
 .sp-hhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .sp-hcard .ui-title { font-size: clamp(24px, 3.6vw, 32px); }
-.sp-planes { grid-template-columns: repeat(5, 1fr); }
+.ui-choices.sp-planes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .sp-pcard small { color: #fcd34d; letter-spacing: .1em; }
 .sp-hrow { display: flex; gap: 18px; flex-wrap: wrap; }
 .sp-hcol { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; }
 .sp-colors { display: flex; gap: 10px; flex-wrap: wrap; }
 .sp-col { width: 44px; height: 44px; border-radius: 50%; padding: 0; border: 2px solid rgba(255,255,255,.25) !important; box-shadow: inset 0 -6px 10px rgba(0,0,0,.2); transition: transform .1s; }
 .sp-col.on { transform: scale(1.12); box-shadow: 0 0 0 3px var(--ui-bg), 0 0 0 5px var(--accent); }
-.sp-starts { display: flex; gap: 8px; flex-wrap: wrap; }
-.sp-start.ui-choice { min-height: 72px; min-width: 84px; padding: 8px 10px; flex: 1 1 84px; }
+.sp-starts { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.sp-start.ui-choice { min-height: 72px; padding: 8px 6px; }
 .sp-start .i { font-size: 28px; }
-.sp-start small { white-space: nowrap; }
+.sp-start small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 .sp-roombadge { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); pointer-events: none !important; }
 /* shared lobby strip (together.js): faces only while flying, full chips in the hangar */
@@ -111,11 +111,12 @@
 .sp-tips p { font-size: 15px; font-weight: 600; color: var(--ui-dim); margin: 6px 0; }
 
 @media (max-width: 560px), (max-height: 560px) {
-  .sp-planes { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .ui-choices.sp-planes { gap: 6px; }
   .sp-pcard.ui-choice { min-height: 70px; font-size: 12px; padding: 6px 2px; } .sp-pcard .i { font-size: 26px; }
   .sp-hcard { padding: 14px 12px; gap: 8px; }
   .sp-hcard .ui-label { display: none; }
-  .sp-start.ui-choice { min-height: 56px; min-width: 64px; }
+  .sp-start.ui-choice { min-height: 56px; }
+  .sp-starts { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); gap: 6px; }
   .sp-set > span { font-size: 15px; }
   .sp-set .ui-seg button { padding: 0 8px; font-size: 13px; }
   .sp-map { width: 110px; height: 110px; }
