@@ -397,3 +397,7 @@ html, body { overscroll-behavior: none; }
 }
 .fi-art { font-size: 80px; line-height: 1; }
 .fi-art .art { width: 110px; height: 110px; display: block; }
+/* games style their own `button`s: keep the shared together buttons looking the same everywhere */
+button.tg-btn.tg-btn { color: #fff; border: 3px solid rgba(255,255,255,.9); background: var(--btn-ok); font-family: "Fredoka", system-ui, sans-serif; }
+button.tg-ready.tg-ready { color: #fff; border: 0; background: var(--btn-hot); font-family: "Fredoka", system-ui, sans-serif; }
+button.tg-ready.tg-ready.on { background: var(--btn-ok); }

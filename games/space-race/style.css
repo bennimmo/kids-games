@@ -48,8 +48,8 @@
 .sd-level.on { background: #39ffc4; border-color: #39ffc4 !important; }
 .sd-go { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px; border-radius: 20px; font-size: 17px; font-weight: 700; color: #2a1650 !important; background: linear-gradient(180deg, #ffe27a, #ffb43d); box-shadow: inset 0 -4px 0 rgba(150,80,10,.25), inset 0 2px 0 rgba(255,255,255,.5), 0 10px 20px -8px rgba(255,180,61,.7); transition: transform .1s; }
 .sd-go span { font-size: 30px; }
-.sd-go:active, .sd-btn:active, .sd-keypad button:active, .sd-level:active, .sd-style:active { transform: scale(.93); }
-.sd-btn:active, .sd-keypad button:active { box-shadow: var(--btn-press); }
+.sd-go:active, .sd-btn:active, .sd-level:active, .sd-style:active { transform: scale(.93); }
+.sd-btn:active { box-shadow: var(--btn-press); }
 .sd-keys { margin: 8px 0 0; color: #b3acdf; font-size: 14px; }
 .sd-btn { width: 72px; height: 72px; padding: 0; border-radius: 50%; font-size: 34px; background: var(--btn-face); color: #2a1650 !important; box-shadow: var(--btn-shadow), 0 0 0 3px rgba(255,255,255,.15); display: inline-grid; place-items: center; transition: transform .1s; }
 .sd-btn .ic { stroke-width: 2.9; }
@@ -69,25 +69,21 @@
 .sd-results li span { font-size: 32px; }
 .sd-results li i { width: 18px; height: 18px; border-radius: 50%; background: var(--pc); }
 
-.sd-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.sd-code span { width: 76px; height: 76px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 48px; display: flex; align-items: center; justify-content: center; }
-.sd-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; justify-content: center; }
-.sd-keypad button { width: 72px; height: 72px; padding: 0; border-radius: 18px; font-size: 42px; background: linear-gradient(180deg, #f3f9ff, #dcecfb); box-shadow: var(--btn-shadow); }
-.sd-ships { display: flex; gap: 12px; justify-content: center; font-size: 44px; }
-.sd-ships span { position: relative; width: 72px; height: 72px; border-radius: 50%; border: 4px solid var(--pc, #555); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); }
-.sd-ships span b { position: absolute; bottom: -10px; right: -10px; font-size: 26px; }
-.sd-ships .sd-name { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 600; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-.sd-lobby .sd-ships { margin-bottom: 22px; }
-.sd-ships .sd-empty { border-style: dashed; animation: sd-pulse 1s infinite; }
 
 @media (max-width: 520px), (max-height: 520px) {
   .sd-card h1 { font-size: 38px; margin-bottom: 8px; }
   .sd-card { padding: 14px; }
   .sd-row { margin: 8px 0; gap: 8px; }
-  .sd-keypad { grid-template-columns: repeat(4, 58px); }
-  .sd-keypad button, .sd-code span { width: 58px; height: 58px; font-size: 34px; }
   .sd-pad button { width: 64px; height: 64px; }
   .sd-place { font-size: 40px; }
 }
-@media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } .sd-wait, .sd-netwait, .sd-ships .sd-empty { animation: none; } }
-.sd-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } .sd-wait, .sd-netwait { animation: none; } }
+
+/* play together (shared look, js/engine/together.js) */
+.sd .tg-btn { border: 3px solid rgba(255,255,255,.9); color: #fff; }
+.sd .tg-ready { color: #fff; }
+.sd-together { margin-top: 4px; }
+.sd-lobby { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.sd-lobby .sd-row { margin: 0; }
+.sd-golabel { margin: 0; font-size: 20px; font-weight: 700; color: #ffcc80; }
+.sd-sad { font-size: 26px; font-weight: 700; }
