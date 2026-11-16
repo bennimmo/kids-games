@@ -703,7 +703,9 @@ export function mount(stage) {
   function onMeta(m) {
     if (!S.net) return;
     if (!m) { leaveOnline(true); return; } // the host left
+    const newHost = !S.net.meta || S.net.meta.hostUid !== m.hostUid;
     S.net.meta = m;
+    if (newHost && (S.phase === 'lobby' || S.phase === 'build')) render(); // now we know who's hosting
     if (!S.net.isHost && m.track) {
       const key = JSON.stringify(m.track);
       if (key !== S.net.trackKey) {

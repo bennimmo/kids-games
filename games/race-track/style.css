@@ -235,6 +235,8 @@
 .rt-sad { flex-direction: column; }
 
 /* friend waiting in the lobby: my car + I'm ready */
+.rt-ui .tg-ready, .rt-ui .tg-btn { color: #fff; }
+.rt-ui .tg-btn { border: 3px solid rgba(255,255,255,.9); }
 .rt-lobby {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
   display: flex; align-items: flex-end; gap: 14px; max-width: calc(100vw - 24px);
