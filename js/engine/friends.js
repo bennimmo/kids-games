@@ -22,6 +22,7 @@ let lastEcho = voiceOpts().echo;
 onVoiceOpts(o => {
   soundsBack();
   if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
+  if (group) group.peers.forEach(p => { try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
 });
 export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
@@ -32,7 +33,22 @@ const KEEP_KEY = 'kg-group';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
 const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
-const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+// STUN finds a direct path. TURN = relay for when devices can't link directly (free public
+// Open Relay server: may be slow or down; swap for a paid/own one if it's unreliable).
+const ICE = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  {
+    urls: [
+      'turn:staticauth.openrelay.metered.ca:80',
+      'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
+      'turn:staticauth.openrelay.metered.ca:443',
+      'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+];
+const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const randomHex = n => [...bytes(n)].map(b => (b & 15).toString(16)).join('');
@@ -382,7 +398,7 @@ function readSignals(g) {
 function makePeer(g, theirUid, theirSid) {
   const { D } = fb;
   const polite = fb.uid > theirUid;
-  const pc = new RTCPeerConnection({ iceServers: ICE });
+  const pc = new RTCPeerConnection(iceConfig());
   const out = ref(`${g.id}/live/${fb.uid}_m/${theirUid}`);
   let n = 0, makingOffer = false, ignoreOffer = false, closed = false, chain = Promise.resolve();
   const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set() };
