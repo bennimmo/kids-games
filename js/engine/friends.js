@@ -6,6 +6,7 @@
 //       players/<uid>_k: { name }                                       (a friend knocking)
 //   games/friends/rooms/<group>  the group ('c' + 16 random)
 //       players/<uid>_m: { name, face, sid }                                (one per device)
+//       players/<uid>_i: { game, code, name, face, at }                 ("come and play" invite, see together.js)
 //       live/<uid>_m/<toUid>/<key>: WebRTC hand-shake messages
 // The link itself is WebRTC, straight between devices, ready for voice/video later
 // (peer.pc is the RTCPeerConnection; tracks friends add arrive as friend.stream).
@@ -53,11 +54,16 @@ let outgoing = null;                  // { code, name, status: asking|no|full|no
 let outUnsub = null, outTimer = null, outToken = 0;
 let group = null;                     // { id, peers: Map(uid -> peer), unsubs, live, timer }
 let mic = null, micStatus = 'off', muted = false; // micStatus: off | asking | on | denied
+let invites = [];                     // [{ uid, name, face, game, code, at }] from friends
+const dismissed = new Set();          // 'uid:code' already answered
+let playing = null;                   // { game, code } room I'm in (from together.js)
+const INVITE_MS = 15 * 60 * 1000;
 
 const subs = new Set();
 const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
-  inGroup: !!group, micStatus, muted,
+  inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing,
+  invites: invites.filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
   friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream })) : [],
 });
 let emitQueued = false;
@@ -329,6 +335,10 @@ async function joinGroup(id) {
       p.face = cleanFace(m.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
+    invites = Object.entries(v)
+      .filter(([pid, i]) => pid.endsWith('_i') && i && i.game && i.code && seen.has(pid.slice(0, -2)) && fb.now() - (i.at || 0) < INVITE_MS)
+      .map(([pid, i]) => ({ uid: pid.slice(0, -2), name: cleanName(i.name) || '?', face: cleanFace(i.face), game: String(i.game), code: String(i.code), at: i.at }))
+      .sort((a, b) => b.at - a.at);
     readSignals(g);
     emit();
   }));
@@ -342,6 +352,8 @@ async function joinGroup(id) {
 export async function leaveGroup() {
   const g = group;
   if (!g) return;
+  clearInvite();
+  invites = [];
   group = null;
   forget();
   clearInterval(g.timer);
@@ -443,6 +455,28 @@ function makePeer(g, theirUid, theirSid) {
   };
   return peer;
 }
+
+// ------------------------------------------------------------ invites ("come and play my game")
+
+// Tell every friend in the group: come and join my room in this game.
+export function sendInvite(game, roomCode) {
+  if (!group || !fb) return false;
+  const r = ref(`${group.id}/players/${fb.uid}_i`);
+  fb.D.onDisconnect(r).remove();
+  fb.D.set(r, { game, code: roomCode, name: myName(), face: myFace(), at: fb.now() }).catch(() => {});
+  return true;
+}
+export function clearInvite() {
+  if (!group || !fb) return;
+  const r = ref(`${group.id}/players/${fb.uid}_i`);
+  fb.D.onDisconnect(r).cancel().catch(() => {});
+  fb.D.remove(r).catch(() => {});
+}
+export function dismissInvite(inv) { dismissed.add(inv.uid + ':' + inv.code); emit(); }
+// The room I'm playing in (so its invite doesn't pop up), or null.
+export function setPlaying(game, roomCode) { playing = game && roomCode ? { game, code: roomCode } : null; emit(); }
+export const myUid = () => (fb ? fb.uid : null);
+export const ensureCore = () => core();
 
 // ------------------------------------------------------------ start + name
 

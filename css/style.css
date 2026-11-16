@@ -327,3 +327,73 @@ html, body { overscroll-behavior: none; }
   .tile .art { width: 92px; height: 92px; }
   .tile .name { font-size: 19px; }
 }
+
+/* ---------- Play together (js/engine/together.js) - the same in every game ---------- */
+.tg-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 64px; padding: 0 26px 0 20px; border: 3px solid rgba(255,255,255,.9); border-radius: 32px;
+  background: var(--btn-ok); color: #fff; font-family: "Fredoka", system-ui, sans-serif; font-size: 24px; font-weight: 700;
+  text-shadow: 0 2px 0 rgba(0,0,0,.15); cursor: pointer; white-space: nowrap;
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 8px 18px -6px rgba(20,90,50,.55);
+  transition: transform .1s;
+}
+.tg-btn .ic { font-size: 30px; stroke-width: 2.8; }
+.tg-btn:active { transform: scale(.94); }
+.tg-btn.small { height: 52px; font-size: 20px; padding: 0 18px 0 14px; }
+.tg-btn.small .ic { font-size: 24px; }
+
+.tg-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.tg-p {
+  display: flex; align-items: center; gap: 8px; padding: 5px 14px 5px 5px; border-radius: 30px;
+  background: #fff; color: #2b2140; box-shadow: 0 4px 12px -4px rgba(43,33,64,.35);
+  font-family: "Fredoka", system-ui, sans-serif; text-align: left;
+}
+.tg-face {
+  width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 28px; line-height: 1; background: #fff3c4;
+}
+.tg-face.big { width: 72px; height: 72px; font-size: 46px; }
+.tg-txt { display: flex; flex-direction: column; line-height: 1.1; }
+.tg-txt b { font-size: 18px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-txt small { font-size: 14px; font-weight: 600; opacity: .7; display: inline-flex; align-items: center; gap: 3px; }
+.tg-p.ready { background: #d7f5e1; }
+.tg-p.ready small { color: #1b7a43; opacity: 1; }
+.tg-p.ready .tg-face { background: #a5e8bd; }
+.tg-p.busy .tg-face { animation: bob 1.2s ease-in-out infinite; }
+.tg-p.coming { opacity: .55; }
+.tg-p.coming .tg-face { animation: bob 1.2s ease-in-out infinite; }
+.tg-p.me { box-shadow: 0 0 0 3px #ffb300, 0 4px 12px -4px rgba(43,33,64,.35); }
+
+.tg-wait {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 22px;
+  background: #fff; color: #2b2140; border-radius: 28px; box-shadow: 0 16px 34px -14px rgba(43,33,64,.5);
+  font-family: "Fredoka", system-ui, sans-serif;
+}
+.tg-wait-who { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 600; text-align: left; }
+.tg-wait-who b { font-weight: 700; }
+.tg-ready {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 72px; min-width: 240px; padding: 0 28px; border: 0; border-radius: 36px;
+  background: var(--btn-hot); color: #fff; font-family: inherit; font-size: 30px; font-weight: 700; cursor: pointer;
+  text-shadow: 0 2px 0 rgba(0,0,0,.15);
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 8px 18px -6px rgba(200,80,30,.6);
+  animation: tg-pulse 1.4s ease-in-out infinite;
+}
+.tg-ready .ic { font-size: 34px; stroke-width: 3.2; }
+.tg-ready.on { background: var(--btn-ok); animation: none; box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 8px 18px -6px rgba(20,90,50,.55); }
+.tg-ready:active { transform: scale(.94); }
+@keyframes tg-pulse { 50% { transform: scale(1.06); } }
+.tg-locked { opacity: .55; filter: saturate(.4); pointer-events: none; }
+
+/* "Kit wants to play ..." */
+.fi-card { width: min(380px, 100%); display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fi-who { display: flex; align-items: center; gap: 12px; font-size: 34px; }
+.fi-face { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; font-size: 46px; background: #fff3c4; animation: ring .5s ease-in-out infinite alternate; }
+.fi-says { font-size: 22px; opacity: .7; }
+.fi-game {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 26px 14px; border-radius: 26px;
+  background: radial-gradient(130% 90% at 25% 0%, rgba(255,255,255,.55), rgba(255,255,255,0) 55%), var(--c);
+  font-size: 24px; box-shadow: inset 0 -4px 0 rgba(0,0,0,.08);
+}
+.fi-art { font-size: 80px; line-height: 1; }
+.fi-art .art { width: 110px; height: 110px; display: block; }

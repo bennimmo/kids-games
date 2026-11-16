@@ -4,10 +4,12 @@ import { CODE_PICS, codeToPics } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import { icon } from './engine/icons.js';
+import { GAMES } from './games.js';
+import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
+  onFriends, friendState, startFriends, dismissInvite, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
@@ -16,7 +18,7 @@ const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da'
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
 const picsHTML = c => codeToPics(c).map(p => `<span>${p}</span>`).join('');
 
-let layer, dock, list, micBtn, knockEl, panel = null;
+let layer, dock, list, micBtn, knockEl, inviteEl, panel = null;
 let onEditName = () => {};
 
 // Keep taps on our things away from the game underneath.
@@ -121,6 +123,36 @@ function renderKnock(s) {
     </div>`;
   knockEl.querySelector('.fk-yes').addEventListener('click', () => { sound.pop(); accept(k.pid); });
   knockEl.querySelector('.fk-no').addEventListener('click', () => { sound.pop(); decline(k.pid); });
+  sound.pop();
+}
+
+// ------------------------------------------------------------ "come and play" invite popup (any screen)
+
+let shownInvite = '';
+function renderInvite(s) {
+  const v = s.knocks.length ? null : s.invites[0]; // a knock comes first
+  const key = v ? v.uid + ':' + v.code : '';
+  if (key === shownInvite) return;
+  shownInvite = key;
+  inviteEl.hidden = !v;
+  if (!v) return;
+  const g = GAMES.find(x => x.id === v.game);
+  if (!g) { dismissInvite(v); return; }
+  inviteEl.innerHTML = `<div class="app-help-card fi-card">
+      <div class="fi-who"><span class="fi-face">${v.face || '🙂'}</span><b>${nameHTML(v.name)}</b></div>
+      <div class="fi-says">wants to play</div>
+      <div class="fi-game" style="--c:${g.color}"><span class="fi-art">${gameArt(g.id) || g.icon}</span><b>${g.name}</b></div>
+      <div class="name-row">
+        <button class="app-btn fk-no fi-no" aria-label="No">${icon('close')}</button>
+        <button class="app-btn name-ok fi-yes" aria-label="Play">${icon('check')}</button>
+      </div>
+    </div>`;
+  inviteEl.querySelector('.fi-yes').addEventListener('click', () => {
+    sound.pop(); dismissInvite(v);
+    closePanel();
+    location.hash = `#/${v.game}?join=${v.code}`;
+  });
+  inviteEl.querySelector('.fi-no').addEventListener('click', () => { sound.pop(); dismissInvite(v); });
   sound.pop();
 }
 
@@ -232,7 +264,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><button class="fb-mic" aria-label="Microphone">${icon('mic')}</button><div class="fb-list"></div></div><div class="app-help fk" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><button class="fb-mic" aria-label="Microphone">${icon('mic')}</button><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
@@ -248,13 +280,20 @@ export function mountFriends({ editName }) {
     layer.querySelectorAll('.fb audio').forEach(a => { if (a.srcObject && a.paused) a.play().catch(() => {}); });
     unlockVoices();
   }, true);
-  knockEl = layer.querySelector('.fk');
-  shield(dock); shield(knockEl);
+  knockEl = layer.querySelector('.fk:not(.fi)');
+  inviteEl = layer.querySelector('.fi');
+  shield(dock); shield(knockEl); shield(inviteEl);
+  // Games ask for this ("Play with friends" before linking up).
+  window.addEventListener('kg-open-friends', () => {
+    if (friendState().codeStatus === 'noname') onEditName();
+    else openPanel();
+  });
   wireDrag();
   let wasAsking = false;
   onFriends(s => {
     renderBubbles(s);
     renderKnock(s);
+    renderInvite(s);
     renderBar(s);
     // they said yes: close the panel so the bubble shows
     if (panel && wasAsking && !s.outgoing && s.inGroup) closePanel();

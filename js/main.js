@@ -6,9 +6,10 @@ import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX, myFace, setMyFace, FACES } from './engine/profile.js';
 import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
 import { nameChanged } from './engine/friends.js';
+import { leftRoom } from './engine/together.js';
 
 const app = document.getElementById('app');
-let cleanup = null;
+let cleanup = null, current = null;
 
 // ---------- install as an app / full screen ----------
 const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone;
@@ -175,8 +176,12 @@ async function showGame(game) {
 }
 
 function route() {
+  const id = location.hash.replace(/^#\/?/, '').split('?')[0];
+  // same game, just tidying the address bar (together.js takeJoinCode)
+  if (cleanup && id === current && !location.hash.includes('?join=')) return;
   if (cleanup) { cleanup(); cleanup = null; }
-  const id = location.hash.replace(/^#\/?/, '');
+  leftRoom(); // never keep inviting friends to a game you've left
+  current = id;
   const game = GAMES.find(g => g.id === id);
   if (game) showGame(game);
   else { showMenu(); newCode(); } // a new friend code every visit
