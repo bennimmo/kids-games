@@ -90,6 +90,8 @@ export async function startMic() {
     mic = m; micStatus = 'on';
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
     group.peers.forEach(addMic);
+    // Chrome (Android) hides local addresses until the mic is allowed: look for a link again now.
+    group.peers.forEach(p => { if (p.status !== 'on') p.retry(); });
   } catch (e) { micStatus = 'denied'; }
   soundsBack();
   emit();
@@ -399,6 +401,9 @@ function makePeer(g, theirUid, theirSid) {
     } catch (e) { /* try again on next change */ } finally { makingOffer = false; }
   };
   pc.onicecandidate = e => { if (e.candidate) send({ c: e.candidate.toJSON() }); };
+  // Not linked yet: try again every 15 s (new network paths, e.g. once the mic is allowed).
+  peer.retry = () => { if (!closed && pc.signalingState !== 'closed') { try { pc.restartIce(); } catch (e) { /* */ } } };
+  const watchdog = setInterval(() => { if (closed) clearInterval(watchdog); else if (peer.status !== 'on') peer.retry(); }, 15000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
@@ -443,6 +448,7 @@ function makePeer(g, theirUid, theirSid) {
   peer.close = () => {
     if (closed) return;
     closed = true;
+    clearInterval(watchdog);
     try { pc.close(); } catch (e) { /* already */ }
     D.remove(out).catch(() => {});
   };
