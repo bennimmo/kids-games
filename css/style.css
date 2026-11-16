@@ -423,7 +423,8 @@ button.tg-ready.tg-ready { color: #fff; border: 0; background: var(--btn-hot); f
 button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 
 /* ---------- Friends list (panel) ---------- */
-.pic { font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif; }
+.pic-img { width: 1em; height: 1em; display: block; margin: auto; pointer-events: none; -webkit-user-drag: none; }
+.pic { display: inline-grid; place-items: center; }
 .fhead { width: 100%; display: flex; align-items: center; justify-content: space-between; }
 .fhead h2 { margin: 0; font-size: 26px; display: inline-flex; align-items: center; gap: 8px; }
 .fedit.on { background: var(--btn-ok); color: #fff; }

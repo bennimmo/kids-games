@@ -41,7 +41,7 @@ Then open http://localhost:8000
 - **My friends list**: add a friend once with pictures, after that they're saved on this device (`kg-friends`). The list shows who's on (green dot) and what they're playing; 📞 calls them wherever they are (pop-up "Kit is calling you"). ✏️ = remove friends. Everyone you've been in a call with is saved.
 - Each device keeps a "home" while the app is open (`games/friends/rooms/h<uid>`: name, face, on, game) so saved friends can see it and call it. Calling someone who's already in a call brings them into it.
 - Friend bubbles show a little game badge; hover/tap shows "Playing Kit's Karts".
-- Code pictures use the Noto emoji font (subset from Google Fonts) so they look the same on Windows, iPad and Android.
+- Code pictures are little SVG files (`icons/pics/`, from Twemoji, CC-BY 4.0) so they look the same on Windows, iPad and Android.
 - Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.

@@ -1,6 +1,6 @@
 // Friends on screen: the bar + panel on the menu, the "wants to connect" popup,
 // and the floating friend bubbles that stay on top of every game.
-import { CODE_PICS, codeToPics } from './engine/net.js';
+import { CODE_PICS, picImg } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import { icon } from './engine/icons.js';
@@ -16,7 +16,7 @@ import {
 const DOCK_KEY = 'kg-bubbles';
 const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da', '#ec407a', '#8d6e63'];
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
-const picsHTML = c => codeToPics(c).map(p => `<span class="pic">${p}</span>`).join('');
+const picsHTML = c => [...c].map(h => `<span class="pic">${picImg(parseInt(h, 16))}</span>`).join('');
 const gameOf = id => GAMES.find(g => g.id === id);
 // "Playing Kit's Karts" / "On the menu" / "Not on"
 const whereText = (online, game) => !online ? 'Not on' : (gameOf(game) ? `Playing ${gameOf(game).name}` : 'On the menu');
@@ -258,7 +258,7 @@ function renderPanel(s) {
   if (!panel) return;
   const out = s.outgoing;
   const newOut = out && out.code && out.code[0] !== 'h' ? out : null; // asking by code (not calling a saved friend)
-  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? CODE_PICS[entry[i]] : ''}</span>`).join('');
+  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? picImg(entry[i]) : ''}</span>`).join('');
   const full = s.friends.length >= MAX_FRIENDS;
   const list = s.contacts;
   panel.innerHTML = `<div class="app-help-card friend-card">
@@ -270,7 +270,7 @@ function renderPanel(s) {
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
         ${full ? '' : `<div class="flabel">${icon('plus')} Friend's pictures</div>
         <div class="fslots">${slots}</div>
-        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}" class="pic">${p}</button>`).join('')}</div>
+        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}" class="pic" aria-label="${p}">${picImg(i)}</button>`).join('')}</div>
         <div class="name-row">
           <button class="app-btn fback" aria-label="Delete">${icon('backspace')}</button>
           <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('check')}</button>
