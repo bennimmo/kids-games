@@ -297,7 +297,7 @@ export function createRenderer() {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const t of texts) {
       ctx.globalAlpha = Math.min(1, t.life * 2);
-      ctx.font = `700 ${Math.max(14, t.size * Math.min(1.2, z + 0.3))}px Fredoka, system-ui, sans-serif`;
+      ctx.font = `700 ${Math.max(14, t.size * Math.min(1.2, z + 0.3))}px Nunito, system-ui, sans-serif`;
       ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.55)';
       ctx.strokeText(t.text, sx(t.x), sy(t.y));
       ctx.fillStyle = t.color;
@@ -319,7 +319,7 @@ export function createRenderer() {
       ctx.fillStyle = `hsl(${120 - opts.aim.power * 120},90%,55%)`;
       ctx.beginPath(); ctx.arc(ex, ey, 9, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.font = '700 18px Fredoka, sans-serif'; ctx.fillStyle = '#fff';
+      ctx.font = '700 18px Nunito, sans-serif'; ctx.fillStyle = '#fff';
       ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 4;
       const txt = Math.round(opts.aim.power * 100) + '%';
       ctx.strokeText(txt, ex, ey - 22); ctx.fillText(txt, ex, ey - 22);
@@ -363,7 +363,7 @@ export function createRenderer() {
     ctx.fillRect(x - bw / 2 - 2, ny - 2, bw + 4, 9);
     ctx.fillStyle = t.hp > 60 ? '#66bb6a' : t.hp > 30 ? '#ffca28' : '#ef5350';
     ctx.fillRect(x - bw / 2, ny, bw * Math.max(0, Math.min(100, t.hp)) / 100, 5);
-    ctx.font = '700 14px Fredoka, system-ui, sans-serif';
+    ctx.font = '700 14px Nunito, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.5)';
     ctx.strokeText(t.look.name, x, ny - 3);

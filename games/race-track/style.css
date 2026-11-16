@@ -1,4 +1,4 @@
-.rt-ui { position: absolute; inset: 0; pointer-events: none; font-family: "Fredoka", system-ui, sans-serif; }
+.rt-ui { position: absolute; inset: 0; pointer-events: none; font-family: "Nunito", system-ui, sans-serif; }
 .rt-ui > * { pointer-events: auto; }
 .rt-ui button { font-family: inherit; cursor: pointer; border: 0; color: var(--ink); transition: transform .1s, box-shadow .1s; }
 .rt-ui button .ic { stroke-width: 2.8; }

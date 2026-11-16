@@ -1,5 +1,5 @@
 /* Draw a Road */
-.dar { position: absolute; inset: 0; pointer-events: none; font-family: "Fredoka", system-ui, sans-serif; }
+.dar { position: absolute; inset: 0; pointer-events: none; font-family: "Nunito", system-ui, sans-serif; }
 .dar button { pointer-events: auto; font-family: inherit; }
 
 /* level picker */

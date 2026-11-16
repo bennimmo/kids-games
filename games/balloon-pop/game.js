@@ -731,7 +731,7 @@ export function mount(stage) {
       ctx.save();
       ctx.translate(W() / 2, H() * 0.45);
       ctx.scale(s, s);
-      ctx.font = `700 ${Math.min(120, W() * 0.16)}px Fredoka, system-ui, sans-serif`;
+      ctx.font = `700 ${Math.min(120, W() * 0.16)}px Nunito, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 10;

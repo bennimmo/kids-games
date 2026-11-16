@@ -68,7 +68,7 @@ const ART = {
     <circle cx="63" cy="40" r="6" fill="#fff"/>
     <path d="M57.5 40a5.5 5.5 0 0 1 11 0z" fill="#1e88e5"/>
     <path d="M34 54h16" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-    <text x="40" y="61" font-family="Fredoka, sans-serif" font-weight="700" font-size="10" fill="#fff" text-anchor="middle">7</text>
+    <text x="40" y="61" font-family="Nunito, sans-serif" font-weight="700" font-size="10" fill="#fff" text-anchor="middle">7</text>
     <circle cx="36" cy="66" r="11" fill="#263238"/><circle cx="36" cy="66" r="4.5" fill="#cfd8dc"/>
     <circle cx="78" cy="66" r="11" fill="#263238"/><circle cx="78" cy="66" r="4.5" fill="#cfd8dc"/>`,
 

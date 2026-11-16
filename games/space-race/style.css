@@ -1,5 +1,5 @@
 /* Star Dash */
-.sd { position: absolute; inset: 0; background: #05040f; color: #f3f0ff; font-family: "Fredoka", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; }
+.sd { position: absolute; inset: 0; background: #05040f; color: #f3f0ff; font-family: "Nunito", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; }
 .sd-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .sd-hud { position: absolute; inset: 0; pointer-events: none; }
 .sd-ui { position: absolute; inset: 0; pointer-events: none; }

@@ -863,7 +863,7 @@ function headBeams(g, c, s) {
 function nameTag(g, c) {
   const y = c.y - (c.z || 0) * 0.3 - 40;
   g.save();
-  g.font = '600 20px Fredoka, sans-serif';
+  g.font = '600 20px Nunito, sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   const w = g.measureText(c.name).width + 16;
   g.fillStyle = 'rgba(0,0,0,.45)';

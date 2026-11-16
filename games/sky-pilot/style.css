@@ -1,5 +1,5 @@
 /* Sky Pilot */
-.sp { position: absolute; inset: 0; background: #8fb8e0; color: #fff; font-family: "Fredoka", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
+.sp { position: absolute; inset: 0; background: #8fb8e0; color: #fff; font-family: "Nunito", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
 .sp-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .sp-hud, .sp-ui { position: absolute; inset: 0; pointer-events: none; }
 .sp-ui > * { pointer-events: auto; }

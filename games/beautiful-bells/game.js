@@ -740,11 +740,11 @@ export function mount(stage) {
       }
       g.globalAlpha = 1;
       g.drawImage(img, 0, 120, W, GH);
-      g.font = '700 64px Fredoka, system-ui, sans-serif';
+      g.font = '700 64px Nunito, system-ui, sans-serif';
       g.lineWidth = 10; g.strokeStyle = '#fff'; g.fillStyle = '#d63384';
       g.strokeText(`${look.name} ✨`, W / 2, 90);
       g.fillText(`${look.name} ✨`, W / 2, 90);
-      g.font = '500 30px Fredoka, system-ui, sans-serif';
+      g.font = '500 30px Nunito, system-ui, sans-serif';
       g.fillStyle = '#7b4bb7';
       g.fillText('Beautiful Bells', W / 2, H - 20);
       cv.toBlob(blob => {

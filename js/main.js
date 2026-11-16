@@ -130,9 +130,11 @@ function editName() {
 function showMenu() {
   app.innerHTML = `
     <div class="menu">
-      <div class="top-left">${nameButton()}${friendBarHTML()}</div>
-      ${appButtons()}
-      <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
+      <header class="menu-top">
+        <h1><span class="logo">${icon('play')}</span>Kids Games</h1>
+        <div class="top-left">${nameButton()}${friendBarHTML()}</div>
+        ${appButtons()}
+      </header>
       ${AGES.map(a => {
         const list = GAMES.filter(g => (g.age || AGES[0].id) === a.id);
         return list.length ? `<section class="age" style="--a:${a.color}">
@@ -161,7 +163,7 @@ function showMenu() {
 
 async function showGame(game) {
   app.innerHTML = `
-    <div class="game">
+    <div class="game" style="--accent:${game.color}">
       <div class="game-stage"></div>
       <button class="home-btn" aria-label="Home">${icon('home')}</button>
     </div>`;

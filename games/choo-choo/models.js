@@ -165,7 +165,7 @@ export function signTexture(text) {
   return canvasTex(512, 128, (g, w, h) => {
     g.fillStyle = '#1e5aa8'; g.fillRect(0, 0, w, h);
     g.strokeStyle = '#fff'; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, h - 16);
-    g.fillStyle = '#fff'; g.font = 'bold 54px "Fredoka", system-ui, sans-serif';
+    g.fillStyle = '#fff'; g.font = 'bold 54px "Nunito", system-ui, sans-serif';
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText(text, w / 2, h / 2 + 3, w - 40);
   });

@@ -263,7 +263,7 @@ export function mount(stage) {
             octx.textBaseline = 'middle';
             octx.fillText(emoji, p[p.length - 2] + 34, p[p.length - 1] - 34);
             if (name) {
-              octx.font = '600 26px Fredoka, sans-serif';
+              octx.font = '600 26px Nunito, sans-serif';
               octx.lineWidth = 6; octx.strokeStyle = '#fff'; octx.lineJoin = 'round';
               octx.strokeText(name, p[p.length - 2] + 34, p[p.length - 1] + 4);
               octx.fillStyle = '#333';

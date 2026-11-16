@@ -23,7 +23,7 @@ button .ic { pointer-events: none; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
 body {
-  font-family: "Fredoka", system-ui, sans-serif;
+  font-family: "Nunito", system-ui, sans-serif;
   color: var(--ink);
   background: linear-gradient(160deg, var(--bg1), var(--bg2));
   overflow: hidden;
@@ -352,7 +352,7 @@ html, body { overscroll-behavior: none; }
 .tg-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   height: 64px; padding: 0 26px 0 20px; border: 3px solid rgba(255,255,255,.9); border-radius: 32px;
-  background: var(--btn-ok); color: #fff; font-family: "Fredoka", system-ui, sans-serif; font-size: 24px; font-weight: 700;
+  background: var(--btn-ok); color: #fff; font-family: "Nunito", system-ui, sans-serif; font-size: 24px; font-weight: 700;
   text-shadow: 0 2px 0 rgba(0,0,0,.15); cursor: pointer; white-space: nowrap;
   box-shadow: inset 0 -4px 0 rgba(0,0,0,.12), 0 8px 18px -6px rgba(20,90,50,.55);
   transition: transform .1s;
@@ -366,7 +366,7 @@ html, body { overscroll-behavior: none; }
 .tg-p {
   display: flex; align-items: center; gap: 8px; padding: 5px 14px 5px 5px; border-radius: 30px;
   background: #fff; color: #2b2140; box-shadow: 0 4px 12px -4px rgba(43,33,64,.35);
-  font-family: "Fredoka", system-ui, sans-serif; text-align: left;
+  font-family: "Nunito", system-ui, sans-serif; text-align: left;
 }
 .tg-face {
   width: 44px; height: 44px; border-radius: 50%; flex: none; display: grid; place-items: center;
@@ -387,7 +387,7 @@ html, body { overscroll-behavior: none; }
 .tg-wait {
   display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 22px;
   background: #fff; color: #2b2140; border-radius: 28px; box-shadow: 0 16px 34px -14px rgba(43,33,64,.5);
-  font-family: "Fredoka", system-ui, sans-serif;
+  font-family: "Nunito", system-ui, sans-serif;
 }
 .tg-wait-who { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 600; text-align: left; }
 .tg-wait-who b { font-weight: 700; }
@@ -418,8 +418,8 @@ html, body { overscroll-behavior: none; }
 .fi-art { font-size: 80px; line-height: 1; }
 .fi-art .art { width: 110px; height: 110px; display: block; }
 /* games style their own `button`s: keep the shared together buttons looking the same everywhere */
-button.tg-btn.tg-btn { color: #fff; border: 3px solid rgba(255,255,255,.9); background: var(--btn-ok); font-family: "Fredoka", system-ui, sans-serif; }
-button.tg-ready.tg-ready { color: #fff; border: 0; background: var(--btn-hot); font-family: "Fredoka", system-ui, sans-serif; }
+button.tg-btn.tg-btn { color: #fff; border: 3px solid rgba(255,255,255,.9); background: var(--btn-ok); font-family: "Nunito", system-ui, sans-serif; }
+button.tg-ready.tg-ready { color: #fff; border: 0; background: var(--btn-hot); font-family: "Nunito", system-ui, sans-serif; }
 button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 
 /* ---------- Friends list (panel) ---------- */

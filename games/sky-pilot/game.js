@@ -379,7 +379,7 @@ export function mount(stage) {
   function nameTag(text, color) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 64;
     const g = c.getContext('2d');
-    g.font = '700 34px Fredoka, Arial, sans-serif';
+    g.font = '700 34px Nunito, Arial, sans-serif';
     const w = Math.min(248, g.measureText(text).width + 34);
     g.fillStyle = 'rgba(10,20,40,.72)'; g.beginPath(); g.roundRect(128 - w / 2, 6, w, 50, 22); g.fill();
     g.strokeStyle = '#' + new THREE.Color(color).getHexString(); g.lineWidth = 5; g.stroke();
@@ -898,7 +898,7 @@ export function mount(stage) {
     g.restore();
     // labels stay upright
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    const label = (pt, text, size, col = '#fff') => { g.font = `700 ${size}px Fredoka, Arial`; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.65)'; g.strokeText(text, pt[0], pt[1]); g.fillStyle = col; g.fillText(text, pt[0], pt[1]); };
+    const label = (pt, text, size, col = '#fff') => { g.font = `700 ${size}px Nunito, Arial`; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.65)'; g.strokeText(text, pt[0], pt[1]); g.fillStyle = col; g.fillText(text, pt[0], pt[1]); };
     const icon = (pt, ic, size) => { g.font = `${size}px sans-serif`; g.fillText(ic, pt[0], pt[1]); };
     const fs = big ? 1 : 1.15;
     for (const t of TOWNS) { const pt = toS(t.x, t.z); if (inside(pt) && (big || Math.hypot(t.x - s.pos.x, t.z - s.pos.z) < 6000)) label([pt[0], pt[1]], t.name, 13 * fs, '#ffe9a8'); }
