@@ -1,13 +1,13 @@
 // Paint Party – a simple paint program (like the old Paint on Windows).
 // Tools down the left, colours and sizes along the bottom, actions on the right.
 // Every drawing saves itself in this browser (🖼️ to see them). 📥 downloads a PNG.
-// 🌍 draw together: make a room or join one with 3 pictures; everyone draws on the same page.
-import { CODE_LEN } from '../../js/engine/net.js';
+// Draw together: "Play with friends" (js/engine/together.js) invites linked friends; everyone draws on the same page.
+import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftRoom, lobbyHTML } from '../../js/engine/together.js';
 import { sound } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
 import { W, H, COLORS, STAMPS, BRUSH, STAMP, SHAPES, MAX_NUMS, byOrder, drawOp, createPainter } from './ops.js';
 import { loadGallery, loadPicture, saveToGallery, removeFromGallery, getCurrent, setCurrent } from './gallery.js';
-import { makeRoom, findRoom, connect, CODE_PICS } from './online.js';
+import { makeRoom, findRoom, connect, GAME_ID } from './online.js';
 
 const svg = inner => `<svg viewBox="0 0 40 40" aria-hidden="true">${inner}</svg>`;
 const TOOLS = [
@@ -41,7 +41,6 @@ export function mount(stage) {
       <button data-act="clear" aria-label="Clear">${icon('trash')}</button>
       <button data-act="download" aria-label="Download">${icon('save')}</button>
       <button data-act="gallery" aria-label="My drawings">${icon('gallery')}</button>
-      <button data-act="friends" aria-label="Draw with friends">${icon('globe')}</button>
     </div>
     <div class="pt-palette"></div>`;
   stage.appendChild(root);
@@ -292,7 +291,7 @@ export function mount(stage) {
       commit(newOp('clear', []));
       sound.splash();
     } else if (a === 'download') download();
-    else if (a === 'gallery') { sound.pop(); galleryModal(); } else if (a === 'friends') { sound.pop(); friendsModal(); }
+    else if (a === 'gallery') { sound.pop(); galleryModal(); }
   }));
 
   function renderPalette() {
@@ -344,23 +343,23 @@ export function mount(stage) {
     $('[data-act="undo"]').disabled = !mine.length;
     $('[data-act="redo"]').disabled = !redo.length;
     $('[data-act="gallery"]').hidden = !!net;
-    $('[data-act="friends"]').hidden = !!net;
   }
 
   let lastTop = '';
   function renderTop() {
+    // Everyone just draws, so every chip says "drawing".
     const html = net ? `
       <div class="pt-room">
-        <span class="pt-code"><b>🔑</b>${net.pics.map(p => `<span>${p}</span>`).join('')}</span>
-        <span class="pt-sep"></span>
-        <span class="pt-people">${net.players().map(p => `<span class="${p.me ? 'me' : ''}">${p.emoji}${p.name ? `<small>${p.name}</small>` : ''}</span>`).join('')}</span>
+        ${lobbyHTML(net.people().map(p => ({ ...p, host: true })), { hostDoing: 'drawing', myUid: net.uid })}
         <button class="pt-leave" aria-label="Leave">${icon('leave')}</button>
-      </div>` : '';
+      </div>` : `<div class="pt-together">${togetherButton('Play with friends', 'small')}</div>`;
     if (html === lastTop) return;
     lastTop = html;
     top.innerHTML = html;
     const leave = top.querySelector('.pt-leave');
     if (leave) leave.addEventListener('click', () => { sound.pop(); leaveRoom(); });
+    const tg = top.querySelector('[data-together]');
+    if (tg) tg.addEventListener('click', () => { sound.pop(); startTogether(); });
     fit();
   }
 
@@ -375,6 +374,7 @@ export function mount(stage) {
       onClosed: () => {
         bake();
         net = null;
+        leftRoom();
         renderTop();
         refresh();
         banner('The room has closed 👋');
@@ -389,6 +389,7 @@ export function mount(stage) {
     const n = net;
     bake();
     net = null;
+    leftRoom();
     renderTop();
     refresh();
     if (n) await n.leave();
@@ -406,72 +407,45 @@ export function mount(stage) {
   }
   function closeModal() { const m = root.querySelector('.pt-modal'); if (m) m.remove(); }
 
-  function friendsModal() {
-    const m = modal(`
-      <h2>Draw with friends</h2>
-      <div class="pt-choices">
-        <button class="pt-big" data-mp="make"><span class="i">🏠</span><span>Make a room</span></button>
-        <button class="pt-big" data-mp="join"><span class="i">🔑</span><span>Join a room</span></button>
-      </div>
-      <p class="pt-msg"></p>`);
-    const msg = m.querySelector('.pt-msg');
-    m.querySelector('[data-mp="join"]').addEventListener('click', () => { sound.pop(); joinModal(); });
-    m.querySelector('[data-mp="make"]').addEventListener('click', async () => {
-      sound.pop();
-      msg.textContent = 'Making a room… ⏳';
-      try {
-        saveNow();
-        const room = await makeRoom(isBlank() ? '' : main.toDataURL('image/jpeg', 0.8));
-        if (closed) { room.leave(); return; }
-        bake();
-        joined(room);
-        sound.win();
-        closeModal();
-        banner('Show friends these pictures 👆', 3500);
-      } catch (e) {
-        msg.textContent = "Couldn't connect 😢 Try again";
-      }
-    });
+  // "Play with friends": make a room (my picture comes too) and invite linked friends.
+  let starting = false;
+  async function startTogether() {
+    if (starting || net) return;
+    starting = true;
+    try {
+      saveNow();
+      const base = isBlank() ? '' : main.toDataURL('image/jpeg', 0.8);
+      const room = await playTogether(GAME_ID, () => makeRoom(base, null).then(async r => {
+        await r.setMeta({ hostUid: r.uid }).catch(() => {});
+        return r;
+      }));
+      if (!room) return;            // friends panel opened instead
+      if (closed) { room.leave(); return; }
+      closeModal();
+      bake();
+      joined(room);
+      sound.win();
+    } catch (e) {
+      banner("Couldn't connect 😢 Try again");
+    } finally {
+      starting = false;
+    }
   }
 
-  function joinModal() {
-    let code = '';
-    const m = modal(`
-      <h2>Tap your friend's pictures</h2>
-      <div class="pt-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
-      <div class="pt-keypad">${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <button class="pt-rub" aria-label="Rub out">${icon('backspace')}</button>
-      <p class="pt-msg"></p>`);
-    const slots = [...m.querySelectorAll('.pt-slots span')];
-    const msg = m.querySelector('.pt-msg');
-    const show = () => slots.forEach((el, i) => { el.textContent = code[i] ? CODE_PICS[parseInt(code[i], 16)] : ''; });
-    m.querySelector('.pt-rub').addEventListener('click', () => { code = code.slice(0, -1); show(); sound.pop(); });
-    m.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
-      if (code.length >= CODE_LEN) return;
-      code += b.dataset.k;
-      show();
-      sound.tone(500 + code.length * 120, 0.08, 'sine', 0.15);
-      if (code.length < CODE_LEN) return;
-      msg.textContent = 'Looking… ⏳';
-      try {
-        const room = await findRoom(code);
-        if (!room) {
-          msg.textContent = 'No room with those pictures. Try again!';
-          sound.bump();
-          code = ''; show();
-          return;
-        }
-        if (closed) { room.leave(); return; }
-        saveNow();                  // keep my old drawing in 🖼️
-        startDrawing(newId());
-        joined(room);
-        sound.win();
-        closeModal();
-      } catch (e) {
-        msg.textContent = "Couldn't connect 😢 Try again";
-        code = ''; show();
-      }
-    }));
+  // Opened from a friend's invite: join their page straight away.
+  async function joinFromInvite(code) {
+    try {
+      const room = await findRoom(code);
+      if (closed) { if (room) room.leave(); return; }
+      if (!room) { banner('That game has finished 👋', 3000); return; }
+      saveNow();                    // keep my old drawing in 🖼️
+      startDrawing(newId());
+      joined(room);
+      joinedRoom(GAME_ID, code);
+      sound.win();
+    } catch (e) {
+      banner("Couldn't connect 😢 Try again");
+    }
   }
 
   function galleryModal() {
@@ -539,6 +513,9 @@ export function mount(stage) {
 
   renderPalette();
   refresh();
+  renderTop();
+  const inviteCode = takeJoinCode(GAME_ID);
+  if (inviteCode) joinFromInvite(inviteCode);
 
   return () => {
     closed = true;
@@ -547,7 +524,7 @@ export function mount(stage) {
     ro.disconnect();
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('pagehide', saveNow);
-    if (net) { net.leave(); net = null; }
+    if (net) { net.leave(); net = null; leftRoom(); }
     css.remove();
   };
 }
