@@ -11,7 +11,8 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { createRoom, joinRoom, joinPublic, serverNow, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
+import { createRoom, joinRoom, joinPublic, serverNow } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, lobbyHTML, people, playerInfo } from '../../js/engine/together.js';
 import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
 import { createTerrain } from './terrain.js';
@@ -86,7 +87,8 @@ export function mount(stage) {
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
   // ---------------------------------------------------------------- state
-  const S = { phase: 'loading', mode: 'solo', joinCode: '', busy: false, sad: 0, paused: false, help: false };
+  const S = { phase: 'loading', mode: 'solo', busy: false, sad: 0, paused: false, help: false };
+  const inviteCode = takeJoinCode(GAME); // opened from a friend's invite (together.js)
   let alive = true, raf = 0, world = null, scene = null;
   const players = [];
   const remotes = new Map();
@@ -122,6 +124,7 @@ export function mount(stage) {
       renderer.compile(scene, menuCam);
       S.phase = 'menu';
       render();
+      if (inviteCode) tryJoin(inviteCode);
     } catch (e) {
       console.error(e);
       ui.innerHTML = `<div class="sp-overlay"><div class="sp-card"><h2>😢</h2><p>${String(e.message || e).slice(0, 120)}</p></div></div>`;
@@ -966,12 +969,16 @@ export function mount(stage) {
     }
   }
 
-  // friends room
+  // friends room: "Play with friends" (together.js) makes a room and invites linked friends
   async function hostRoom() {
     S.busy = true; render();
     try {
-      const room = await createRoom(GAME, { state: 'fly' });
-      S.busy = false; goRoom(room);
+      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'fly' }));
+      S.busy = false;
+      if (!room) { render(); return; } // friends panel opened instead
+      if (!alive) { room.leave(); return; }
+      room.setMeta({ hostUid: room.uid }).catch(() => {});
+      goRoom(room);
     } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
   }
   async function tryJoin(code) {
@@ -979,17 +986,25 @@ export function mount(stage) {
     try {
       const room = await joinRoom(GAME, code);
       S.busy = false;
-      if (!room) { S.joinCode = ''; S.sad = clock + 1.5; sound.bump(); render(); return; }
+      if (!alive) { if (room) room.leave(); return; }
+      if (!room) { S.gone = clock + 3; sound.bump(); render(); return; }
+      joined(GAME, code);
+      S.mode = 'solo';
       goRoom(room);
-    } catch (e) { console.warn(e); S.busy = false; S.joinCode = ''; S.sad = clock + 2; render(); }
+    } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
   }
+  const stripHtml = () => lobbyHTML(people(net.players, net.hostUid).map(p => ({ ...p, host: true })), { hostDoing: 'flying', myUid: net.room && net.room.uid });
+  const updateStrip = () => ui.querySelectorAll('.sp-strip').forEach(e => { e.innerHTML = stripHtml(); });
   function goRoom(room) {
     leavePublic();
-    net.room = room; net.code = room.code;
-    room.setPlayer(room.uid + '_p0', { joined: room.now(), name: myName() });
+    net.room = room; net.code = room.code; net.hostUid = room.isHost ? room.uid : '';
+    room.setPlayer(room.uid + '_p0', { joined: room.now(), ...playerInfo(true) });
     net.unsubs.push(room.onLive(l => { net.live = l; }));
-    net.unsubs.push(room.onPlayers(pl => { net.players = pl; }));
-    net.unsubs.push(room.onMeta(m => { if (!m && net.room === room) leaveRoom(true); }));
+    net.unsubs.push(room.onPlayers(pl => { net.players = pl; updateStrip(); }));
+    net.unsubs.push(room.onMeta(m => {
+      if (!m && net.room === room) { leaveRoom(true); return; }
+      if (m && m.hostUid && m.hostUid !== net.hostUid) { net.hostUid = m.hostUid; updateStrip(); }
+    }));
     if (room.onStatus) net.unsubs.push(room.onStatus(st => { net.status = st; }));
     S.phase = 'hangar';
     render();
@@ -997,6 +1012,7 @@ export function mount(stage) {
   function leaveRoom(gone = false) {
     if (!net.room) return;
     const r = net.room; net.room = null;
+    leftRoom();
     net.unsubs.forEach(u => u && u()); net.unsubs = [];
     r.leave(); net.live = {}; clearRemotes();
     if (gone) { S.sad = clock + 2; }
@@ -1136,11 +1152,9 @@ export function mount(stage) {
     if (S.phase !== 'hangar') hideHangarPlane();
     if (S.phase === 'menu') menuUI();
     if (S.phase === 'hangar') hangarUI();
-    if (S.phase === 'friends') friendsUI();
-    if (S.phase === 'join') joinUI();
     if (S.phase === 'fly' && S.paused) pauseUI();
     if (S.phase === 'fly' && net.room) {
-      const b = el(`<div class="sp-roombadge"><b>🔑</b>${codeToPics(net.code).map(p => `<span>${p}</span>`).join('')}</div>`);
+      const b = el(`<div class="sp-roombadge sp-strip">${stripHtml()}</div>`);
       ui.appendChild(b);
     }
   }
@@ -1155,7 +1169,6 @@ export function mount(stage) {
       <h1>Sky <b>Pilot</b></h1>
       <div class="sp-row sp-play">
         <button class="sp-go" data-m="solo"><span>🙂</span>Fly</button>
-        <button class="sp-go" data-m="friends"><span>🔑</span>Friends</button>
         ${MISSIONS.length ? '<button class="sp-go" data-m="missions"><span>🎯</span>Missions</button>' : ''}
       </div>
       <div class="sp-row sp-toggles">
@@ -1164,7 +1177,8 @@ export function mount(stage) {
         ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
         ${toggle('sound', '🔊', '🔇', 'Sound')}
       </div>
-      ${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
+      <div class="sp-row">${togetherButton()}</div>
+      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}${S.gone > clock ? '<p class="sp-sad">That game has finished 👋</p>' : ''}
       <button class="sp-help-btn">${icon('keyboard')} ?</button>
     </div></div>`);
     click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
@@ -1172,11 +1186,11 @@ export function mount(stage) {
     box.querySelectorAll('.sp-go').forEach(b => click(b, () => {
       sound.pop();
       const m = b.dataset.m;
-      if (m === 'friends') { S.phase = 'friends'; render(); return; }
       S.mode = 'solo';
       if (TOUCH && prefs.tilt) askTilt();
       S.phase = 'hangar'; S.who = 0; render();
     }));
+    click(box.querySelector('[data-together]'), () => { if (S.busy) return; sound.pop(); S.mode = 'solo'; hostRoom(); });
     click(box.querySelector('.sp-help-btn'), () => { S.help = true; helpUI(); });
     ui.appendChild(box);
   }
@@ -1219,46 +1233,13 @@ export function mount(stage) {
         <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
         <button class="sp-btn sp-fly" aria-label="Fly">${icon('play')}</button>
       </div>
-      ${net.room ? `<div class="sp-code"><b>🔑</b>${codeToPics(net.code).map(p => `<span>${p}</span>`).join('')}</div><p class="sp-friends">${Object.values(net.players || {}).map(x => '🙂 ' + (cleanName(x && x.name) || '')).join(' &nbsp; ')}</p>` : ''}
+      ${net.room ? `<div class="sp-strip sp-hstrip">${stripHtml()}</div>` : ''}
     </div></div>`);
     box.querySelectorAll('.sp-pcard').forEach(b => click(b, () => { sound.pop(); pl.type = b.dataset.t; savePrefs(); render(); }));
     box.querySelectorAll('.sp-col').forEach(b => click(b, () => { sound.pop(); pl.color = +b.dataset.c; savePrefs(); render(); }));
     box.querySelectorAll('.sp-start').forEach(b => click(b, () => { sound.pop(); prefs.start = b.dataset.s; savePrefs(); render(); }));
     click(box.querySelector('.sp-back'), () => { sound.pop(); if (net.room) leaveRoom(); S.phase = 'menu'; render(); });
     click(box.querySelector('.sp-fly'), () => { sound.pop(); hideHangarPlane(); startFlying(); });
-    ui.appendChild(box);
-  }
-
-  function friendsUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card">
-      <h2>🔑 Fly with friends</h2>
-      <div class="sp-row sp-play">
-        <button class="sp-go sp-host"><span>🏠</span>Make a room</button>
-        <button class="sp-go sp-join"><span>🔑</span>Join a room</button>
-      </div>
-      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
-    </div></div>`);
-    click(box.querySelector('.sp-host'), () => { if (!S.busy) { S.mode = 'solo'; hostRoom(); } });
-    click(box.querySelector('.sp-join'), () => { if (S.busy) return; sound.pop(); S.joinCode = ''; S.phase = 'join'; render(); });
-    click(box.querySelector('.sp-back'), () => { sound.pop(); S.phase = 'menu'; render(); });
-    ui.appendChild(box);
-  }
-  function joinUI() {
-    const slots = Array.from({ length: CODE_LEN }, (_, i) => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
-    const box = el(`<div class="sp-overlay"><div class="sp-card">
-      <div class="sp-code sp-slots">${slots}</div>
-      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <div class="sp-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="sp-row"><button class="sp-btn sp-del" aria-label="Delete">${icon('backspace')}</button><button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button></div>
-    </div></div>`);
-    box.querySelectorAll('.sp-keypad button').forEach(b => click(b, () => {
-      if (S.busy || S.joinCode.length >= CODE_LEN) return;
-      sound.pop(); S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) { S.mode = 'solo'; tryJoin(S.joinCode); } else render();
-    }));
-    click(box.querySelector('.sp-del'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
-    click(box.querySelector('.sp-back'), () => { S.phase = 'friends'; render(); });
     ui.appendChild(box);
   }
 

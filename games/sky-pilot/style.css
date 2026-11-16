@@ -108,15 +108,13 @@
 .sp-start span { font-size: 30px; }
 .sp-start small { font-size: 11px; opacity: .85; }
 .sp-start.on { background: rgba(79,195,247,.5); border-color: #b3e5fc !important; }
-.sp-friends { margin: 4px 0 0; font-size: 16px; }
 
-.sp-code { display: flex; gap: 10px; justify-content: center; margin: 8px 0; }
-.sp-code > b { display: flex; align-items: center; font-size: 36px; }
-.sp-code span { width: 70px; height: 70px; border-radius: 18px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 44px; display: flex; align-items: center; justify-content: center; }
-.sp-keypad { display: grid; grid-template-columns: repeat(4, 70px); gap: 10px; justify-content: center; }
-.sp-keypad button { width: 70px; height: 70px; border-radius: 18px; font-size: 40px; padding: 0; display: grid; place-items: center; background: var(--btn-face); box-shadow: var(--btn-shadow); }
-.sp-keypad button:active { transform: scale(.92); box-shadow: var(--btn-press); }
-.sp-roombadge { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; gap: 4px; align-items: center; background: rgba(8,20,40,.5); padding: 4px 10px; border-radius: 14px; font-size: 22px; pointer-events: none !important; }
+.sp-roombadge { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); pointer-events: none !important; }
+/* shared lobby strip (together.js): faces only while flying, full chips in the hangar */
+.sp-roombadge .tg-p { padding: 3px; opacity: .9; }
+.sp-roombadge .tg-txt { display: none; }
+.sp-roombadge .tg-face { width: 34px; height: 34px; font-size: 22px; }
+.sp-hstrip { margin-top: 10px; }
 
 .sp-help table { margin: 0 auto; border-collapse: collapse; font-size: 16px; }
 .sp-help td, .sp-help th { padding: 4px 10px; border-bottom: 1px solid rgba(255,255,255,.15); text-align: left; }
@@ -127,7 +125,6 @@
   .sp-card { padding: 12px; }
   .sp-row { margin: 8px 0; gap: 6px; }
   .sp-pcard { flex-basis: 90px; } .sp-pcard span { font-size: 30px; } .sp-pcard b { font-size: 13px; }
-  .sp-keypad { grid-template-columns: repeat(4, 56px); } .sp-keypad button, .sp-code span { width: 56px; height: 56px; font-size: 32px; }
   .sp-map { width: 110px; height: 110px; }
   .sp-read b { font-size: 22px; min-width: 48px; } .sp-read { min-width: 0; padding: 2px 8px; }
   .sp-corner .sp-tl { left: 90px; }

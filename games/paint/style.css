@@ -36,22 +36,13 @@
 
 .pt-top { grid-area: top; display: flex; justify-content: center; }
 .pt-top:empty { display: none; }
-.pt-room {
-  display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px;
-  background: rgba(255,255,255,.9); border-radius: 999px; box-shadow: 0 4px 0 rgba(40,50,120,.15);
-}
-/* room code: its own yellow box with a key, so friends' faces aren't mistaken for code pictures */
-.pt-code {
-  display: inline-flex; align-items: center; gap: 4px; font-size: 28px;
-  background: #fff3c4; border: 3px solid #ffb300; border-radius: 14px; padding: 2px 6px;
-}
-.pt-code b { font-size: 20px; margin-right: 2px; }
-.pt-code span { background: #fff; border-radius: 10px; padding: 0 5px; }
-.pt-sep { width: 2px; align-self: stretch; background: #d6d9e8; border-radius: 2px; }
-.pt-people { display: inline-flex; gap: 2px; font-size: 20px; opacity: .9; }
-.pt-people > span { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; }
-.pt-people small { font-size: 13px; font-weight: 600; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pt-people .me { background: #fff6a8; border-radius: 14px; }
+.pt-room { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+/* shared lobby strip (together.js), a bit smaller so the page keeps its room */
+.pt-room .tg-p { padding: 3px 12px 3px 3px; }
+.pt-room .tg-face { width: 36px; height: 36px; font-size: 22px; }
+.pt-room .tg-txt b { font-size: 15px; }
+.pt-room .tg-txt small { font-size: 12px; }
+.pt-together { display: flex; justify-content: center; }
 .pt-leave { width: 46px; height: 46px; border-radius: 50%; background: var(--btn-no); color: #fff; font-size: 24px; display: grid; place-items: center; box-shadow: var(--btn-shadow); }
 .pt-leave:active { transform: scale(.92); box-shadow: var(--btn-press); }
 
@@ -111,28 +102,6 @@
 .pt-card h2 { margin: 0 56px; font-size: clamp(26px, 5vw, 40px); color: #5b4bd6; text-align: center; }
 .pt-x { position: absolute; top: 12px; right: 12px; width: 48px; height: 48px; border-radius: 50%; background: var(--btn-face); box-shadow: var(--btn-shadow); font-size: 22px; display: grid; place-items: center; }
 .pt-x:active { transform: scale(.92); box-shadow: var(--btn-press); }
-.pt-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
-.pt-big {
-  width: 220px; max-width: 75vw; padding: 22px 14px; border-radius: 28px;
-  background: linear-gradient(180deg, #f5f8ff, #e3eaff);
-  box-shadow: var(--btn-shadow); transition: transform .1s, box-shadow .1s;
-  display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 26px; font-weight: 700;
-}
-.pt-big .i { font-size: 72px; line-height: 1; }
-.pt-big:active { transform: scale(.95); box-shadow: var(--btn-press); }
-.pt-msg { margin: 0; font-size: 22px; font-weight: 700; color: #5b4bd6; min-height: 1.2em; text-align: center; }
-.pt-slots { display: flex; gap: 10px; }
-.pt-slots span {
-  width: 64px; height: 64px; border-radius: 16px; border: 4px dashed #b9c3ff;
-  display: grid; place-items: center; font-size: 40px;
-}
-.pt-keypad { display: grid; grid-template-columns: repeat(4, 64px); gap: 8px; }
-.pt-keypad button, .pt-rub {
-  width: 64px; height: 64px; border-radius: 16px; background: var(--btn-face); font-size: 36px;
-  box-shadow: var(--btn-shadow); display: grid; place-items: center;
-}
-.pt-keypad button:active, .pt-rub:active { transform: scale(.92); box-shadow: var(--btn-press); }
-.pt-rub { width: 120px; font-size: 30px; }
 
 .pt-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; width: 100%; }
 .pt-pic-wrap { position: relative; }

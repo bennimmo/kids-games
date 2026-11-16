@@ -11,7 +11,7 @@
 .kk.flash::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,200,.55); pointer-events: none; }
 
 .kk-btn { width: 54px; height: 54px; border-radius: 50%; padding: 0; background: var(--btn-face); color: var(--ink) !important; font-size: 26px; display: inline-grid; place-items: center; box-shadow: var(--btn-shadow); }
-.kk-btn:active, .kk-go:active, .kk-big-btn:active, .kk-ok:active, .kk-mini:active, .kk-keypad button:active { transform: scale(.93); box-shadow: var(--btn-press); }
+.kk-btn:active, .kk-go:active, .kk-big-btn:active, .kk-ok:active, .kk-mini:active { transform: scale(.93); box-shadow: var(--btn-press); }
 
 /* ---- build screen */
 .kk-top { position: absolute; left: 96px; right: 8px; top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -158,32 +158,10 @@
 }
 
 /* ---- online */
-.kk-badge { position: absolute; left: 50%; top: 78px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 10px; border-radius: 26px; background: rgba(0,0,0,.45); }
-.kk-badge .kk-code span { width: 48px; height: 48px; font-size: 30px; border-radius: 14px; border-width: 3px; }
-.kk-badge .kk-code { margin: 0; gap: 6px; }
-.kk-badge.up { top: 12px; }
-.kk-friends { display: flex; gap: 4px; }
-.kk-friends .kk-kimg { width: 60px; height: 40px; object-fit: contain; background: rgba(255,255,255,.85); border-radius: 10px; }
-.kk-badge .kk-btn { width: 46px; height: 46px; font-size: 22px; }
-.kk-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.kk-code span { width: 76px; height: 76px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 48px; display: flex; align-items: center; justify-content: center; }
-.kk-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; justify-content: center; }
-.kk-keypad button { width: 72px; height: 72px; border-radius: 18px; font-size: 42px; padding: 0; background: var(--btn-face); box-shadow: var(--btn-shadow); }
-.kk-choice { position: relative; width: 240px; border-radius: 20px; background: #eceff1; padding: 0; overflow: hidden; border: 4px solid #cfd8dc !important; }
-.kk-choice canvas, .kk-blank { width: 100%; height: 150px; display: flex; align-items: center; justify-content: center; font-size: 70px; }
-.kk-choice span { display: block; font-size: 40px; padding: 4px; }
-.kk-choice.off { opacity: .4; pointer-events: none; }
-.kk-hint { font-size: 30px; margin-top: 8px; }
 .kk-card > .kk-back { margin-top: 12px; }
 .kk-wait { font-size: 56px; animation: kk-pulse 1s infinite; }
 .kk-netwait { position: absolute; right: 16px; top: 140px; font-size: 30px; animation: kk-pulse .8s infinite; pointer-events: none; }
-.kk-lobby-info { flex: 1 1 auto; justify-content: center; font-size: 40px; gap: 18px; }
-.kk-lobby-info span { font-size: 30px; }
 @media (max-width: 760px), (max-height: 560px) {
-  .kk-keypad { grid-template-columns: repeat(4, 58px); }
-  .kk-keypad button { width: 58px; height: 58px; font-size: 34px; }
-  .kk-choice { width: 180px; }
-  .kk-choice canvas, .kk-blank { height: 112px; }
 }
 
 /* ---- tilt */
@@ -211,8 +189,6 @@
   .kk-bcount b { font-size: 14px; }
   .kk-extra { width: 50px; height: 50px; font-size: 28px; border-radius: 14px; }
   .kk-go { width: 70px; font-size: 36px; border-radius: 20px; }
-  .kk-badge { top: 54px; }
-  .kk-lobby-info { font-size: 28px; }
   .kk-place { font-size: 40px; }
   .kk-lap { top: 52px; font-size: 18px; }
   .kk-item { width: 56px; height: 56px; font-size: 32px; left: 92px; top: 8px; }
@@ -237,17 +213,42 @@
   .kk-extra { width: 48px; height: 48px; font-size: 26px; }
   .kk-mini { min-width: 32px; height: 30px; font-size: 16px; }
   .kk-bcount { font-size: 18px; min-width: 40px; }
-  .kk-badge { top: 112px; }
-  .kk-badge.up { top: 90px; }
-  .kk-badge .kk-code span { width: 38px; height: 38px; font-size: 24px; }
 }
-.kk-blank.kk-pics3 { font-size: 46px; letter-spacing: 4px; }
-.kk-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
-.kk-badge .kk-code > b { font-size: 26px; margin-right: 0; }
-.kk-friends figure { margin: 0; display: flex; flex-direction: column; align-items: center; }
-.kk-friends figure b { font-size: 12px; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kk-player b { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* tap the item box to use it */
 .kk-item[data-p] { pointer-events: auto; touch-action: none; cursor: pointer; }
 .kk-item.ready:active { transform: scale(.92); }
+
+/* ---------- playing with friends (together.js) ---------- */
+.kk-top .tg-btn { flex: none; }
+.kk-strip { position: absolute; left: 50%; top: 80px; transform: translateX(-50%); max-width: calc(100% - 24px); display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 34px; background: rgba(0,0,0,.35); }
+.kk-strip.up { top: 12px; }
+.kk-strip .kk-btn { width: 50px; height: 50px; font-size: 24px; flex: none; background: var(--btn-no); color: #fff; }
+.kk-waitfor { position: absolute; right: 12px; bottom: 132px; padding: 8px 16px; border-radius: 20px; background: #fff; color: #2b2140; font-size: 20px; font-weight: 700; box-shadow: 0 6px 16px -6px rgba(0,0,0,.5); animation: kk-pulse 1.4s infinite; }
+.kk-note { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); padding: 14px 26px; border-radius: 30px; background: #fff; color: #2b2140; font-size: 28px; font-weight: 700; box-shadow: 0 12px 30px -10px rgba(0,0,0,.6); }
+.kk-lobbybar { height: auto; justify-content: center; pointer-events: none; }
+.kk-lobbybar .tg-wait { pointer-events: auto; max-width: 100%; }
+.kk-mykarts { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; }
+.kk-mykart { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px 6px; border: 0; border-radius: 22px; background: #f4f0ff; box-shadow: 0 0 0 3px var(--pc, #b388ff); font-family: inherit; color: #2b2140; cursor: pointer; }
+.kk-mykart .kk-kimg { width: 110px; height: 70px; object-fit: contain; }
+.kk-mykart b { font-size: 20px; }
+.kk-mykart .kk-x { position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--btn-no); color: #fff; font-size: 16px; }
+.kk-mykart:active { transform: scale(.95); }
+.kk-add2 { box-shadow: none; background: rgba(0,0,0,.06); font-size: 26px; padding: 10px 14px; }
+.kk-add2 b { font-size: 16px; }
+.kk-lobby-info { display: flex; flex-direction: column; gap: 4px; font-size: 20px; font-weight: 700; opacity: .7; }
+@media (max-height: 560px) {
+  .kk-strip { top: 54px; }
+  .kk-strip .tg-face { width: 34px; height: 34px; font-size: 22px; }
+  .kk-mykart .kk-kimg { width: 80px; height: 50px; }
+  .kk-lobbybar .tg-wait { padding: 10px 14px; gap: 8px; }
+  .kk-lobbybar .tg-wait-who { font-size: 20px; }
+  .kk-lobbybar .tg-face.big { width: 50px; height: 50px; font-size: 32px; }
+  .kk-lobbybar .tg-ready { height: 56px; font-size: 24px; min-width: 180px; }
+  .kk-waitfor { bottom: 86px; }
+}
+@media (max-aspect-ratio: 1/1) {
+  .kk-strip { top: 112px; }
+  .kk-strip.up { top: 90px; }
+}

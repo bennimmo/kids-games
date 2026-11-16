@@ -10,7 +10,7 @@
   display: inline-grid; place-items: center;
   box-shadow: var(--btn-shadow);
 }
-.rt-btn:active, .rt-big:active, .rt-go:active, .rt-choice:active, .rt-keypad button:active { transform: scale(.93); box-shadow: var(--btn-press); }
+.rt-btn:active, .rt-big:active, .rt-go:active, .rt-choice:active { transform: scale(.93); box-shadow: var(--btn-press); }
 
 /* bottom bar in build mode */
 .rt-bar {
@@ -223,36 +223,43 @@
 .rt-wait-small { font-size: 64px; }
 @keyframes rt-spin { 50% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
 .rt-sad .rt-wait { animation: rt-pulse .6s infinite; }
-.rt-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 14px; }
-.rt-code span {
-  width: 84px; height: 84px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80;
-  font-size: 54px; display: flex; align-items: center; justify-content: center;
-}
-.rt-keypad { display: grid; grid-template-columns: repeat(4, 84px); gap: 12px; justify-content: center; }
-.rt-keypad button {
-  width: 84px; height: 84px; border-radius: 20px; font-size: 50px; background: var(--btn-face); padding: 0;
-  box-shadow: var(--btn-shadow);
-}
-.rt-del-pic { position: absolute; top: -24px; right: -24px; }
-.rt-room-cars { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0 10px; }
-.rt-room-cars canvas { width: 80px; height: 56px; }
 .rt-badge {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   background: rgba(255,255,255,.92); border-radius: 24px; padding: 8px 12px; display: flex; align-items: center; gap: 10px;
   box-shadow: 0 8px 20px -8px rgba(43,33,64,.4);
 }
-.rt-badge .rt-code { margin: 0; gap: 4px; }
-.rt-badge .rt-code span { width: 48px; height: 48px; font-size: 30px; border-radius: 12px; border-width: 3px; }
-.rt-badge .rt-room-cars { margin: 0; }
-.rt-badge .rt-room-cars canvas { width: 56px; height: 40px; }
 .rt-badge .rt-btn { width: 56px; height: 56px; font-size: 28px; }
-.rt-lobby .rt-card { min-width: 300px; }
-@media (max-width: 700px) {
-  .rt-keypad { grid-template-columns: repeat(4, 64px); }
-  .rt-keypad button, .rt-code span { width: 64px; height: 64px; font-size: 38px; }
+.rt-badge { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 240px); }
+.rt-golabel { flex-basis: 100%; text-align: center; font-size: 18px; font-weight: 700; color: #e65100; }
+.rt-msg { margin-top: 10px; font-size: 32px; font-weight: 700; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
+.rt-sad { flex-direction: column; }
+
+/* friend waiting in the lobby: my car + I'm ready */
+.rt-lobby {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  display: flex; align-items: flex-end; gap: 14px; max-width: calc(100vw - 24px);
 }
-.rt-badge-pen { font-size: 34px; animation: rt-pen 1s ease-in-out infinite; }
-@keyframes rt-pen { 50% { transform: translate(4px, -4px) rotate(-10deg); } }
+.rt-mycars {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 12px;
+  background: #fff; border-radius: 24px; box-shadow: 0 16px 34px -14px rgba(43,33,64,.5); color: #2b2140;
+}
+.rt-mycars b { font-size: 18px; }
+.rt-mycar-row { display: flex; gap: 8px; }
+.rt-mycar {
+  position: relative; width: 130px; height: 90px; border-radius: 18px; padding: 0; background: #f3f6ff;
+  box-shadow: var(--btn-shadow); display: grid; place-items: center;
+}
+.rt-mycar canvas { width: 120px; height: 72px; }
+.rt-mycar-pen {
+  position: absolute; top: -8px; right: -8px; width: 34px; height: 34px; border-radius: 50%;
+  background: #42a5f5; color: #fff; font-size: 18px; display: grid; place-items: center; box-shadow: 0 3px 8px rgba(0,0,0,.25);
+}
+@media (max-width: 760px) {
+  .rt-lobby { flex-direction: column; align-items: center; gap: 8px; bottom: 8px; }
+  .rt-lobby .tg-wait { padding: 12px 16px; gap: 10px; }
+  .rt-lobby .tg-wait-who { font-size: 20px; }
+  .rt-badge { max-width: calc(100vw - 130px); }
+}
 .rt-badge-wait, .rt-netwait { font-size: 26px; animation: rt-pulse .8s infinite; }
 .rt-netwait {
   position: absolute; top: 90px; left: 14px; background: rgba(255,255,255,.9);
@@ -298,13 +305,8 @@
 .rt-item:empty { opacity: .45; }
 .rt-item.ready { background: #fff8e1; border: 2px solid #ffb300; animation: rt-pulse .8s infinite; }
 .rt-tb-fire { background: rgba(255,143,0,.75); }
-.rt-room-cars figure { margin: 0; display: flex; flex-direction: column; align-items: center; }
 .rt-name { font-size: 18px; font-weight: 600; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-place .rt-name { font-size: 26px; min-width: 0; }
-.rt-badge .rt-name { font-size: 12px; max-width: 70px; }
-.rt-pics3 { font-size: 46px; letter-spacing: 4px; }
-.rt-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
-.rt-badge .rt-code > b { font-size: 26px; margin-right: 0; }
 
 /* steering mode button + finger hint */
 .rt-mode {
@@ -345,7 +347,6 @@
   .rt-tb { width: 70px; height: 70px; font-size: 32px; border-radius: 20px; border-width: 4px !important; }
   .rt-tb-up { width: 84px; height: 84px; }
   .rt-mode { width: 52px; height: 52px; font-size: 28px; }
-  .rt-badge .rt-code span { width: 36px; height: 36px; font-size: 22px; }
   .rt-badge .rt-btn { width: 44px; height: 44px; font-size: 22px; }
   .game .home-btn { width: 50px; height: 50px; font-size: 24px; top: 6px; left: 6px; }
 }

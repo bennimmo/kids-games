@@ -1,19 +1,19 @@
 // Tank Tantrum – take turns driving, aiming and firing silly weapons.
 // Last tank standing wins. Play on one device (pass it round, or against
-// computer tanks) or online with friends (3-picture room codes).
+// computer tanks) or with friends ("Play with friends", js/engine/together.js).
 // Files: sim.js (world + rules, no DOM), weapons.js, ai.js (computer tanks),
 // render.js (drawing), online.js (rooms), game.js (screens + controls).
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
-import { CODE_LEN } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftRoom, people, lobbyHTML, waitHTML, readyButton, allReady, notReady, startLabel } from '../../js/engine/together.js';
 import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
 import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS, NAMES } from './render.js';
 import { myName } from '../../js/engine/profile.js';
-import { makeRoom, findRoom, connect, CODE_PICS, MAP_IDS } from './online.js';
+import { makeRoom, findRoom, connect, MAP_IDS, GAME_ID } from './online.js';
 
 const TURN_TIME = 45;
 const NEXT_GAME = 15;   // online: seconds until the next game starts
@@ -344,7 +344,7 @@ export function mount(stage) {
       const left = Math.max(0, Math.ceil(match.over.nextAt - time));
       const el = ui.querySelector('.tt-next b');
       if (el && el.textContent !== String(left)) el.textContent = left;
-      if (left <= 0 && net && net.isHost && !match.over.started) { match.over.started = true; hostStart(); }
+      if (left <= 0 && net && net.isHost && !match.over.started) { match.over.started = true; nextOrLobby(); }
     }
     if (w.winner >= 0 && Math.random() < dt * 4) {
       const t = w.tanks[w.winner];
@@ -655,10 +655,6 @@ export function mount(stage) {
     else if (w.phase === 'aim' && match.ctrl[w.active] === 'remote') hint = t.look.name + ' is having a go…';
     setText('hint', hud.hint, hint);
     setShow('hint', hud.hint, !!hint);
-    if (match.mode === 'online' && net) {
-      const room = `<span class="tt-code"><b>🔑</b>${net.pics.map(p => `<span>${p}</span>`).join('')}</span>`;
-      if (hud.cache.room !== room) { hud.cache.room = room; hud.room.innerHTML = room; }
-    } else if (hud.cache.room) { hud.cache.room = ''; hud.room.innerHTML = ''; }
   }
 
   function openBackpack() {
@@ -731,7 +727,7 @@ export function mount(stage) {
       wrap.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
         sound.pop();
         const a = b.dataset.a;
-        if (a === 'again') { if (match.mode === 'online') { match.over.started = true; hostStart(); } else startLocal(); }
+        if (a === 'again') { if (match.mode === 'online') { match.over.started = true; nextOrLobby(); } else startLocal(); }
         else if (a === 'menu') { startDemo(); show('local'); }
         else if (a === 'lobby') { net.setLobby({ phase: 'lobby' }); }
         else if (a === 'leave') confirmLeave();
@@ -772,7 +768,6 @@ export function mount(stage) {
     if (s === 'game') { buildHud(); return; }
     if (s === 'title') titleScreen();
     else if (s === 'local') localScreen();
-    else if (s === 'online') onlineScreen();
     else if (s === 'lobby') lobbyScreen();
   }
   function panel(html, cls = '') {
@@ -785,12 +780,24 @@ export function mount(stage) {
       <h1 class="tt-title">💥 Tank Tantrum</h1>
       <div class="tt-choices">
         <button class="tt-big" data-a="local"><span class="i">📱</span><span>Play here</span><small>Pass it round, or vs 🤖</small></button>
-        <button class="tt-big" data-a="online"><span class="i">🌍</span><span>Play online</span><small>With friends</small></button>
       </div>
+      ${togetherButton()}
+      <p class="tt-msg"></p>
       <button class="tt-mytank" data-a="tank"><canvas></canvas><span>My tank: <b>${esc(myLook.name)}</b> ${icon('edit')}</span></button>`);
     tankIcon(p.querySelector('.tt-mytank canvas'), myLook, 64);
     p.querySelector('[data-a="local"]').addEventListener('click', () => { sound.pop(); show('local'); });
-    p.querySelector('[data-a="online"]').addEventListener('click', () => { sound.pop(); show('online'); });
+    p.querySelector('[data-together]').addEventListener('click', async () => {
+      sound.pop();
+      const msg = p.querySelector('.tt-msg');
+      msg.textContent = '⏳';
+      try {
+        const room = await playTogether(GAME_ID, makeRoom);
+        msg.textContent = '';
+        if (!room) return;
+        if (closed) { room.leave(); leftRoom(); return; }
+        joined(room);
+      } catch (e) { msg.textContent = "Couldn't connect 😢 Try again"; }
+    });
     p.querySelector('[data-a="tank"]').addEventListener('click', () => { sound.pop(); editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); titleScreen(); }); });
   }
 
@@ -879,57 +886,22 @@ export function mount(stage) {
     });
   }
 
-  // ---------------------------------------------------------------- online menus
-  function onlineScreen() {
-    const p = panel(`
-      <h2>Play online</h2>
-      <div class="tt-choices">
-        <button class="tt-big" data-a="make"><span class="i">🏠</span><span>Make a room</span></button>
-        <button class="tt-big" data-a="join"><span class="i">🔑</span><span>Join a room</span></button>
-      </div>
-      <p class="tt-msg"></p>
-      <button class="tt-btn alt" data-a="back">${icon('back')} Back</button>`);
-    const msg = p.querySelector('.tt-msg');
-    p.querySelector('[data-a="back"]').addEventListener('click', () => { sound.pop(); show('title'); });
-    p.querySelector('[data-a="join"]').addEventListener('click', () => { sound.pop(); joinScreen(); });
-    p.querySelector('[data-a="make"]').addEventListener('click', async () => {
-      sound.pop();
-      msg.textContent = 'Making a room… ⏳';
-      try {
-        const room = await makeRoom();
-        if (closed) { room.leave(); return; }
-        joined(room);
-      } catch (e) { msg.textContent = "Couldn't connect 😢 Try again"; }
-    });
+  // ---------------------------------------------------------------- play with friends
+  // Opened from a friend's "come and play" pop-up: join their room straight away.
+  async function joinFromInvite(code) {
+    panel(`<h2>Joining your friend… ⏳</h2>`);
+    try {
+      const room = await findRoom(code);
+      if (closed) { if (room) room.leave(); return; }
+      if (!room) { finished(); return; }
+      joinedRoom(GAME_ID, code);
+      joined(room);
+    } catch (e) { finished("Couldn't connect 😢"); }
   }
-
-  function joinScreen() {
-    let code = '';
-    const p = panel(`
-      <h2>Tap your friend's pictures</h2>
-      <div class="tt-codeslots">${'<span></span>'.repeat(CODE_LEN)}</div>
-      <div class="tt-keypad">${CODE_PICS.map((pic, i) => `<button data-k="${i.toString(16)}">${pic}</button>`).join('')}</div>
-      <div class="tt-row"><button class="tt-btn alt" data-a="back">${icon('back')} Back</button><button class="tt-btn alt" data-a="rub" aria-label="Delete">${icon('backspace')}</button></div>
-      <p class="tt-msg"></p>`);
-    const slots = [...p.querySelectorAll('.tt-codeslots span')];
-    const msg = p.querySelector('.tt-msg');
-    const showCode = () => slots.forEach((el, i) => { el.textContent = code[i] ? CODE_PICS[parseInt(code[i], 16)] : ''; });
-    p.querySelector('[data-a="back"]').addEventListener('click', () => { sound.pop(); show('online'); });
-    p.querySelector('[data-a="rub"]').addEventListener('click', () => { code = code.slice(0, -1); showCode(); sound.pop(); });
-    p.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
-      if (code.length >= CODE_LEN) return;
-      code += b.dataset.k;
-      showCode();
-      sound.tone(500 + code.length * 120, 0.08, 'sine', 0.15);
-      if (code.length < CODE_LEN) return;
-      msg.textContent = 'Looking… ⏳';
-      try {
-        const room = await findRoom(code);
-        if (!room) { msg.textContent = 'No room with those pictures. Try again!'; sound.bump(); code = ''; showCode(); return; }
-        if (closed) { room.leave(); return; }
-        joined(room);
-      } catch (e) { msg.textContent = "Couldn't connect 😢 Try again"; code = ''; showCode(); }
-    }));
+  function finished(text = 'That game has finished 👋') {
+    leftRoom();
+    const p = panel(`<h2>${text}</h2><button class="tt-btn ok" data-a="ok">${icon('check')} OK</button>`);
+    p.querySelector('[data-a="ok"]').addEventListener('click', () => { sound.pop(); show('title'); });
   }
 
   function joined(room) {
@@ -938,9 +910,7 @@ export function mount(stage) {
       onClosed: () => {
         net = null;
         startDemo();
-        show('online');
-        const msg = ui.querySelector('.tt-msg');
-        if (msg) msg.textContent = 'The room has closed 👋';
+        finished();
       },
     });
     sound.win();
@@ -974,14 +944,19 @@ export function mount(stage) {
   async function leaveRoom() {
     const n = net;
     net = null;
+    leftRoom();
     startDemo();
     show('title');
     if (n) await n.leave();
   }
 
+  let lastPhase = null;
   function onNet() {
     if (!net) return;
     const meta = net.meta() || {};
+    // back in the room after games: friends say I'm ready again (they may want a new tank)
+    if (lastPhase === 'play' && meta.phase === 'lobby' && !net.isHost) net.setReady(false);
+    if (meta.phase) lastPhase = meta.phase;
     if (meta.phase === 'play' && meta.game && (!match || match.gameId !== meta.game.id)) {
       if (startOnline(meta.game)) return;
     }
@@ -991,23 +966,31 @@ export function mount(stage) {
 
   function lobbyBots() { const m = net.meta() || {}; return Array.isArray(m.bots) ? m.bots.slice(0, MAX_TANKS) : []; }
 
+  const hostUid = () => (net && net.hostPid() ? net.hostPid().split('_')[0] : null);
+  const lobbyPeople = () => people(net.rawPlayers(), hostUid());
+
   function lobbyScreen() {
     if (!net) return;
+    if (ui.querySelector('.tt-modal')) return;   // tank editor open: redraw when it closes
     const meta = net.meta() || {};
     const players = net.players();
     const bots = lobbyBots();
     const total = players.length + bots.length;
     const playing = meta.phase === 'play' && !(match && match.mode === 'online');
     const map = meta.map || 'random';
-    const html = `
-      <h2>Room</h2>
-      <div class="tt-code big"><b>🔑</b>${net.pics.map(pic => `<span>${pic}</span>`).join('')}</div>
-      <p class="tt-sub">${net.isHost ? 'Show friends these pictures 👆' : 'You are in!'}</p>
-      <div class="tt-players">
+    const list = lobbyPeople();
+    const host = list.find(x => x.host);
+    const doing = 'picking the map';
+    const lock = !net.isHost ? '' : notReady(list).length ? startLabel(list) : (total < 2 ? 'Wait for a friend, or add a 🤖' : '');
+    const tanks = `<div class="tt-players">
         ${players.map(pl => `<div class="tt-pl ${pl.me ? 'me' : ''}"><canvas data-look='${esc(JSON.stringify(pl.look))}'></canvas><b>${esc(pl.look.name)}</b></div>`).join('')}
         ${bots.map((b, i) => `<div class="tt-pl bot"><canvas data-look='${esc(JSON.stringify(sanitizeLook(b.look)))}'></canvas><b>${esc(sanitizeLook(b.look).name)} 🤖</b>${net.isHost ? `<button class="tt-rm" data-rm="${i}" aria-label="Remove">${icon('close')}</button>` : ''}</div>`).join('')}
-      </div>
+      </div>`;
+    const html = `
+      <h2>Play with friends</h2>
+      ${lobbyHTML(list, { hostDoing: doing, myUid: net.uid })}
       ${net.isHost ? `
+        ${tanks}
         <div class="tt-row">
           <button class="tt-btn alt" data-bot="easy" ${total >= MAX_TANKS ? 'disabled' : ''}>${icon('plus')}🤖 Easy</button>
           <button class="tt-btn alt" data-bot="tricky" ${total >= MAX_TANKS ? 'disabled' : ''}>${icon('plus')}🤖 Tricky</button>
@@ -1017,17 +1000,23 @@ export function mount(stage) {
         <div class="tt-row">
           <button class="tt-btn alt" data-a="tank">🎨 My tank</button>
           <button class="tt-btn alt" data-a="leave">${icon('leave')} Leave</button>
-          <button class="tt-btn" data-a="go" ${total < 2 ? 'disabled' : ''}>${icon('play')} Start!</button>
+          <button class="tt-btn ${lock ? 'tg-locked' : ''}" data-a="go" ${lock ? 'disabled' : ''}>${icon('play')} Start!</button>
         </div>
-        ${total < 2 ? '<p class="tt-msg">Wait for a friend, or add a 🤖</p>' : ''}` : `
-        <p class="tt-msg">${playing ? 'A game is going on. You can play in the next one! ⏳' : 'Waiting for the host to start… ⏳'}</p>
+        ${lock ? `<p class="tt-msg">${lock}</p>` : ''}` : `
+        ${playing
+          ? `<div class="tg-wait"><div class="tg-wait-who">A game is going on. You can play in the next one! ⏳</div>${readyButton(net.ready())}</div>`
+          : waitHTML(host, doing, net.ready())}
+        <button class="tt-btn tt-mytank-big" data-a="tank"><canvas data-look='${esc(JSON.stringify(myLook))}'></canvas>🎨 My tank</button>
+        ${tanks}
         <div class="tt-row">
-          <button class="tt-btn alt" data-a="tank">🎨 My tank</button>
           <button class="tt-btn alt" data-a="leave">${icon('leave')} Leave</button>
         </div>`}`;
     if (html === lastLobbyHtml && ui.querySelector('.tt-panel')) return;
     lastLobbyHtml = html;
-    const p = panel(html);
+    const old = ui.querySelector('.tt-menu.lobby');   // just an update: no pop, keep the scroll
+    const scroll = old ? old.scrollTop : 0;
+    const p = panel(html, old ? 'lobby again' : 'lobby');
+    if (old) ui.querySelector('.tt-menu').scrollTop = scroll;
     p.querySelectorAll('canvas[data-look]').forEach(c => { try { tankIcon(c, sanitizeLook(JSON.parse(c.dataset.look)), 72); } catch (e) { /* bad look */ } });
     p.querySelectorAll('[data-bot]').forEach(b => b.addEventListener('click', () => {
       sound.pop();
@@ -1046,9 +1035,22 @@ export function mount(stage) {
     if (wb) wb.addEventListener('click', () => { sound.pop(); net.setLobby({ wind: !((net.meta() || {}).wind === true) }); });
     const q = s => p.querySelector(s);
     q('[data-a="leave"]').addEventListener('click', () => { sound.pop(); confirmLeave(); });
-    q('[data-a="tank"]').addEventListener('click', () => { sound.pop(); editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); if (net) net.setLook(l); lastLobbyHtml = ''; lobbyScreen(); }); });
+    q('[data-a="tank"]').addEventListener('click', () => {
+      sound.pop();
+      if (net && !net.isHost) net.setReady(false); // changing tank: not ready until done
+      editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); if (net) net.setLook(l); lastLobbyHtml = ''; lobbyScreen(); });
+    });
+    const rd = q('[data-ready]');
+    if (rd) rd.addEventListener('click', () => { sound.pop(); net.setReady(!net.ready()); });
     const go = q('[data-a="go"]');
-    if (go) go.addEventListener('click', () => { sound.pop(); hostStart(); });
+    if (go) go.addEventListener('click', () => { sound.pop(); if (!go.disabled) hostStart(); });
+  }
+
+  // After a game: straight into the next one if everyone's still ready, else back to the room.
+  function nextOrLobby() {
+    if (!net || !net.isHost) return;
+    if (allReady(lobbyPeople())) hostStart();
+    else net.setLobby({ phase: 'lobby' });
   }
 
   function hostStart() {
@@ -1072,7 +1074,8 @@ export function mount(stage) {
   // ---------------------------------------------------------------- go
   if (/[?&]ttdebug/.test(location.search)) window.__tt = () => ({ match, replay, screen, net, time });
   startDemo();
-  show('title');
+  const inviteCode = takeJoinCode(GAME_ID);
+  if (inviteCode) joinFromInvite(inviteCode); else show('title');
   const stopLoop = startLoop(update, draw);
 
   return () => {
@@ -1082,7 +1085,7 @@ export function mount(stage) {
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('keyup', onKey);
     document.removeEventListener('click', onHomeClick, true);
-    if (net) net.leave();
+    if (net) { net.leave(); leftRoom(); }
     view.destroy();
     root.remove();
     css.remove();
