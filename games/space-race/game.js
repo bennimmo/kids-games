@@ -22,9 +22,9 @@ const PREFS_KEY = 'star-dash-v1';
 const COLORS = [0xff8a3d, 0x3dd6ff, 0x6cff6c, 0xff5fd2];
 const CSS_COLORS = ['#ff8a3d', '#3dd6ff', '#6cff6c', '#ff5fd2'];
 const LEVELS = [
-  { icon: '🐢', skill: 0.84, top: 0.9 },
-  { icon: '🐇', skill: 0.95, top: 0.97 },
-  { icon: '🚀', skill: 1.03, top: 1.03 },
+  { icon: '🐢', name: 'Easy', skill: 0.84, top: 0.9 },
+  { icon: '🐇', name: 'Medium', skill: 0.95, top: 0.97 },
+  { icon: '🚀', name: 'Hard', skill: 1.03, top: 1.03 },
 ];
 const STYLES = { tube: { icon: '🌀', name: 'Tube Race', make: createTube }, open: { icon: '🪐', name: 'Open Space', make: createOpen } };
 const SEND_EVERY = 1 / 15;
@@ -47,7 +47,7 @@ export function mount(stage) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   } catch (e) {
-    ui.innerHTML = '<div class="sd-overlay"><div class="sd-card"><h2>😢 No 3D</h2><p>This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
+    ui.innerHTML = '<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel"><div class="ui-kicker">Star Dash</div><h2 class="ui-title">No 3D here</h2><p class="ui-sub">This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
     return () => css.remove();
   }
   const DPR = Math.min(devicePixelRatio || 1, 2);
@@ -292,7 +292,9 @@ export function mount(stage) {
   function frame(now) {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (S.paused && !S.net) return;   // pause card open (local races only)
+    clock += dt;
     if (!race) return;
     const R = race, W = R.world;
 
@@ -389,11 +391,11 @@ export function mount(stage) {
     if (S.phase === 'race') raceUI();
     if (S.phase === 'results') resultsUI();
     if (S.phase === 'lobby') lobbyUI();
-    if (S.net && S.net.status === 'waiting') ui.appendChild(el('<div class="sd-netwait">📶⏳</div>'));
+    if (S.net && S.net.status === 'waiting') ui.appendChild(el('<div class="sd-netwait ui-chip">Reconnecting…</div>'));
   }
 
   function styleButtons(enabled = true) {
-    return Object.entries(STYLES).map(([k, s]) => `<button class="sd-style ${S.style === k ? 'on' : ''} ${enabled ? '' : 'off'}" data-style="${k}"><span>${s.icon}</span>${s.name}</button>`).join('');
+    return `<div class="ui-choices tight sd-styles">${Object.entries(STYLES).map(([k, s]) => `<button class="sd-style ui-choice ${S.style === k ? 'on' : ''} ${enabled ? '' : 'off'}" data-style="${k}"><span class="i">${s.icon}</span>${s.name}</button>`).join('')}</div>`;
   }
   function wireStyles(box, after) {
     box.querySelectorAll('.sd-style').forEach(b => click(b, () => {
@@ -403,16 +405,19 @@ export function mount(stage) {
   }
 
   function menuUI() {
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-menu">
-      <h1>Star <b>Dash</b></h1>
-      <div class="sd-row">${styleButtons()}</div>
-      <div class="sd-row sd-levels"><span>🤖</span>${LEVELS.map((l, i) => `<button class="sd-level ${S.level === i ? 'on' : ''}" data-l="${i}" aria-label="computer level ${i + 1}">${l.icon}</button>`).join('')}</div>
-      <div class="sd-row sd-play">
-        <button class="sd-go" data-m="ai"><span>🙂 vs 🤖</span>Computer</button>
-        <button class="sd-go" data-m="two"><span>🙂 vs 🙂</span>Same screen</button>
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-menu">
+      <h1 class="ui-title">Star Dash</h1>
+      <p class="ui-sub">Race through space. First to the finish wins.</p>
+      <div class="ui-label">Track</div>
+      ${styleButtons()}
+      <div class="sd-line"><span class="ui-label">Computer</span><div class="ui-seg sd-levels">${LEVELS.map((l, i) => `<button class="sd-level ${S.level === i ? 'on' : ''}" data-l="${i}" aria-label="computer level ${i + 1}">${l.icon} ${l.name}</button>`).join('')}</div></div>
+      <div class="ui-label">Play</div>
+      <div class="ui-choices sd-play">
+        <button class="sd-go ui-choice" data-m="ai"><span class="i">🤖</span>vs Computer<small>Just you</small></button>
+        <button class="sd-go ui-choice" data-m="two"><span class="i">👥</span>Same screen<small>Two players</small></button>
       </div>
-      <div class="sd-row sd-together">${S.busy ? '<span class="sd-wait">⏳</span>' : togetherButton()}</div>
-      ${S.sad > clock ? `<p class="sd-sad">😢 ${S.msg}</p>` : ''}
+      <div class="ui-row sd-together">${S.busy ? '<span class="ui-sub">Connecting…</span>' : togetherButton()}</div>
+      ${S.sad > clock ? `<p class="ui-sub sd-sad">${S.msg}</p>` : ''}
       <p class="sd-keys">Player 1: ← → ↑ ↓ · Player 2: W A S D</p>
     </div></div>`);
     wireStyles(box, () => { demo(); render(); });
@@ -428,27 +433,48 @@ export function mount(stage) {
   }
 
   function raceUI() {
-    const b = el(`<button class="sd-btn sd-quit" aria-label="Stop race">${icon('close')}</button>`);
-    click(b, () => { sound.pop(); if (S.net) toLobby(); else { S.phase = 'menu'; demo(); render(); } });
+    const b = el(`<button class="ui-hud-btn sd-quit" aria-label="Pause">${icon('pause')}</button>`);
+    click(b, () => { sound.pop(); pauseUI(); });
     ui.appendChild(b);
+  }
+  // Pause card. Local races really pause; online the race goes on (others are racing).
+  function pauseUI() {
+    if (ui.querySelector('.sd-pause')) return;
+    const online = !!S.net;
+    S.paused = !online;
+    const box = el(`<div class="sd-overlay ui-overlay sd-pause"><div class="sd-card ui-panel">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">${online ? 'Leave the race?' : 'Paused'}</h2>
+      <div class="sd-col">
+        <button class="ui-btn primary big" data-a="resume">${icon('play')} ${online ? 'Keep racing' : 'Resume'}</button>
+        ${online ? '' : `<button class="ui-btn" data-a="restart">${icon('retry')} Restart</button>`}
+        <button class="ui-btn ghost" data-a="quit">${icon('leave')} ${online ? 'Back to room' : 'Quit'}</button>
+      </div>
+    </div></div>`);
+    const close = () => { S.paused = false; box.remove(); };
+    click(box.querySelector('[data-a="resume"]'), () => { sound.pop(); close(); });
+    click(box.querySelector('[data-a="restart"]'), () => { sound.pop(); close(); startLocal(race.mode); });
+    click(box.querySelector('[data-a="quit"]'), () => { sound.pop(); close(); if (S.net) toLobby(); else { S.phase = 'menu'; demo(); render(); } });
+    ui.appendChild(box);
   }
 
   function resultsUI() {
     const R = race;
     const order = [...R.finish, ...R.ships.filter(s => !R.finish.includes(s)).sort((a, b) => R.world.progress(b) - R.world.progress(a))];
     const names = sh => {
-      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `🤖 ${LEVELS[S.level].icon}` : `🙂 ${myName() || 'You'}`;
-      if (R.mode === 'two') return `🙂 Player ${sh.slot + 1}`;
+      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `Computer ${LEVELS[S.level].icon}` : (myName() || 'You');
+      if (R.mode === 'two') return `Player ${sh.slot + 1}`;
       const who = S.net && cleanName(S.net.players[sh.pid] && S.net.players[sh.pid].name);
-      return sh.ctrl === 'solo' ? `🙂 ${who || 'You'}` : `🌍 ${who || 'Friend'}`;
+      return sh.ctrl === 'solo' ? (who || 'You') : (who || 'Friend');
     };
     const host = !S.net || S.net.isHost;
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-results">
-      <h2>🏁 Race over!</h2>
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-results">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">Race over</h2>
       <ol>${order.map((sh, i) => `<li style="--pc:${CSS_COLORS[sh.slot]}"><span>${MEDALS[i]}</span><i></i>${names(sh)}</li>`).join('')}</ol>
-      <div class="sd-row">
-        ${host ? `<button class="sd-btn sd-again" aria-label="Race again">${icon('retry')}</button>` : '<span class="sd-wait">⏳</span>'}
-        <button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button>
+      <div class="ui-row sd-foot">
+        <button class="ui-btn ghost sd-back">${icon('back')} ${S.net ? 'Room' : 'Menu'}</button>
+        ${host ? `<button class="ui-btn primary big sd-again">${icon('retry')} Again</button>` : `<span class="ui-sub">Waiting for the host…</span>`}
       </div>
     </div></div>`);
     click(box.querySelector('.sd-again'), again);
@@ -492,15 +518,18 @@ export function mount(stage) {
     if (!n.isHost) S.style = style;
     const canGo = list.length >= 2 && allReady(folk);
     const label = canGo ? '' : startLabel(folk);
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-lobby">
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-lobby">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">Play with friends</h2>
       ${lobbyHTML(folk, { hostDoing: HOST_DOING, myUid: n.room.uid })}
       ${n.isHost
-        ? `<div class="sd-row">${styleButtons(true)}</div>${label ? `<p class="sd-golabel">${label}</p>` : ''}`
+        ? `<div class="ui-label">Track</div>${styleButtons(true)}`
         : waitHTML(folk.find(p => p.host), HOST_DOING, n.ready)}
-      <div class="sd-row">
-        ${n.isHost ? `<button class="sd-btn sd-start ${canGo ? '' : 'tg-locked'}" aria-label="Start">${icon('play')}</button>` : ''}
-        <button class="sd-btn sd-leave" aria-label="Leave">${icon('leave')}</button>
+      <div class="ui-row sd-foot">
+        <button class="ui-btn ghost sd-leave">${icon('leave')} Leave</button>
+        ${n.isHost ? `<button class="ui-btn primary big sd-start ${canGo ? '' : 'tg-locked'}">${icon('play')} Start</button>` : ''}
       </div>
+      ${n.isHost && label ? `<p class="ui-sub sd-golabel">${label}</p>` : ''}
     </div></div>`);
     if (n.isHost) wireStyles(box, () => { n.room.setMeta({ style: S.style }); demo(); render(); });
     click(box.querySelector('.sd-start'), () => { if (lobbyPlayers().length >= 2 && allReady(netPeople())) hostStart(); });
