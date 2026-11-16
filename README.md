@@ -30,6 +30,10 @@ Then open http://localhost:8000
 2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / big).
    - Optional: a drawn menu icon in `js/game-art.js`.
 
+## Look (`css/ui.css`)
+- One look for menus in every game: dark glass panels (`.ui-panel` in `.ui-overlay`), Nunito font, `--accent` = the game's colour.
+- Use `.ui-kicker/.ui-title/.ui-sub`, `.ui-label`, `.ui-choices/.ui-choice`, `.ui-seg`, `.ui-btn` (`.primary .go .danger .ghost .round`), `.ui-hud-btn` for buttons over the game. Footer: ghost Back left, main action right. Pause = "Paused": Resume / Restart / Quit.
+
 ## Shared engine bits (`js/engine/`)
 - `canvas.js` – full-screen sharp canvas
 - `loop.js` – game loop with `update(dt)` / `draw()`
