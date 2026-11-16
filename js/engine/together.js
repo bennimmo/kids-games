@@ -1,9 +1,9 @@
 // Play together: ONE way to play with friends, the same in every game.
 //
-//  1. Friends link up once on the menu (picture code, friends.js).
+//  1. Add friends once on the menu (picture code, friends.js). Friends who are on show as bubbles.
 //  2. In a game, the big "Play with friends" button (togetherButton) -> playTogether():
-//     not linked yet -> the friends panel opens; linked -> the game makes a room and
-//     every friend gets a pop-up "Kit wants to play Kit's Karts" (friends-ui.js).
+//     no friends on -> the friends panel opens; else the game makes a room and every
+//     friend who's on gets a pop-up "Kit wants to play Kit's Karts" (friends-ui.js).
 //  3. Tapping ✔ opens that game with #/<game>?join=<code>; the game calls takeJoinCode()
 //     on start and joins straight away. No codes to type in games.
 //  4. Lobby: every player entry carries { name, face, ready } (playerInfo()).
@@ -29,7 +29,7 @@ export function togetherButton(label = 'Play with friends', cls = '') {
 // Tap on the button. create() makes the room (createRoom(...)) and returns it.
 // Returns the room, or null if the friends panel opened instead.
 export async function playTogether(game, create) {
-  if (!friendState().inGroup) { openFriends(); return null; }
+  if (!friendState().buddies.length) { openFriends(); return null; } // no friends on: add / find one
   const room = await create();
   if (!room) return null;
   hosting(game, room.code);
@@ -55,7 +55,7 @@ export function joined(game, code) { setPlaying(game, code); }
 export function leftRoom() { setPlaying(null); clearInvite(); }
 
 export function openFriends() { window.dispatchEvent(new CustomEvent('kg-open-friends')); }
-export const inFriendGroup = () => friendState().inGroup;
+export const inFriendGroup = () => friendState().buddies.length > 0;
 
 // ------------------------------------------------------------ lobby
 
@@ -81,13 +81,13 @@ export function saidNo(list = []) {
   const here = new Set(list.map(p => p.uid));
   const code = s.playing && s.playing.code;
   const no = new Set(s.declines.filter(d => d.code === code).map(d => d.uid));
-  return s.friends.filter(f => no.has(f.uid) && !here.has(f.uid));
+  return s.buddies.filter(f => no.has(f.uid) && !here.has(f.uid));
 }
 // Friends in my group who haven't come into the room yet (and haven't said no).
 export function coming(list) {
   const here = new Set(list.map(p => p.uid));
   const no = new Set(saidNo(list).map(f => f.uid));
-  return friendState().friends.filter(f => f.status === 'on' && !here.has(f.uid) && !no.has(f.uid));
+  return friendState().buddies.filter(f => !here.has(f.uid) && !no.has(f.uid));
 }
 
 // Everyone (except the host) has pressed I'm ready.

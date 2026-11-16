@@ -460,7 +460,7 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .frow-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 700; color: #1b7a43; padding-right: 6px; }
 .fadd { gap: 8px; }
 .flabel small { font-weight: 500; opacity: .8; }
-.fbar-count.on { background: #22c55e; color: #fff; }
+.fbar-count.on { background: #fff; color: #1b7a43; }
 .fk-ring.face { background: #fff3c4; font-size: 58px; }
 
 /* friend bubbles: what they're playing */
@@ -482,3 +482,20 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 
 .tg-p.said-no { opacity: .7; background: #ffe4e0; }
 .tg-p.said-no small { color: #c2410c; opacity: 1; }
+
+/* bubbles = friends who are on; call only when you want one */
+.fb-dock:not(.incall) .fb-tools { display: none !important; }
+.fb:not(.incall) .fb-quiet { display: none !important; }
+.fb.incall .fb-face { border-color: #4ade80; box-shadow: 0 0 0 3px #22c55e, 0 4px 0 rgba(0,0,0,.2); }
+.fb-ring {
+  display: none; position: absolute; top: -6px; right: -4px; width: 32px; height: 32px; padding: 0; border: 2px solid #fff; border-radius: 50%;
+  background: var(--btn-ok); color: #fff; font-size: 16px; place-items: center; cursor: pointer; box-shadow: 0 3px 8px -2px rgba(0,0,0,.35);
+}
+.fb-dock.open .fb-ring:not([hidden]) { display: grid; }
+@media (hover: hover) { .fb:hover .fb-ring:not([hidden]) { display: grid; } }
+.fb.calling .fb-ring:not([hidden]) { display: grid; animation: ring .4s ease-in-out infinite alternate; }
+.fb:not(.incall) .fb-face { animation: none; }
+.fbar-plus { position: absolute; top: -4px; right: -4px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; background: #fff; color: #1b7a43; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.fbar-plus .ic { stroke-width: 3.4; }
+
+.fadded { font-weight: 700; color: #1b7a43; background: #d7f5e1; border-radius: 16px; padding: 8px 16px; }

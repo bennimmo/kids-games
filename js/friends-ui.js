@@ -85,26 +85,30 @@ function wireDrag() {
 }
 
 function renderBubbles(s) {
-  const want = new Map(s.friends.map(f => [f.uid, f]));
+  const want = new Map(s.buddies.map(f => [f.uid, f]));
   for (const el of [...list.children]) if (!want.has(el.dataset.uid)) el.remove();
-  for (const f of s.friends) {
+  for (const f of s.buddies) {
     let el = list.querySelector(`[data-uid="${f.uid}"]`);
     if (!el) {
       el = document.createElement('div');
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><button class="fb-quiet" aria-label="Mute friend"></button><div class="fb-name"></div><div class="fb-where"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><div class="fb-name"></div><div class="fb-where"></div><audio autoplay playsinline></audio>`;
       el.querySelector('.fb-quiet').addEventListener('click', () => {
         sound.pop();
         quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
         openDock(true);
         renderBubbles(friendState());
       });
+      el.querySelector('.fb-ring').addEventListener('click', () => { sound.pop(); callFriend(f.uid); openDock(true); });
       list.appendChild(el);
       sound.pop();
     }
-    el.classList.toggle('on', f.status === 'on');
+    el.classList.toggle('on', f.status === 'on' || !f.inCall);
+    el.classList.toggle('incall', f.inCall);
+    el.classList.toggle('calling', !!f.calling);
+    el.querySelector('.fb-ring').hidden = f.inCall || s.friends.length >= MAX_FRIENDS;
     el.querySelector('.fb-face b').textContent = f.face || [...f.name][0] || '?';
     el.classList.toggle('has-face', !!f.face);
     el.querySelector('.fb-name').textContent = f.name;
@@ -123,14 +127,15 @@ function renderBubbles(s) {
     el.querySelector('.fb-quiet').textContent = q ? '🔈' : '🔊';
     el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
   }
-  for (const u of quiet) if (!want.has(u)) quiet.delete(u);
-  tidyVoices(new Set(s.friends.filter(f => !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
+  for (const u of quiet) if (!want.has(u) || !want.get(u).inCall) quiet.delete(u);
+  tidyVoices(new Set(s.buddies.filter(f => f.inCall && !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
+  dock.classList.toggle('incall', s.inGroup);
   micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   badge.hidden = !(s.muted || s.micStatus === 'denied');
   badge.innerHTML = s.micStatus === 'denied' ? '🚫' : icon('micOff');
-  if (!s.friends.length) openDock(false);
-  dock.hidden = !s.friends.length;
+  if (!s.buddies.length) openDock(false);
+  dock.hidden = !s.buddies.length;
   placeDock();
 }
 
@@ -195,10 +200,10 @@ function renderBar(s) {
   const bar = document.querySelector('.friend-bar');
   if (!bar) return;
   // Just a phone button (the code is in the panel). Little number = friends connected.
-  let inner = s.codeStatus === 'offline' ? '📵' : icon('phone');
-  const on = s.contacts.filter(c => c.online && !c.inCall).length;
-  if (s.friends.length) inner += `<span class="fbar-count">${s.friends.length}</span>`;
-  else if (on) inner += `<span class="fbar-count on">${on}</span>`;
+  let inner = s.codeStatus === 'offline' ? '📵' : icon('people');
+  const on = s.buddies.length;
+  if (on) inner += `<span class="fbar-count on">${on}</span>`;
+  else inner += `<span class="fbar-plus">${icon('plus')}</span>`;
   bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
@@ -210,6 +215,7 @@ function renderBar(s) {
 const OUT_MSG = {
   asking: n => `⏳ ${n ? nameHTML(n) : ''}…`,
   away: () => '😴 Not on',
+  added: n => `🎉 Friends with ${n ? nameHTML(n) : 'them'}!`,
   no: () => '🙅 No',
   full: () => '👫 Full',
   none: () => '🤷 Not found',
@@ -261,9 +267,12 @@ function renderPanel(s) {
   const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? picImg(entry[i]) : ''}</span>`).join('');
   const full = s.friends.length >= MAX_FRIENDS;
   const list = s.contacts;
+  const justAdded = newOut && newOut.status === 'added';
+  if (justAdded) adding = false;
   const html = `<div class="app-help-card friend-card">
       <div class="fhead"><h2>${icon('people')} My friends</h2>
         ${list.length ? `<button class="fsmall fedit${editing ? ' on' : ''}" aria-label="Edit friends">${icon(editing ? 'check' : 'edit')}</button>` : ''}</div>
+      ${justAdded ? `<div class="fmsg fadded">${OUT_MSG.added(newOut.name)}</div>` : ''}
       ${list.length ? `<div class="flistv">${list.map(c => friendRow(c, s)).join('')}</div>` : `<div class="fempty">No friends yet. Add one with their pictures!</div>`}
       ${adding ? `<div class="fsec fadd">
         <div class="flabel">${icon('user')} My pictures <small>(show your friend)</small></div>
@@ -322,7 +331,7 @@ function panelClick(e) {
   if (!btn || !panel.contains(btn)) return;
   const re = () => renderPanel(friendState());
   if (btn.matches('.fclose')) { sound.pop(); closePanel(); }
-  else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; newCode(); re(); }
+  else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; cancelAsk(); newCode(); re(); }
   else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; re(); }
   else if (btn.dataset.call) { sound.pop(); callFriend(btn.dataset.call); }
   else if (btn.dataset.rm) {

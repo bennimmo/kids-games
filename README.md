@@ -38,7 +38,10 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## 📞 Friends (on the menu)
-- **My friends list**: add a friend once with pictures, after that they're saved on this device (`kg-friends`). The list shows who's on (green dot) and what they're playing; 📞 calls them wherever they are (pop-up "Kit is calling you"). ✏️ = remove friends. Everyone you've been in a call with is saved.
+- **Friends ≠ calls.** The home-screen button (👫+) opens My friends. Add a friend once with pictures ("wants to be friends" ✔): you're friends, no call. Saved on this device (`kg-friends`).
+- Every friend who's on shows as a bubble (over every game), with a badge of what they're playing. Tap/hover a bubble → 📞 to start a call; in a call the bubble gets a green ring and the mic/hang-up buttons show.
+- The list shows who's on (green dot) and what they're playing; 📞 calls them too. ✏️ = remove friends. Everyone you've been in a call with is saved.
+- "Play with friends" in a game invites every friend who's on (call or not); the invite is on my home (`meta.invite`), "not this time" comes back as `players/<uid>_r`.
 - Each device keeps a "home" while the app is open (`games/friends/rooms/h<uid>`: name, face, on, game) so saved friends can see it and call it. Calling someone who's already in a call brings them into it.
 - Friend bubbles show a little game badge; hover/tap shows "Playing Kit's Karts".
 - Code pictures are little SVG files (`icons/pics/`, from Twemoji, CC-BY 4.0) so they look the same on Windows, iPad and Android.
