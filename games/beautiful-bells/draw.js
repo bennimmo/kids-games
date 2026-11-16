@@ -465,6 +465,7 @@ const ARM = 'M78 440 C56 466 52 540 55 592 C57 640 62 690 64 724 L89 724 C92 690
 const LEG = 'M112 718 C116 800 126 860 130 900 C134 950 142 990 146 1014 L172 1014 C172 990 176 950 178 900 C180 860 196 800 202 772 L202 720Z';
 const MIRROR_ATTR = 'transform="translate(400 0) scale(-1 1)"';
 const twoPaths = d => `<path d="${d}"/><path d="${d}" ${MIRROR_ATTR}/>`;
+const twoPathsFill = (d, fill) => `<path d="${d}" fill="${fill}"/><path d="${d}" fill="${fill}" ${MIRROR_ATTR}/>`;
 
 function patternDef(pat, ink, id, scale = 1) {
   const tf = scale !== 1 ? ` patternTransform="scale(${scale})"` : '';
@@ -494,18 +495,27 @@ function fabric(col, pat, key, defs, ctx) {
   let patId = null;
   if (pat && pat !== 'plain') { patId = `${ctx.id}${key}`; defs.push(patternDef(pat, ink, patId)); }
   const fill = d => `<path d="${d}" fill="${col}"/>` + (patId ? `<path d="${d}" fill="url(#${patId})"/>` : '') +
-    `<path d="${d}" fill="url(#${ctx.id}ts)"/><path d="${d}" fill="url(#${ctx.id}tl)"/>`;
+    `<path d="${d}" fill="url(#${ctx.id}ts)"/><path d="${d}" fill="url(#${ctx.id}tl)"/>` +
+    (ctx.lite ? '' : `<path d="${d}" fill="#000" filter="url(#${ctx.id}fab)" opacity=".45"/>`);
   return { col, dark, light, fill };
 }
+// A soft fold in cloth: a blurred shadow with a highlight beside it.
+const fold = (d, F, ctx, w = 7) => ctx.lite ? lineD(d, F.dark, 2, .25) :
+  `<path d="${d}" stroke="${F.dark}" stroke-width="${w}" fill="none" opacity=".35" stroke-linecap="round" filter="url(#${ctx.id}b3)"/>` +
+  `<path d="${d}" stroke="${F.light}" stroke-width="${w * .6}" fill="none" opacity=".3" stroke-linecap="round" transform="translate(5 0)" filter="url(#${ctx.id}b3)"/>`;
 const lineD = (d, col, w = 2, o = .45) => `<path d="${d}" stroke="${col}" stroke-width="${w}" fill="none" opacity="${o}" stroke-linecap="round" stroke-linejoin="round"/>`;
 const scallops = (pts, r, fill) => pts.map(([x, y]) => circle(x, y, r, `fill="${fill}" stroke="${mix(fill, '#000', .15)}" stroke-width="1"`)).join('');
 
 function sleeves(kind, F, ctx) {
   if (!kind) return '';
   const end = kind === 'long' ? 712 : 528;
-  let s = `<g clip-path="url(#${ctx.armClip})">${F.fill(`M0 400 L400 400 L400 ${end} L0 ${end}Z`)}` +
-    (kind === 'long' ? `<rect x="0" y="${end - 12}" width="400" height="12" fill="${F.dark}"/>` : `<path d="M0 ${end} L400 ${end}" stroke="${F.dark}" stroke-width="4"/>`) +
-    both(lineD('M86 470 Q78 520 76 560', F.dark, 2, .3)).join('') + '</g>';
+  let s = `<g clip-path="url(#${ctx.armClip})">` +
+    (ctx.lite ? '' : `<rect x="0" y="${end}" width="400" height="8" fill="#000" opacity=".12" filter="url(#${ctx.id}b3)"/>`) +
+    F.fill(`M0 400 L400 400 L400 ${end} L0 ${end}Z`) +
+    `<g clip-path="url(#${ctx.sleeveEnd}${end})">${twoPathsFill(ARM, `url(#${ctx.id}cyl)`)}</g>` +
+    (kind === 'long' ? `<rect x="0" y="${end - 12}" width="400" height="12" fill="${F.dark}" opacity=".6"/>` : `<path d="M0 ${end} L400 ${end}" stroke="${F.dark}" stroke-width="2.5" opacity=".7"/>`) +
+    both(fold('M86 470 Q78 520 76 560', F, ctx, 5)).join('') + (kind === 'long' ? both(fold('M70 600 Q82 620 92 610', F, ctx, 5)).join('') : '') + '</g>';
+  ctx.defs.push(`<clipPath id="${ctx.sleeveEnd}${end}"><rect x="0" y="0" width="400" height="${end}"/></clipPath>`);
   if (kind === 'puff') s += both(`<path d="M76 438 Q44 470 56 516 Q82 532 106 514 Q116 470 98 446Z" fill="${F.col}" stroke="${F.dark}" stroke-width="2"/>`).join('') +
     both(lineD('M70 470 Q76 500 72 516 M88 456 Q92 490 90 518', F.dark, 1.6, .4)).join('');
   return s;
@@ -545,9 +555,9 @@ function topSvg(look, defs, ctx) {
   const H = TOP_HEM[style];
   const F = fabric(TOP_COLORS[look.topColor] || TOP_COLORS.pink, look.topPattern, 'tp', defs, ctx);
   const W = fabric('#fafafc', null, 'tw', defs, ctx);
-  const hem = `<path d="M0 ${H} L400 ${H}" stroke="${F.dark}" stroke-width="4"/>`;
+  const hem = `<path d="M0 ${H} L400 ${H}" stroke="${F.dark}" stroke-width="2.5" opacity=".7"/>`;
   const seams = both(lineD('M82 446 Q92 470 106 480', F.dark, 2, .5)).join('');
-  const folds = lineD('M150 560 Q160 600 152 640', F.dark, 2, .25) + lineD('M252 548 Q242 590 250 636', F.dark, 2, .25);
+  const folds = fold('M150 560 Q160 600 152 640', F, ctx) + fold('M252 548 Q242 590 250 636', F, ctx) + fold('M132 486 Q160 500 176 520', F, ctx, 5) + fold('M268 486 Q240 500 224 520', F, ctx, 5);
   let inside = '', after = '', sl = TOP_SLEEVE[style];
   switch (style) {
     case 'vneck': inside = F.fill(NECKS.vneck(H)) + neckTrim('vneck', F); break;
@@ -575,7 +585,8 @@ function topSvg(look, defs, ctx) {
       break;
     default: inside = F.fill(NECKS.crew(H)) + neckTrim('crew', F);
   }
-  return `<g clip-path="url(#${ctx.torsoClip})">${inside}${seams}${folds}${hem}</g>${after}${sleeves(sl, F, ctx)}`;
+  const hemShadow = ctx.lite ? '' : `<g clip-path="url(#${ctx.lowerClip})"><rect x="0" y="${H}" width="400" height="10" fill="#000" opacity=".2" filter="url(#${ctx.id}b3)"/></g>`;
+  return `${hemShadow}<g clip-path="url(#${ctx.torsoClip})">${inside}${seams}${folds}${hem}</g>${after}${sleeves(sl, F, ctx)}`;
 }
 
 function skirtD(hem, flare, top = 636) {
@@ -600,8 +611,11 @@ function bottomSvg(it, defs, ctx) {
     case 'trousers': {
       const end = it.end || (it.tight ? 1000 : 1006);
       let s = F.fill(`M0 636 L400 636 L400 ${end} L0 ${end}Z`) +
-        both(lineD(`M158 780 Q164 ${(780 + end) / 2} 160 ${end}`, F.dark, 2, .35)).join('') +
-        `<path d="M0 ${end} L400 ${end}" stroke="${F.dark}" stroke-width="3"/>`;
+        `<g clip-path="url(#${ctx.legClip})">${twoPathsFill(LEG, `url(#${ctx.id}cyl)`)}</g>` +
+        both(lineD(`M158 780 Q164 ${(780 + end) / 2} 160 ${end}`, F.dark, 1.6, .3)).join('') +
+        (end > 900 ? both(fold('M134 880 Q154 872 172 884', F, ctx, 5)).join('') + both(fold('M140 960 Q156 952 170 962', F, ctx, 4)).join('') : '') +
+        both(fold('M150 700 Q170 712 196 704', F, ctx, 5)).join('') +
+        `<path d="M0 ${end} L400 ${end}" stroke="${F.dark}" stroke-width="2.5" opacity=".7"/>`;
       if (!it.tight) s += `<rect x="0" y="634" width="400" height="14" fill="${F.dark}"/>` + lineD('M200 650 L200 700', F.dark, 2, .5);
       if (it.denim) s += both(`<path d="M128 652 Q142 680 168 662" stroke="#e8b923" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/>`).join('') +
         `<path d="M0 ${end - 8} L400 ${end - 8}" stroke="#e8b923" stroke-width="1.5" stroke-dasharray="3 2"/>`;
@@ -630,7 +644,7 @@ function dressSvg(it, defs, ctx) {
   if (it.special === 'dungarees') {
     const W = fabric('#fafafc', null, 'dw', defs, ctx);
     return {
-      lower: `<g clip-path="url(#${ctx.lowerClip})">${F.fill('M0 636 L400 636 L400 1006 L0 1006Z')}` +
+      lower: `<g clip-path="url(#${ctx.lowerClip})">${F.fill('M0 636 L400 636 L400 1006 L0 1006Z')}<g clip-path="url(#${ctx.legClip})">${twoPathsFill(LEG, `url(#${ctx.id}cyl)`)}</g>` +
         both(lineD('M158 780 Q164 890 160 1006', F.dark, 2, .35)).join('') + `<path d="M0 998 L400 998" stroke="#e8b923" stroke-width="1.5" stroke-dasharray="3 2"/></g>`,
       upper: `<g clip-path="url(#${ctx.torsoClip})">${W.fill(NECKS.crew(660))}${neckTrim('crew', W)}${F.fill('M144 470 L256 470 L262 660 L138 660Z')}` +
         `<rect x="176" y="500" width="48" height="34" rx="4" fill="none" stroke="${F.dark}" stroke-width="2.5" stroke-dasharray="4 3"/></g>` +
@@ -643,7 +657,7 @@ function dressSvg(it, defs, ctx) {
   switch (it.skirt) {
     case 'ball': {
       const d = 'M124 628 L276 628 Q318 760 374 1004 Q200 1040 26 1004 Q82 760 124 628Z';
-      skirt = F.fill(d) + [[150, 60], [178, 120], [222, 280], [250, 340]].map(([x, hx]) => lineD(`M${x} 650 Q${x + (x - 200) * .4} 820 ${hx} 1014`, F.dark, 2, .3)).join('') +
+      skirt = F.fill(d) + [[150, 60], [178, 120], [222, 280], [250, 340], [200, 200]].map(([x, hx]) => fold(`M${x} 650 Q${x + (x - 200) * .4} 820 ${hx} 1014`, F, ctx, 10)).join('') +
         lineD('M26 1004 Q200 1040 374 1004', F.dark, 3, .6);
       if (it.glitter) skirt += glitterDots([[120, 900], [170, 860], [240, 880], [300, 930], [200, 960], [90, 970], [270, 790], [140, 780], [330, 990], [210, 740]]);
       break;
@@ -680,7 +694,7 @@ function dressSvg(it, defs, ctx) {
 
 function socksSvg(it, defs, ctx) {
   const F = fabric(it.color, it.pattern, 'sk', defs, ctx);
-  let s = `<g clip-path="url(#${it.tights ? ctx.lowerClip : ctx.legClip})">${F.fill(`M0 ${it.top} L400 ${it.top} L400 1016 L0 1016Z`)}` +
+  let s = `<g clip-path="url(#${it.tights ? ctx.lowerClip : ctx.legClip})">${F.fill(`M0 ${it.top} L400 ${it.top} L400 1016 L0 1016Z`)}<g clip-path="url(#${ctx.legClip})">${twoPathsFill(LEG, `url(#${ctx.id}cyl)`)}</g>` +
     (it.tights ? '' : `<rect x="0" y="${it.top}" width="400" height="7" fill="${F.dark}" opacity=".5"/>`) + '</g>';
   if (it.frill) s += both(scallops([[136, it.top + 2], [146, it.top - 1], [156, it.top - 2], [166, it.top - 1], [175, it.top + 2]], 5.5, '#fff')).join('');
   return s;
@@ -976,25 +990,39 @@ export function renderGirl(look, opts = {}) {
   }).join('');
 
   // Whole body: skin, then clothes from the feet up.
-  const ctx = { id, torsoClip: `${id}tc`, armClip: `${id}ac`, legClip: `${id}lg`, lowerClip: `${id}lw` };
+  const ctx = { id, lite, defs, torsoClip: `${id}tc`, armClip: `${id}ac`, legClip: `${id}lg`, lowerClip: `${id}lw`, sleeveEnd: `${id}se` };
+  // Round shading for arms and legs (dark edges, soft highlight), and a woven texture for cloth.
+  defs.push(`<linearGradient id="${id}cyl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".28"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".55" stop-color="#fff" stop-opacity=".1"/><stop offset=".75" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".32"/></linearGradient>`);
+  if (!lite) defs.push(`<filter id="${id}fab" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85 .45" numOctaves="2" seed="5"/><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .7 -.3"/><feComposite operator="in" in2="SourceGraphic"/></filter>`);
+  const skinNoise = d => lite ? '' : `<path d="${d}" fill="#000" filter="url(#${id}nzb)" opacity=".28"/>`;
+  if (!lite) defs.push(`<filter id="${id}nzb" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="4"/><feColorMatrix type="matrix" values="0 0 0 0 .35  0 0 0 0 .2  0 0 0 0 .15  0 0 0 .9 -.32"/><feComposite operator="in" in2="SourceGraphic"/></filter>`);
   defs.push(`<clipPath id="${ctx.torsoClip}"><path d="${TORSO}"/></clipPath>`,
     `<clipPath id="${ctx.armClip}">${twoPaths(ARM)}</clipPath>`,
     `<clipPath id="${ctx.legClip}">${twoPaths(LEG)}</clipPath>`,
     `<clipPath id="${ctx.lowerClip}"><path d="${TORSO}"/>${twoPaths(LEG)}</clipPath>`,
     `<linearGradient id="${id}ts" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".22"/><stop offset=".28" stop-color="#000" stop-opacity="0"/><stop offset=".72" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient>`,
     `<linearGradient id="${id}tl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".1"/></linearGradient>`);
-  const skinPath = d => `<path d="${d}" fill="${skin.base}" stroke="${outline}" stroke-width="1.4"/><path d="${d}" fill="url(#${id}bs)"/>`;
+  const skinPath = d => `<path d="${d}" fill="${skin.base}" stroke="${outline}" stroke-width="1" stroke-opacity=".5"/><path d="${d}" fill="url(#${id}bs)"/>${skinNoise(d)}`;
   const dress = it('dress'), bottom = it('bottom'), socks = it('socks'), shoes = it('shoes'), bag = it('bag'), bracelet = it('bracelet');
   const dressParts = dress ? dressSvg(dress, defs, ctx) : null;
   const legs = `<ellipse cx="200" cy="1040" rx="100" ry="11" fill="#5a2a5e" opacity=".14" filter="url(#${id}b6)"/>` +
-    both(`<path d="${LEG}" fill="${skin.base}" stroke="${outline}" stroke-width="1.4"/>`).join('') + both(`<path d="${LEG}" fill="url(#${id}bs)"/>`).join('') +
+    both(`<path d="${LEG}" fill="${skin.base}" stroke="${outline}" stroke-width="1" stroke-opacity=".5"/>`).join('') + twoPathsFill(LEG, `url(#${id}cyl)`) +
+    (lite ? '' : twoPathsFill(LEG, '#000').replace(/fill="#000"/g, `fill="#000" filter="url(#${id}nzb)" opacity=".28"`)) +
+    both(`<ellipse cx="152" cy="884" rx="14" ry="9" fill="#fff" opacity=".12" filter="url(#${id}b3)"/>`).join('') +
     both(`<path d="M134 770 Q144 880 156 1000" stroke="#fff" stroke-width="7" opacity=".14" fill="none" stroke-linecap="round" filter="url(#${id}b3)"/>`).join('') +
     both(`<path d="M140 884 Q154 892 168 884" stroke="${skin.shade}" stroke-width="2" fill="none" opacity=".4"/>`).join('') +
-    both(`<ellipse cx="152" cy="1022" rx="22" ry="11" fill="${skin.base}" stroke="${skin.shade}" stroke-width="1.5"/>`).join('');
-  const arms = both(`<path d="${ARM}" fill="${skin.base}" stroke="${outline}" stroke-width="1.4"/>`).join('') + both(`<path d="${ARM}" fill="url(#${id}bs)"/>`).join('') +
+    both(`<ellipse cx="152" cy="1022" rx="22" ry="11" fill="${skin.base}" stroke="${outline}" stroke-width="1" stroke-opacity=".6"/>`).join('') + both(`<ellipse cx="146" cy="1018" rx="10" ry="4" fill="#fff" opacity=".2"/>`).join('');
+  const arms = both(`<path d="${ARM}" fill="${skin.base}" stroke="${outline}" stroke-width="1" stroke-opacity=".5"/>`).join('') + twoPathsFill(ARM, `url(#${id}cyl)`) +
+    (lite ? '' : twoPathsFill(ARM, '#000').replace(/fill="#000"/g, `fill="#000" filter="url(#${id}nzb)" opacity=".28"`)) +
+    both(`<path d="M70 588 Q78 596 92 590" stroke="${skin.shade}" stroke-width="3" fill="none" opacity=".35" filter="url(#${id}b2)"/>`).join('') +
     both(`<path d="M74 478 Q64 590 74 708" stroke="#fff" stroke-width="6" opacity=".14" fill="none" stroke-linecap="round" filter="url(#${id}b3)"/>`).join('');
-  const hand = `<ellipse cx="76" cy="743" rx="15" ry="21" fill="${skin.base}" stroke="${outline}" stroke-width="1.5"/><ellipse cx="89" cy="732" rx="5.5" ry="11" transform="rotate(-15 89 732)" fill="${skin.base}" stroke="${outline}" stroke-width="1.2"/>` +
-    `<path d="M69 754 L70 763 M75 756 L75 765 M81 754 L80 763" stroke="${skin.shade}" stroke-width="1.3" stroke-linecap="round" opacity=".7"/>`;
+  // Hand: a relaxed hand with fingers together, a thumb in front and soft shading.
+  const HAND = 'M63 724 C60 738 60 752 62 764 C64 774 70 779 76 779 C83 779 88 774 89 764 C90 752 90 738 88 724Z';
+  const hand = `<path d="${HAND}" fill="${skin.base}" stroke="${outline}" stroke-width="1" stroke-opacity=".6"/>` +
+    `<path d="${HAND}" fill="url(#${id}cyl)"/>` +
+    `<path d="M70 758 Q70 768 71 776 M76 760 Q76 770 76 778 M82 758 Q82 768 81 776" stroke="${skin.shade}" stroke-width="1.1" fill="none" opacity=".55"/>` +
+    `<path d="M86 734 C92 740 93 752 88 760 C85 762 82 760 83 756 C85 750 84 742 82 738Z" fill="${skin.base}" stroke="${outline}" stroke-width=".8" stroke-opacity=".6"/>` +
+    `<ellipse cx="72" cy="740" rx="5" ry="9" fill="#fff" opacity=".12"/>`;
   const rightHand = `<g ${MIRROR}>${hand}</g>`;
   const hands = hand + rightHand;
   const shoeStr = shoes ? shoeSvg(shoes) + `<g ${MIRROR}>${shoeSvg(shoes)}</g>` : '';
