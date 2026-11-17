@@ -2,7 +2,7 @@
 // (dinosaur skeletons, fossils, lost socks…). Looks only – the shape comes from sim.js.
 // art   = the full picture (1 pixel per world unit), made once per map
 // shown = art cut to the ground's shape + the grass/snow/icing on top
-import { W, H, CELL, COLS, ROWS, WATER_Y } from './sim.js';
+import { H, CELL, ROWS, WATER_Y } from './sim.js';
 
 const emojiFont = px => `${px}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
 
@@ -49,6 +49,8 @@ function rng(seed) {
 
 // ---------------------------------------------------------------- the picture
 export function makeArt(world) {
+  const W = world.W, COLS = world.cols;
+  const k = W / 2000;   // wider map = more stuff
   const g = GROUNDS[world.map] || GROUNDS.grass;
   const R = rng(world.artSeed ^ 0x5eed);
   const art = document.createElement('canvas');
@@ -113,7 +115,7 @@ export function makeArt(world) {
   if (g.roots) {
     ctx.strokeStyle = 'rgba(70,40,18,.55)';
     ctx.lineCap = 'round';
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 70 * k; i++) {
       let x = R() * W, y = under(x, 6);
       ctx.lineWidth = 1 + R() * 2;
       ctx.beginPath(); ctx.moveTo(x, y);
@@ -123,7 +125,7 @@ export function makeArt(world) {
     }
   }
   // pebbles
-  for (let i = 0; i < 420 && g.pebbles.length; i++) {
+  for (let i = 0; i < 420 * k && g.pebbles.length; i++) {
     const p = randSpot(14, 600);
     if (!p) continue;
     const col = g.pebbles[Math.floor(R() * g.pebbles.length)];
@@ -135,7 +137,7 @@ export function makeArt(world) {
   }
   if (g.sprinkles) {
     const cols = ['#ff4d6d', '#4dc9ff', '#ffe14d', '#7be36b', '#ffffff', '#b46bff'];
-    for (let i = 0; i < 1600; i++) {
+    for (let i = 0; i < 1600 * k; i++) {
       const p = randSpot(10, 700);
       if (!p) continue;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(R() * 3);
@@ -145,7 +147,7 @@ export function makeArt(world) {
     }
   }
   if (g.craters) {
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 40 * k; i++) {
       const p = randSpot(10, 500);
       if (!p) continue;
       const r = 6 + R() * 18;
@@ -156,7 +158,7 @@ export function makeArt(world) {
     }
   }
   if (g.ice) {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 60 * k; i++) {
       const p = randSpot(16, 500);
       if (!p) continue;
       const s = 5 + R() * 12;
@@ -178,7 +180,7 @@ export function makeArt(world) {
     }
     return null;
   };
-  for (let i = 0; i < g.dinos; i++) {
+  for (let i = 0; i < Math.round(g.dinos * k); i++) {
     const p = place(110, 70, 380);
     if (!p) continue;
     const kind = ['longneck', 'trex', 'trike'][Math.floor(R() * 3)];
@@ -191,7 +193,7 @@ export function makeArt(world) {
     skeleton(ctx, kind);
     ctx.restore();
   }
-  const extras = 16;
+  const extras = Math.round(16 * k);
   for (let i = 0; i < extras; i++) {
     const p = place(34, 30, 520);
     if (!p) continue;
@@ -326,15 +328,22 @@ function fishBones(ctx) {
 // ---------------------------------------------------------------- the ground on screen
 export function createGround() {
   const shown = document.createElement('canvas');
-  shown.width = W; shown.height = H;
   const sctx = shown.getContext('2d');
-  const maskC = document.createElement('canvas'); maskC.width = COLS; maskC.height = ROWS;
-  const topC = document.createElement('canvas'); topC.width = COLS; topC.height = ROWS;
+  const maskC = document.createElement('canvas'), topC = document.createElement('canvas');
   const mctx = maskC.getContext('2d'), tctx = topC.getContext('2d');
-  const mImg = mctx.createImageData(COLS, ROWS), tImg = tctx.createImageData(COLS, ROWS);
+  let mImg = null, tImg = null;
   const artCache = new Map();
   let world = null, g = GROUNDS.grass, art = null;
-  let topDepth = new Uint8Array(COLS);
+  let topDepth = null;
+  let COLS = 0;
+  function resize(w) {   // maps are wider when there are more tanks
+    if (COLS === w.cols) return;
+    COLS = w.cols;
+    shown.width = w.W; shown.height = H;
+    maskC.width = topC.width = COLS; maskC.height = topC.height = ROWS;
+    mImg = mctx.createImageData(COLS, ROWS); tImg = tctx.createImageData(COLS, ROWS);
+    topDepth = new Uint8Array(COLS);
+  }
 
   function cells(c0, r0, c1, r1) {
     const m = world.mask, md = mImg.data, td = tImg.data;
@@ -384,8 +393,9 @@ export function createGround() {
 
   function setWorld(w) {
     world = w;
+    resize(w);
     g = GROUNDS[w.map] || GROUNDS.grass;
-    const key = w.map + ':' + w.artSeed;
+    const key = w.map + ':' + w.artSeed + ':' + w.W;
     art = artCache.get(key);
     if (!art) {
       art = makeArt(w);

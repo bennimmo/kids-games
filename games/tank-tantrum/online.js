@@ -10,7 +10,7 @@ import { createRoom, joinRoom } from '../../js/engine/net.js';
 import { playerInfo } from '../../js/engine/together.js';
 import { sanitizeLook } from './render.js';
 import { WEAPON } from './weapons.js';
-import { MAPS, MAX_SPEED, W, H } from './sim.js';
+import { MAPS, MAX_SPEED, MAX_W as W, H } from './sim.js';
 
 export const GAME_ID = 'tank-tantrum';
 const DRIVE_EVERY = 110; // ms

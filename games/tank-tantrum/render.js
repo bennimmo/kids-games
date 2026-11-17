@@ -171,7 +171,7 @@ export function createRenderer() {
     }
 
     // ground
-    ctx.drawImage(ground.canvas, sx(0), sy(0), W * z, H * z);
+    if (world) ctx.drawImage(ground.canvas, sx(0), sy(0), world.W * z, H * z);
     const bed = sy(H);   // sea floor under the map
     if (bed < vh) { ctx.fillStyle = `rgb(${theme.deep.join(',')})`; ctx.fillRect(0, bed - 1, vw, vh - bed + 1); }
 
