@@ -6,10 +6,13 @@
 // land with the bike pointing where you're going or you crash.
 //
 // Input each step: { steer -1..1 (right +), throttle -1..1 (up = pedal / front flip),
-//   jump (held), whip, superman, nohand, barspin, manual (held) }
+//   jump (held, bunny hop), pump (held, crouch: speed on down-slopes), stretch (held: stay low off lips),
+//   whip, barspin (tap), superman, nohand, table, cancan, nofoot (hold), manual (held),
+//   flipLock / spinLock (a trick modifier is held, so the arrows pick tricks instead of flipping) }
 import { clamp, lerp } from '../sky-pilot/noise.js';
 
 const G = 9.81;
+const HOLDS = ['superman', 'nohand', 'table', 'cancan', 'nofoot'];   // tricks you hold in the air
 export const COM = 0.95;            // centre of mass above the wheels' contact point
 const TAU = Math.PI * 2;
 
@@ -21,6 +24,9 @@ export const TRICKS = {
   barspin: { name: 'Barspin', pts: 300 },
   superman: { name: 'Superman', pts: 350 },
   nohand: { name: 'No hander', pts: 250 },
+  table: { name: 'Table top', pts: 300 },
+  cancan: { name: 'Can-can', pts: 300 },
+  nofoot: { name: 'No footer', pts: 350 },
 };
 
 export function newRider(world) {
@@ -30,7 +36,7 @@ export function newRider(world) {
     steer: 0, lean: 0, crouch: 0, charge: 0, jumpHeld: false,
     // air
     air: 0, flip: 0, flipV: 0, spin: 0, spinV: 0, basePitch: 0, takeoffUp: { x: 0, y: 1, z: 0 },
-    whip: 0, whipping: false, bar: 0, barring: false, superman: 0, nohand: 0, supT: 0, noT: 0,
+    whip: 0, whipping: false, bar: 0, barring: false, superman: 0, nohand: 0, table: 0, cancan: 0, nofoot: 0, holdT: {},
     whipEdge: false, barEdge: false, airTricks: [],
     // ground tricks
     manual: 0, manualT: 0, manualBal: 0,
@@ -38,7 +44,7 @@ export function newRider(world) {
     crank: 0, wheel: 0, slide: 0, speed: 0, pedal: 0, brake: 0,
     // state
     crashed: false, crashT: 0, finished: false, events: [],
-    cp: 0, progress: 0, onTrail: true,
+    cp: 0, progress: 0, route: 0, onTrail: true,
   };
   placeAt(b, world, world.start);
   return b;
@@ -48,7 +54,7 @@ export function placeAt(b, world, p) {
   b.pos.x = p.x; b.pos.z = p.z; b.pos.y = world.height(p.x, p.z);
   b.yaw = p.yaw; b.vel.x = b.vel.y = b.vel.z = 0;
   b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
-  b.whip = b.bar = b.superman = b.nohand = 0; b.whipping = b.barring = false;
+  b.whip = b.bar = 0; for (const k of HOLDS) b[k] = 0; b.holdT = {}; b.whipping = b.barring = false;
   b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = [];
   b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0;
   world.normal(b.pos.x, b.pos.z, b.n); copy(b.up, b.n);
@@ -77,11 +83,12 @@ export function stepRider(b, world, inp, dt) {
   b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? 9 : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
   b.pedal = b.ground ? Math.max(0, inp.throttle) : 0;
+  b.stretch = !!inp.stretch; b.pump = !!inp.pump;
   b.brake = b.ground ? Math.max(0, -inp.throttle) : 0;
 
   // jump: hold to crouch, let go to pop
   if (inp.jump) { b.charge = Math.min(1, b.charge + dt * 3); }
-  b.crouch = lerp(b.crouch, inp.jump ? 1 : 0, 1 - Math.exp(-dt * 10));
+  b.crouch = lerp(b.crouch, inp.jump || inp.pump ? 1 : inp.stretch ? -0.6 : 0, 1 - Math.exp(-dt * 10));
   const popNow = b.jumpHeld && !inp.jump;
   b.jumpHeld = inp.jump;
 
@@ -105,8 +112,8 @@ export function stepRider(b, world, inp, dt) {
 
   // where on the trail
   const ta = world.trailAt(b.pos.x, b.pos.z);
-  b.onTrail = ta.i >= 0 && ta.d < world.path.halfW(ta.i) + 1;
-  if (ta.i >= 0 && ta.d < 25) b.progress = ta.i;
+  b.onTrail = ta.i >= 0 && ta.d < world.routes[ta.r].halfW(ta.i) + 1;
+  if (ta.i >= 0 && ta.d < 25) { b.progress = ta.i; b.route = ta.r; }
   b.speed = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
   // out of the map
   if (Math.abs(b.pos.x) > world.HALF - 3 || b.pos.z < 2 || b.pos.z > world.L - 3) crash(b, 'edge');
@@ -129,17 +136,19 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // forces along the bike
   const gF = -G * f.y, gS = -G * s.y;
-  const pedalA = b.pedal * Math.max(0, 7 - 0.42 * Math.max(0, vF));
-  const roll = (onDirt ? 0.22 : 0.9) * Math.sign(vF);
+  const pedalA = b.pedal * Math.max(0, 8 - 0.48 * Math.max(0, vF));
+  const roll = (onDirt ? 0.22 : 0.9) * world.B.roll * Math.sign(vF);
   const drag = 0.0062 * vF * Math.abs(vF);
-  let a = gF + pedalA - roll - drag;
+  // pumping: crouch on the way down a roller / landing to gain speed
+  const pumpA = inp.pump && f.y < -0.03 ? clamp(-f.y * 6, 0, 1) * 1.6 : 0;
+  let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1);
   vF += a * dt;
   if (b.brake > 0) { const bd = b.brake * 8 * dt; vF = Math.abs(vF) <= bd ? 0 : vF - Math.sign(vF) * bd; }
   if (Math.abs(vF) < 0.05 && b.pedal === 0 && Math.abs(gF) < 0.6) vF = 0;   // stop on gentle bits
 
   // sideways: grip, or slide (drift) when asking too much
   vS += gS * dt;
-  const grip = (onDirt ? 9.5 : 7.5) * n.y * (b.brake > 0.5 ? 0.75 : 1);
+  const grip = (onDirt ? 9.5 : 7.5) * world.B.grip * n.y * (b.brake > 0.5 ? 0.75 : 1);
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
@@ -170,11 +179,16 @@ function groundStep(b, world, inp, dt, popNow) {
   // move, then see if the ground is still under us
   b.pos.x += b.vel.x * dt; b.pos.y += b.vel.y * dt; b.pos.z += b.vel.z * dt;
   const h = world.height(b.pos.x, b.pos.z);
-  if (b.pos.y > h + 0.03) { takeOff(b); return; }
   const n2 = world.normal(b.pos.x, b.pos.z, tmpT);
   const into = dot(b.vel, n2);
-  // moving away from the ground fast (a lip): fly
-  if (into > 0.3 && b.pos.y > h - 0.05) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+  if (b.pos.y > h + 0.03 || (into > 0.3 && b.pos.y > h - 0.05)) {
+    // the ground falls away. A sharp lip throws you up; a gentle hump or roller the suspension
+    // and your legs soak up (up to about 1.6 g), so you stay on the ground.
+    const hv = Math.hypot(b.vel.x, b.vel.z) || 1, dx = b.vel.x / hv * 0.8, dz = b.vel.z / hv * 0.8;
+    const kap = (world.height(b.pos.x + dx, b.pos.z + dz) - 2 * h + world.height(b.pos.x - dx, b.pos.z - dz)) / 0.64;
+    const need = -kap * hv * hv;
+    if (need > G * 1.6 || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+  }
   b.pos.y = h;
   if (into < 0) {   // ground came up: lose the bit going into it (suspension soaks it up)
     const sp = Math.hypot(b.vel.x, b.vel.y, b.vel.z);
@@ -202,6 +216,8 @@ function endManual(b) {
 
 function takeOff(b) {
   if (b.manual > 0) endManual(b);
+  // counterpump: stretching at the lip soaks it up and keeps you low
+  if (b.stretch && b.vel.y > 0) { const n = b.n, vn = dot(b.vel, n); if (vn > 0) { b.vel.x -= n.x * vn * 0.45; b.vel.y -= n.y * vn * 0.45; b.vel.z -= n.z * vn * 0.45; } }
   b.ground = false; b.air = 0;
   b.flip = b.spin = 0; b.flipV = b.spinV = 0;
   const hs = Math.hypot(b.vel.x, b.vel.z);
@@ -211,7 +227,7 @@ function takeOff(b) {
   b.basePitch = Math.atan2(-along, b.n.y);
   if (hs < 0.5) b.basePitch = 0;
   copy(b.takeoffUp, b.up);
-  b.airTricks = []; b.supT = 0; b.noT = 0;
+  b.airTricks = []; b.holdT = {};
 }
 
 function airStep(b, world, inp, dt) {
@@ -236,8 +252,8 @@ function airStep(b, world, inp, dt) {
 
   // flips and spins (only once properly in the air)
   const can = b.air > 0.12;
-  const wantFlip = can ? -b.lean * 7.2 : 0;            // down / back = backflip (nose up)
-  const wantSpin = can ? -b.steer * 7.6 : 0;           // right = spin right
+  const wantFlip = can && !inp.flipLock ? -b.lean * 7.2 : 0;            // down / back = backflip (nose up)
+  const wantSpin = can && !inp.spinLock ? -b.steer * 7.6 : 0;           // right = spin right
   b.flipV = lerp(b.flipV, wantFlip, 1 - Math.exp(-dt * (Math.abs(wantFlip) > 0.1 ? 5 : 7)));
   b.spinV = lerp(b.spinV, wantSpin, 1 - Math.exp(-dt * (Math.abs(wantSpin) > 0.1 ? 6 : 8)));
   b.flip += b.flipV * dt; b.spin += b.spinV * dt;
@@ -252,10 +268,14 @@ function airStep(b, world, inp, dt) {
   if (can && inp.barspin && !b.barEdge && !b.barring) { b.barring = true; b.bar = 0; }
   b.barEdge = inp.barspin;
   if (b.barring) { b.bar += dt * TAU / 0.42; if (b.bar >= TAU) { b.bar = 0; b.barring = false; b.airTricks.push('barspin'); } }
-  b.superman = lerp(b.superman, can && inp.superman ? 1 : 0, 1 - Math.exp(-dt * (inp.superman ? 6 : 9)));
-  b.nohand = lerp(b.nohand, can && inp.nohand ? 1 : 0, 1 - Math.exp(-dt * (inp.nohand ? 7 : 10)));
-  if (b.superman > 0.8) b.supT += dt; else if (b.supT > 0.15) { b.airTricks.push('superman'); b.supT = 0; } else if (b.superman < 0.3) b.supT = 0;
-  if (b.nohand > 0.8) b.noT += dt; else if (b.noT > 0.15) { b.airTricks.push('nohand'); b.noT = 0; } else if (b.nohand < 0.3) b.noT = 0;
+  for (const k of HOLDS) {
+    const on = can && !!inp[k];
+    b[k] = lerp(b[k], on ? 1 : 0, 1 - Math.exp(-dt * (on ? 6.5 : 9.5)));
+    const t = b.holdT[k] || 0;
+    if (b[k] > 0.8) b.holdT[k] = t + dt;
+    else if (t > 0.15) { b.airTricks.push(k); b.holdT[k] = 0; }
+    else if (b[k] < 0.3) b.holdT[k] = 0;
+  }
   b.wheel += hs * dt / 0.36 * 0.98;
 
   // landing?
@@ -280,7 +300,7 @@ function land(b, world, h) {
   const flips = Math.round(b.flip / TAU), spins = Math.round(b.spin / TAU);
   const whipBad = b.whipping && b.whip > 0.9 && b.whip < TAU - 0.9;
   const barBad = false;
-  const poseBad = b.superman > 0.45 || b.nohand > 0.6;
+  const poseBad = b.superman > 0.45 || b.nohand > 0.6 || b.table > 0.5 || b.cancan > 0.55 || b.nofoot > 0.5;
   const shortHop = b.air < 0.35;
   // landing on the up-slope (came up short: "cased it") hurts but you ride away
   const cased = t.y > 0.08 && Math.abs(wrap(b.flip)) < 0.6 && Math.abs(wrap(b.spin)) < 0.6;
@@ -298,8 +318,7 @@ function land(b, world, h) {
   if (flips < 0) add('frontflip', -flips);
   if (spins !== 0) { const sp = Math.abs(spins); list.push(sp * 360 + ''); pts += TRICKS.spin.pts * sp * (sp > 1 ? 1.3 : 1); }
   if (b.whipping && b.whip > TAU - 0.9) b.airTricks.push('whip');
-  if (b.superman > 0.8 && b.supT > 0.15) b.airTricks.push('superman');
-  if (b.nohand > 0.8 && b.noT > 0.15) b.airTricks.push('nohand');
+  for (const k of HOLDS) if (b[k] > 0.8 && (b.holdT[k] || 0) > 0.15) b.airTricks.push(k);
   const counts = {};
   for (const k of b.airTricks) counts[k] = (counts[k] || 0) + 1;
   for (const k in counts) add(k, counts[k]);
@@ -315,7 +334,7 @@ function land(b, world, h) {
   const vt = { x: b.vel.x + n.x * into, y: b.vel.y + n.y * into, z: b.vel.z + n.z * into };
   b.vel.x = vt.x * keep; b.vel.y = vt.y * keep; b.vel.z = vt.z * keep;
   b.ground = true; b.flip = b.spin = 0; b.flipV = b.spinV = 0;
-  b.whip = 0; b.whipping = false; b.bar = 0; b.barring = false; b.superman = 0; b.nohand = 0;
+  b.whip = 0; b.whipping = false; b.bar = 0; b.barring = false; for (const k of HOLDS) b[k] = 0; b.holdT = {};
   copy(b.up, n);
   b.events.push({ type: 'land', v: into, air: b.air, perfect, cased: cased && err > 0.85 });
   if (list.length && pts > 0) b.events.push({ type: 'trick', list, pts, perfect });
@@ -333,9 +352,11 @@ export function crash(b, why) {
 export function bikeFrame(b, out) {
   if (b.ground) {
     const f = bikeForward(b.yaw, 0, out.fwd);
-    const n = b.up;
+    // riders stay upright on a side slope: keep the ground's tilt along the bike (pitch), not across it (roll)
+    const sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);          // sideways, level
+    const ns = b.up.x * sx + b.up.z * sz;
+    const n = out.up; n.x = b.up.x - sx * ns * 0.9; n.y = b.up.y; n.z = b.up.z - sz * ns * 0.9; norm(n);
     const fn = dot(f, n); f.x -= n.x * fn; f.y -= n.y * fn; f.z -= n.z * fn; norm(f);
-    copy(out.up, n);
   } else {
     bikeForward(b.yaw + b.spin, b.basePitch + b.flip, out.fwd);
     // up is at right angles to forward, in the flip plane

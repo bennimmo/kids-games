@@ -18,13 +18,14 @@ export const COLORS = {
 
 export function createBike(T, env, look = {}) {
   const root = new THREE.Group();           // placed from physics each frame
+  const body = new THREE.Group(); root.add(body);   // the whole bike; tilts sideways for a table top
   const mats = makeMaterials(T, env, look);
 
   // --------------------------------------------------------------- frame (can tailwhip around the steering axis)
   const whipPivot = new THREE.Group(); whipPivot.position.copy(HT_TOP);
   const whipAxis = STEER_AXIS.clone();
   const frame = new THREE.Group(); frame.position.copy(HT_TOP).negate();
-  whipPivot.add(frame); root.add(whipPivot);
+  whipPivot.add(frame); body.add(whipPivot);
   const tube = (a, b, r, m, r2) => {
     const d = b.clone().sub(a), len = d.length();
     const g = new THREE.CylinderGeometry(r2 ?? r, r, len, 12, 1);
@@ -75,7 +76,7 @@ export function createBike(T, env, look = {}) {
   addDecal(frame, mats);
 
   // --------------------------------------------------------------- front end: fork, wheel, bars (steers + barspins)
-  const steer = new THREE.Group(); steer.position.copy(HT_TOP); root.add(steer);
+  const steer = new THREE.Group(); steer.position.copy(HT_TOP); body.add(steer);
   const front = new THREE.Group(); front.position.copy(HT_TOP).negate(); steer.add(front);
   const crown = HT_BOT.clone().add(STEER_AXIS.clone().multiplyScalar(-0.06));
   for (const s of [-1, 1]) {
@@ -149,6 +150,10 @@ export function createBike(T, env, look = {}) {
     steer.quaternion.copy(steerQ);
     whipQ.setFromAxisAngle(whipAxis, p.whip);
     whipPivot.quaternion.copy(whipQ);
+    // table top: bike lies over sideways, pivoting near the rider's hands
+    const tb = p.table || 0;
+    body.position.set(0, 0, 0); body.rotation.set(0, 0, 0);
+    if (tb > 0.01) { const piv = V(0, 1.0, 0.1); body.rotation.z = -tb * 1.15; body.position.copy(piv).sub(piv.clone().applyEuler(body.rotation)); }
     if (p.crashed) return;
 
     const c = p.crouch, l = p.lean, s = p.superman, n = p.nohand, m = p.manual;
@@ -175,6 +180,10 @@ export function createBike(T, env, look = {}) {
       sh = lerpV(sh, V(0, 1.5, -0.08), n); hip = lerpV(hip, V(0, 1.02, -0.36), n);
       hands = hands.map((h, i) => lerpV(h, V(i ? -0.78 : 0.78, 1.55, -0.02), n));
     }
+    const cc = p.cancan || 0, nf = p.nofoot || 0;
+    if (cc > 0.01) feet[1] = lerpV(feet[1], V(0.32, 0.72, 0.25), cc);                      // one leg over the top tube
+    if (nf > 0.01) { feet = feet.map((f, i) => lerpV(f, V(i ? -0.55 : 0.55, 0.85, 0.05), nf)); hip = lerpV(hip, V(0, 1.12, -0.3), nf); }
+    if (tb > 0.01) hip = lerpV(hip, V(-0.12, 1.12, -0.28), tb);
     if (whipOn) {
       const k = Math.min(1, Math.sin(Math.min(Math.PI, p.whip * 0.5 + 0.3)) * 2);
       feet = feet.map((f, i) => lerpV(f, V(i ? -0.38 : 0.38, 0.78, -0.25), k));

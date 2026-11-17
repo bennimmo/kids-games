@@ -59,23 +59,26 @@ function stones(g, size, seed, count, rMin, rMax, cols) {
   }
 }
 
-export function makeTextures(size = 512) {
+// B = the map's look (biomes.js): colours for ground, dirt, rock
+export function makeTextures(size = 512, B) {
   const T = {};
-  // ---- grass ground (under the blades): mixed greens, dry bits, moss
+  const G = B.grass, F = B.floor, D = B.dirt, RK = B.rock;
+  // ---- open ground (grass / sand / snow)
   T.grass = toTex(paint(size, 11, (u, v, N) => {
     const a = N(u, v, 4, 6), b = N(u + 0.3, v, 32, 3), dry = N(u, v + 0.5, 3, 3);
     const k = a * 0.7 + b * 0.3;
-    let r = 52 + k * 50, g2 = 78 + k * 62, bl = 28 + k * 22;
+    let r = G[0] + k * G[3], g2 = G[1] + k * G[4], bl = G[2] + k * G[5];
     const d = Math.max(0, dry - 0.55) * 3;
-    r += d * 60; g2 += d * 25; bl += d * 10;
+    r += d * B.dry[0]; g2 += d * B.dry[1]; bl += d * B.dry[2];
+    if (B.snow) { const sp = N(u, v, 64, 2); r += sp * 10; g2 += sp * 10; bl += sp * 8; }
     return [r, g2, bl];
   }).c);
 
-  // ---- forest floor (needles and earth, under trees)
+  // ---- ground under trees (needles and earth / darker sand / old snow)
   T.floor = toTex(paint(size, 19, (u, v, N) => {
     const a = N(u, v, 6, 6), n = N(u, v, 64, 2);
     const k = a * 0.6 + n * 0.4;
-    return [70 + k * 55, 52 + k * 38, 34 + k * 22];
+    return [F[0] + k * F[3], F[1] + k * F[4], F[2] + k * F[5]];
   }).c);
 
   // ---- dirt trail: packed brown earth with a few stones
@@ -84,9 +87,9 @@ export function makeTextures(size = 512) {
     const { c, g } = paint(size, 23, (u, v, N) => {
       const a = N(u, v, 3, 5), b = N(u + 0.5, v, 12, 3), f = N(u, v + 0.3, 40, 2);
       const k = 0.86 + a * 0.22 + (b - 0.5) * 0.12 + (f - 0.5) * 0.06;
-      return [128 * k, 93 * k, 63 * k];
+      return [D[0] * k, D[1] * k, D[2] * k];
     });
-    stones(g, size, 5, 70, 1.2 * k5, 3 * k5, [['#cbb89c', '#8a755e'], ['#b3a08a', '#76634f']]);
+    stones(g, size, 5, 70, 1.2 * k5, 3 * k5, B.stones);
     stones(g, size, 6, 12, 3 * k5, 6 * k5, [['#bfb5a6', '#7a7064']]);
     T.dirt = toTex(c);
   }
@@ -103,8 +106,9 @@ export function makeTextures(size = 512) {
     const a = N(u, v, 4, 6), cr = Math.abs(N(u, v + 0.7, 8, 4) - 0.5), lic = N(u + 0.4, v, 10, 4);
     let k = 95 + a * 90;
     if (cr < 0.02) k *= 0.55;
-    let r = k, g2 = k * 0.98, bl = k * 0.94;
-    if (lic > 0.62) { const m = (lic - 0.62) * 3; r = r * (1 - m) + 150 * m; g2 = g2 * (1 - m) + 160 * m; bl = bl * (1 - m) + 95 * m; }
+    let r = k * RK[0], g2 = k * RK[1], bl = k * RK[2];
+    if (B.terrace) { const band = N(u * 0.1, v * 2, 8, 3); r *= 0.85 + band * 0.3; g2 *= 0.85 + band * 0.25; }
+    if (B.lichen && lic > 0.62) { const m = (lic - 0.62) * 3; r = r * (1 - m) + 150 * m; g2 = g2 * (1 - m) + 160 * m; bl = bl * (1 - m) + 95 * m; }
     return [r, g2, bl];
   }).c);
 
@@ -144,6 +148,54 @@ export function makeTextures(size = 512) {
     T.branch = toTex(c, true, false);
     T.branch.wrapS = T.branch.wrapT = THREE.ClampToEdgeWrapping;
   }
+
+  // ---- pine branch with snow on top
+  {
+    const c = canvas(256), g = c.getContext('2d');
+    g.drawImage(T.branch.image, 0, 0);
+    const r = rng(78);
+    g.globalCompositeOperation = 'source-atop';
+    for (let i = 0; i < 260; i++) { const x = r() * 256, y = r() * 256; g.fillStyle = `rgba(250,252,255,${0.55 + r() * 0.4})`; g.beginPath(); g.ellipse(x, y, 4 + r() * 8, 2 + r() * 3, 0, 0, 7); g.fill(); }
+    T.branchSnow = toTex(c, true, false); T.branchSnow.wrapS = T.branchSnow.wrapT = THREE.ClampToEdgeWrapping;
+  }
+  // ---- leaf clusters (birch), scale leaves (juniper), fern, dry shrub
+  const cardTex = (seed, draw) => { const c = canvas(256), g = c.getContext('2d'), r = rng(seed); g.clearRect(0, 0, 256, 256); draw(g, r); const t = toTex(c, true, false); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; };
+  T.leaves = cardTex(81, (g, r) => {
+    for (let i = 0; i < 420; i++) {
+      const a = r() * 6.28, d = Math.sqrt(r()) * 112, x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d * 0.85;
+      const sh = 0.6 + r() * 0.55;
+      g.fillStyle = `rgb(${Math.round(92 * sh)},${Math.round(138 * sh)},${Math.round(52 * sh)})`;
+      g.beginPath(); g.ellipse(x, y, 5 + r() * 4, 3 + r() * 2, r() * 3, 0, 7); g.fill();
+    }
+  });
+  T.juniper = cardTex(82, (g, r) => {
+    for (let i = 0; i < 900; i++) {
+      const a = r() * 6.28, d = Math.sqrt(r()) * 115, x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d * 0.8;
+      const sh = 0.55 + r() * 0.5;
+      g.fillStyle = `rgb(${Math.round(70 * sh)},${Math.round(104 * sh)},${Math.round(80 * sh)})`;
+      g.beginPath(); g.arc(x, y, 2.5 + r() * 3, 0, 7); g.fill();
+    }
+  });
+  T.fern = cardTex(83, (g, r) => {
+    g.strokeStyle = '#3c5a26'; g.lineWidth = 3; g.beginPath(); g.moveTo(128, 250); g.quadraticCurveTo(120, 120, 128, 8); g.stroke();
+    for (let i = 0; i < 26; i++) {
+      const t = i / 26, y = 245 - t * 232, x = 128 - Math.sin(t * 3) * 4, l = (1 - Math.abs(t - 0.35) * 1.2) * 70;
+      for (const sd of [-1, 1]) {
+        const sh = 0.7 + r() * 0.4;
+        g.fillStyle = `rgb(${Math.round(70 * sh)},${Math.round(118 * sh)},${Math.round(44 * sh)})`;
+        g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + sd * l * 0.5, y - 10, x + sd * l, y - 4 - t * 6); g.quadraticCurveTo(x + sd * l * 0.5, y + 2, x, y + 4); g.fill();
+      }
+    }
+  });
+  T.shrub = cardTex(84, (g, r) => {
+    const twig = (x, y, a, l, d) => {
+      if (d > 4 || l < 6) { g.fillStyle = `rgba(${120 + r() * 40},${110 + r() * 30},${60 + r() * 20},1)`; g.beginPath(); g.arc(x, y, 3 + r() * 3, 0, 7); g.fill(); return; }
+      const x2 = x + Math.cos(a) * l, y2 = y + Math.sin(a) * l;
+      g.strokeStyle = '#6b5240'; g.lineWidth = Math.max(1, 4 - d); g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
+      twig(x2, y2, a - 0.4 - r() * 0.3, l * 0.72, d + 1); twig(x2, y2, a + 0.4 + r() * 0.3, l * 0.72, d + 1);
+    };
+    for (let i = 0; i < 5; i++) twig(128 + (r() - 0.5) * 30, 250, -Math.PI / 2 + (r() - 0.5) * 1.2, 50 + r() * 20, 0);
+  });
 
   // ---- soft round puff (dust)
   {

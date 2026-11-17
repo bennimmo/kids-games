@@ -68,3 +68,7 @@
 .mr-swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .mr-sw { width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent; padding: 0; }
 .mr-sw.on { border-color: #fff; }
+.mr-combo { font-size: 17px; font-weight: 900; color: #9cff9c; text-shadow: 0 2px 8px rgba(0,0,0,.5); min-height: 22px; }
+.mr-route { position: absolute; left: 50%; top: 76px; transform: translateX(-50%); font-size: 18px; font-weight: 900; padding: 3px 12px; border-radius: 12px; background: rgba(14,18,24,.5); opacity: 0; transition: opacity .25s; white-space: nowrap; }
+.mr-route.show { opacity: 1; }
+.mr-tb.tweak { background: rgba(124,77,255,.45); }

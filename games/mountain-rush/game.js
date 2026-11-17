@@ -1,15 +1,17 @@
 // Mountain Rush: 3D downhill mountain biking.
 //
-// Step 1 (test version): one map (Pine Ridge), one trail with jumps, drops, berms and rollers,
-// one bike, air tricks (flips, 360s, tailwhip, barspin, superman, no hander), manuals,
-// crashes, instant reset to the last checkpoint.
+// Three maps (forest, desert, snow), each with two routes that split, cross and tangle.
+// Air tricks (flips, 360s, tailwhip, barspin, superman, no hander, table top, can-can,
+// no footer) chain into combos, manuals, pumping, crashes, instant reset to checkpoints.
+// Keys follow Descenders where it makes sense.
 //
-// Files: world.js (mountain + trail maths), physics.js (bike, tricks, crashes),
+// Files: biomes.js (maps + looks), world.js (mountain + route maths), physics.js (bike, tricks, crashes),
 // scene.js (sky, ground, trees, grass, gates, dust), bike.js (bike + rider model),
 // textures.js (textures painted in code).
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { audioCtx } from '../../js/engine/sound.js';
 import { buildWorld, MAPS } from './world.js';
+import { MAP_ORDER } from './biomes.js';
 import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.js';
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS } from './bike.js';
@@ -17,14 +19,15 @@ import { makeTextures } from './textures.js';
 import { clamp, lerp } from '../sky-pilot/noise.js';
 
 const PREFS_KEY = 'mountain-rush-v1';
+const COMBO_GAP = 2.5;      // seconds on the ground before a combo is banked
 const TOUCH = navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
 const STEP = 1 / 120;
 const PARAMS = new URLSearchParams(location.search);
 
 const QUALITY = {
-  low: { name: 'low', dpr: 1, shadows: 0, shadowBox: 40, trees: 0.55, grass: 0, grassPatch: 0, particles: 300, fog: 0.0105, viewDist: 190 },
-  mid: { name: 'mid', dpr: 1.25, shadows: 2048, shadowBox: 42, trees: 0.8, grass: 0.7, grassPatch: 40, particles: 500, fog: 0.0088, viewDist: 230 },
-  high: { name: 'high', dpr: 2, shadows: 4096, shadowBox: 48, trees: 1, grass: 0.5, grassPatch: 48, particles: 800, fog: 0.0076, viewDist: 260 },
+  low: { name: 'low', dpr: 1, shadows: 0, shadowBox: 40, trees: 0.55, plants: 0.3, grass: 0, grassPatch: 0, particles: 300, fog: 0.0105, viewDist: 190 },
+  mid: { name: 'mid', dpr: 1.25, shadows: 2048, shadowBox: 42, trees: 0.8, plants: 0.6, grass: 0.7, grassPatch: 40, particles: 500, fog: 0.0088, viewDist: 230 },
+  high: { name: 'high', dpr: 2, shadows: 4096, shadowBox: 48, trees: 1, plants: 1, grass: 0.5, grassPatch: 48, particles: 800, fog: 0.0076, viewDist: 260 },
 };
 
 export function mount(stage) {
@@ -39,7 +42,7 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0 } };
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0 }, map: 'pine-ridge' };
     try { return { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -57,7 +60,7 @@ export function mount(stage) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // ---------------------------------------------------------------- state
-  const S = { phase: 'loading', paused: false, map: 'pine-ridge', time: 0, timing: false, score: 0, cp: 0, finished: false, crashT: 0, msgT: 0 };
+  const S = { phase: 'loading', paused: false, map: MAPS[prefs.map] ? prefs.map : 'pine-ridge', time: 0, timing: false, score: 0, cp: 0, gate: null, finished: false, crashT: 0, msgT: 0, combo: null, hideUI: false, route: 0 };
   let alive = true, raf = 0, W = null, scene = null, bike = null, rider = null, Q = QUALITY[prefs.quality] || QUALITY.high;
   const camera = new THREE.PerspectiveCamera(70, 1, 0.08, 600);
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), yaw: 0, fov: 70, shake: 0 };
@@ -67,7 +70,7 @@ export function mount(stage) {
     ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Mountain Rush</div><h1 class="ui-title">${txt}</h1><div class="mr-load"><i style="width:${Math.round(f * 100)}%"></i></div></div></div>`;
   }
   const tick = () => new Promise(r => setTimeout(r, 16));
-  let T = null, envTex = null;
+  let T = null, envTex = null, tBiome = '';
 
   async function build() {
     S.phase = 'loading';
@@ -75,12 +78,13 @@ export function mount(stage) {
     if (!alive) return;
     W = buildWorld(S.map);
     loadingUI('Painting the ground', 0.3); await tick();
-    if (!T) T = makeTextures(TOUCH ? 512 : 1024);
+    if (!T || tBiome !== W.biome) { if (T) Object.values(T).forEach(t => t.dispose && t.dispose()); T = makeTextures(TOUCH ? 512 : 1024, W.B); tBiome = W.biome; envTex = null; }
     loadingUI('Growing the forest', 0.5); await tick();
     if (scene) disposeScene(scene.scene);
     renderer.shadowMap.enabled = Q.shadows > 0;
     scene = createScene(W, T, Q);
     if (!envTex) envTex = makeEnv();
+    if (bike) bike.dispose && bike.dispose();
     loadingUI('Pumping up the tyres', 0.85); await tick();
     bike = createBike(T, envTex, lookColors());
     bike.root.matrixAutoUpdate = false; bike.rider.matrixAutoUpdate = false;
@@ -102,7 +106,7 @@ export function mount(stage) {
     const es = new THREE.Scene();
     const sky = scene.scene.children.find(o => o.isMesh && o.material && o.material.type === 'ShaderMaterial');
     if (sky) es.add(sky.clone());
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(400, 24), new THREE.MeshBasicMaterial({ color: 0x3c4a32 }));
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(400, 24), new THREE.MeshBasicMaterial({ color: W.B.snow ? 0xc8d0d8 : W.B.terrace ? 0x8a5a3a : 0x3c4a32 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -20; es.add(ground);
     const tex = pm.fromScene(es, 0.03, 1, 1000).texture;
     pm.dispose();
@@ -122,39 +126,65 @@ export function mount(stage) {
   const keys = new Set();
   const onKey = e => {
     if (e.type === 'keydown') {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+      if (S.phase === 'ride' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Backspace'].includes(e.code)) e.preventDefault();
       if (!keys.has(e.code)) pressed(e.code);
       keys.add(e.code);
-    } else keys.delete(e.code);
+    } else { keys.delete(e.code); released(e.code); }
   };
   window.addEventListener('keydown', onKey);
   window.addEventListener('keyup', onKey);
   const onBlur = () => keys.clear();
   window.addEventListener('blur', onBlur);
+  // Keys (like Descenders): Z pedal, ←/→ steer, ↑/↓ lean (flip in the air; ↓ brakes on the ground),
+  // X bunny hop, S crouch / pump, D stretch / counterpump, Space tweak (in the air),
+  // C + arrows trick modifier (tap C = camera), A "Hey!", R respawn, Backspace start,
+  // T set respawn point, V reset camera, U hide the HUD. J K L I still do tricks too.
+  let cUsed = false;
   function pressed(code) {
+    if (code === 'KeyC') cUsed = false;
     if (S.phase !== 'ride') return;
     if (code === 'KeyR' || code === 'Enter') resetToCheckpoint();
-    else if (code === 'KeyT' || code === 'Backspace') restartRun();
-    else if (code === 'KeyC') toggleCam();
+    else if (code === 'Backspace') restartRun();
+    else if (code === 'KeyT') setRespawn();
+    else if (code === 'KeyV') snapCamera();
+    else if (code === 'KeyU') toggleUI();
+    else if (code === 'KeyA') sayHey();
     else if (code === 'Escape' || code === 'KeyP') togglePause();
   }
-  const touchState = { x: 0, y: 0, jump: false, whip: false, bar: false, sup: false, noh: false, man: false };
+  function released(code) {
+    if (code === 'KeyC' && !cUsed && S.phase === 'ride') toggleCam();
+  }
+  const touchState = { x: 0, y: 0, jump: false, whip: false, bar: false, sup: false, noh: false, man: false, tweak: false };
   let padPrev = {};
   function readInput() {
     const k = c => keys.has(c);
-    let steer = (k('ArrowRight') || k('KeyD') ? 1 : 0) - (k('ArrowLeft') || k('KeyA') ? 1 : 0);
-    let thr = (k('ArrowUp') || k('KeyW') ? 1 : 0) - (k('ArrowDown') || k('KeyS') ? 1 : 0);
+    const L = k('ArrowLeft'), R = k('ArrowRight'), U = k('ArrowUp'), D = k('ArrowDown');
+    const air = rider && !rider.ground;
+    const mod = k('KeyC'), tweak = k('Space');
+    if (mod && (L || R || U || D)) cUsed = true;
     const inp = {
-      steer, throttle: thr, jump: k('Space'),
+      steer: (R ? 1 : 0) - (L ? 1 : 0),
+      throttle: air ? (U ? 1 : 0) - (D ? 1 : 0) : (k('KeyZ') || U ? 1 : 0) - (D ? 1 : 0),
+      jump: k('KeyX'), pump: k('KeyS'), stretch: k('KeyD'),
       whip: k('KeyJ'), barspin: k('KeyI'), superman: k('KeyK'), nohand: k('KeyL'),
       manual: k('KeyQ') || k('ShiftLeft') || k('ShiftRight'),
     };
+    // trick modifier: C + arrows
+    if (mod) {
+      inp.flipLock = inp.spinLock = true;
+      if (air) { inp.whip ||= L; inp.barspin ||= R; inp.superman ||= U; inp.nohand ||= D; }
+      else if (D) { inp.manual = true; inp.throttle = 0; }
+      if (air) { inp.steer = 0; inp.throttle = 0; }
+    }
+    // tweak: Space (with ← can-can, → no footer)
+    if (tweak && air) { inp.spinLock = true; if (L) inp.cancan = true; else if (R) inp.nofoot = true; else inp.table = true; inp.steer = 0; }
     // touch
     if (TOUCH) {
       if (Math.abs(touchState.x) > 0.05) inp.steer = touchState.x;
       if (Math.abs(touchState.y) > 0.05) inp.throttle = touchState.y;
       inp.jump = inp.jump || touchState.jump; inp.whip = inp.whip || touchState.whip; inp.barspin = inp.barspin || touchState.bar;
       inp.superman = inp.superman || touchState.sup; inp.nohand = inp.nohand || touchState.noh; inp.manual = inp.manual || touchState.man;
+      if (touchState.tweak && air) { inp.spinLock = true; if (touchState.x < -0.4) inp.cancan = true; else if (touchState.x > 0.4) inp.nofoot = true; else inp.table = true; inp.steer = 0; }
     }
     // gamepad
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -165,7 +195,7 @@ export function mount(stage) {
       const lx = dz(ax[0] || 0), ly = dz(ax[1] || 0);
       if (lx) inp.steer = lx;
       const trig = val(7) - val(6);
-      if (rider && !rider.ground) { if (ly) inp.throttle = -ly; }
+      if (air) { if (ly) inp.throttle = -ly; if (val(6) > 0.5) { inp.spinLock = true; if (lx < -0.4) inp.cancan = true; else if (lx > 0.4) inp.nofoot = true; else inp.table = true; inp.steer = 0; } }
       else if (Math.abs(trig) > 0.05) inp.throttle = trig; else if (ly) inp.throttle = -ly;
       inp.jump = inp.jump || bt(0); inp.whip = inp.whip || bt(2); inp.superman = inp.superman || bt(3); inp.nohand = inp.nohand || bt(1);
       inp.barspin = inp.barspin || bt(5); inp.manual = inp.manual || bt(4);
@@ -173,7 +203,6 @@ export function mount(stage) {
       if (edge(8)) resetToCheckpoint();
       if (edge(9)) togglePause();
       if (edge(3) && S.phase === 'menu') startRide();
-      if (edge(12) || edge(13)) { /* d-pad reserved */ }
       if (edge(10) || edge(11)) toggleCam();
       for (let i = 0; i < gp.buttons.length; i++) padPrev[gp.index + ':' + i] = bt(i);
     }
@@ -185,8 +214,9 @@ export function mount(stage) {
   function buildHUD() {
     hudEl.innerHTML = `
       <div class="mr-top"><div class="mr-pill mr-time">0:00.0</div><div class="mr-pill mr-cp">CP 0/${W.checkpoints.length - 1}</div></div>
-      <div class="mr-prog"><i></i>${W.checkpoints.slice(1).map(c => `<em style="left:${(c.i - W.path.start) / (W.path.finish - W.path.start) * 100}%"></em>`).join('')}</div>
-      <div class="mr-score"><span>Tricks</span><b>0</b></div>
+      <div class="mr-prog"><i></i>${W.checkpoints.slice(1).map(c => `<em style="left:${(c.z - W.startZ) / (W.finishZ - W.startZ) * 100}%"></em>`).join('')}</div>
+      <div class="mr-score"><span>Tricks</span><b>0</b><div class="mr-combo"></div></div>
+      <div class="mr-route"></div>
       <div class="mr-speed"><b>0</b><small>km/h</small></div>
       <div class="mr-trick"><div class="t"></div><div class="p"></div></div>
       <div class="mr-airname"></div>
@@ -201,7 +231,7 @@ export function mount(stage) {
   }
   const H = {};
   function hudRefs() {
-    for (const [k, sel] of Object.entries({ time: '.mr-time', cp: '.mr-cp', prog: '.mr-prog i', score: '.mr-score b', speed: '.mr-speed b', trick: '.mr-trick', trickT: '.mr-trick .t', trickP: '.mr-trick .p', air: '.mr-airname', msg: '.mr-msg' })) H[k] = hudEl.querySelector(sel);
+    for (const [k, sel] of Object.entries({ time: '.mr-time', cp: '.mr-cp', combo: '.mr-combo', route: '.mr-route', prog: '.mr-prog i', score: '.mr-score b', speed: '.mr-speed b', trick: '.mr-trick', trickT: '.mr-trick .t', trickP: '.mr-trick .p', air: '.mr-airname', msg: '.mr-msg' })) H[k] = hudEl.querySelector(sel);
   }
   const fmt = t => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`; };
   let trickHide = 0, msgHide = 0;
@@ -228,7 +258,7 @@ export function mount(stage) {
     pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
     ui.appendChild(pad);
     const box = document.createElement('div'); box.className = 'mr-tbtns';
-    const btns = [['whip', 'Tail<br>whip'], ['bar', 'Bar<br>spin'], ['reset', '↺<br>Reset'], ['sup', 'Super<br>man'], ['noh', 'No<br>hands'], ['man', 'Man<br>ual']];
+    const btns = [['whip', 'Tail<br>whip'], ['bar', 'Bar<br>spin'], ['reset', '↺<br>Reset'], ['sup', 'Super<br>man'], ['noh', 'No<br>hands'], ['man', 'Man<br>ual'], ['tweak', 'Tweak']];
     box.innerHTML = btns.map(([k, l]) => `<button class="mr-tb ${k}" data-k="${k}">${l}</button>`).join('') + '<button class="mr-tb jump" data-k="jump">JUMP</button>';
     box.querySelectorAll('.mr-tb').forEach(b => {
       const k = b.dataset.k;
@@ -243,16 +273,15 @@ export function mount(stage) {
   function menu() {
     S.phase = 'menu';
     hudEl.innerHTML = '';
-    const best = prefs.best[S.map];
     const sw = (kind, list, cur) => list.map((c, i) => `<button class="mr-sw${i === cur ? ' on' : ''}" data-kind="${kind}" data-i="${i}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="colour"></button>`).join('');
     ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel wide">
       <div class="ui-kicker">Downhill</div><h1 class="ui-title">Mountain Rush</h1>
-      <div class="mr-maps">
-        <button class="mr-map on">${mapPic('#9fc3d4', '#3f6b45', '#2c4a30', '#7a5634')}<div class="nm">${MAPS[S.map].name}<small>${MAPS[S.map].sub}</small></div></button>
-        <button class="mr-map" disabled>${mapPic('#f2c48d', '#b5532c', '#8a3b1d', '#c9824b')}<div class="nm">Red Rock<small>Coming soon</small></div></button>
-        <button class="mr-map" disabled>${mapPic('#cfe0ee', '#f5f8fb', '#9fb3c2', '#6d7f8c')}<div class="nm">Snow Peak<small>Coming soon</small></div></button>
-      </div>
-      ${best ? `<div class="mr-best">Best: ${fmt(best.time)} · ${best.score.toLocaleString()} trick points</div>` : ''}
+      <div class="mr-maps">${MAP_ORDER.map(id => {
+        const pic = { 'pine-ridge': ['#9fc3d4', '#3f6b45', '#2c4a30', '#7a5634'], 'red-rock': ['#f2c48d', '#b5532c', '#8a3b1d', '#e0a070'], 'snow-peak': ['#cfe0ee', '#f5f8fb', '#9fb3c2', '#6d7f8c'] }[id];
+        const bt = prefs.best[id];
+        return `<button class="mr-map${id === S.map ? ' on' : ''}" data-map="${id}">${mapPic(...pic)}<div class="nm">${MAPS[id].name}<small>${bt ? 'Best ' + fmt(bt.time) : MAPS[id].sub}</small></div></button>`;
+      }).join('')}</div>
+      <div class="mr-best">${MAPS[S.map].routes.map(r => r.name).join(' and ')}: two routes that cross. Swap lines whenever you like.</div>
       <div class="ui-label">Bike</div><div class="mr-swatches">${sw('frame', COLORS.frame, prefs.look.frame)}</div>
       <div class="ui-label">Jersey</div><div class="mr-swatches">${sw('jersey', COLORS.jersey, prefs.look.jersey)}</div>
       <div class="ui-label">Graphics</div>
@@ -261,6 +290,11 @@ export function mount(stage) {
       ${controlsHTML()}
     </div></div>`;
     click(ui.querySelector('.mr-go'), startRide);
+    ui.querySelectorAll('.mr-map').forEach(b => click(b, () => {
+      if (b.dataset.map === S.map) return;
+      S.map = b.dataset.map; prefs.map = S.map; savePrefs();
+      build();
+    }));
     ui.querySelectorAll('.mr-sw').forEach(b => click(b, () => {
       prefs.look[b.dataset.kind] = +b.dataset.i; savePrefs();
       bike.setLook(lookColors());
@@ -286,15 +320,17 @@ export function mount(stage) {
     if (TOUCH) return `<div class="ui-label">How to ride</div><div class="mr-keys">
       <kbd>Stick</kbd><span>Steer. Up = pedal, down = brake. In the air: flip and spin</span>
       <kbd>Jump</kbd><span>Hold to crouch, let go to pop. Pop at the top of a jump to go higher</span>
-      <kbd>Tricks</kbd><span>In the air: Tailwhip, Barspin, Superman, No hands. Let go before you land!</span>
+      <kbd>Tricks</kbd><span>In the air: Tailwhip, Barspin, Superman, No hands. Tweak = table top (stick left: can-can, right: no footer). Let go before you land!</span>
+      <kbd>Combo</kbd><span>Land tricks one after another to build a combo. Crash and you lose it</span>
       <kbd>↺</kbd><span>Back to the last checkpoint</span></div>`;
     return `<div class="ui-label">How to ride</div><div class="mr-keys">
-      <kbd>W A S D</kbd><span>or arrows: pedal, brake, steer. In the air: flip (W/S) and spin (A/D)</span>
-      <kbd>Space</kbd><span>Hold to crouch, let go to jump. Pop at the lip to go higher</span>
-      <kbd>J K L I</kbd><span>Air tricks: Tailwhip, Superman, No hander, Barspin. Let go before landing!</span>
-      <kbd>Q / Shift</kbd><span>Manual (wheelie). Balance with W/S</span>
-      <kbd>R</kbd><span>Back to the last checkpoint &nbsp; <kbd>T</kbd> restart from the top &nbsp; <kbd>C</kbd> camera</span>
-      <kbd>🎮</kbd><span>Gamepad works too: stick, triggers, A jump, X Y B RB tricks</span></div>`;
+      <kbd>Z</kbd><span>Pedal &nbsp; <kbd>← →</kbd> steer &nbsp; <kbd>↑ ↓</kbd> lean (↓ brakes; in the air: flip)</span>
+      <kbd>X</kbd><span>Bunny hop (hold, then let go at a lip to go higher)</span>
+      <kbd>S</kbd><span>Crouch / pump: hold going down rollers for speed &nbsp; <kbd>D</kbd> stretch to stay low off lips</span>
+      <kbd>C + arrows</kbd><span>Tricks in the air: ← tailwhip, → barspin, ↑ superman, ↓ no hander. On the ground C + ↓ = manual</span>
+      <kbd>Space</kbd><span>Tweak in the air: table top (with ← can-can, → no footer). Let go before landing!</span>
+      <kbd>R</kbd><span>Respawn &nbsp; <kbd>Backspace</kbd> start &nbsp; <kbd>T</kbd> set respawn point &nbsp; <kbd>C</kbd> camera &nbsp; <kbd>V</kbd> reset camera &nbsp; <kbd>U</kbd> hide HUD &nbsp; <kbd>A</kbd> say hey</span>
+      <kbd>🎮</kbd><span>Gamepad: stick, triggers, A jump, X Y B RB tricks, LT tweak in the air</span></div>`;
   }
 
   function startRide() {
@@ -306,7 +342,7 @@ export function mount(stage) {
   }
   function restartRun() {
     placeAt(rider, W, W.start);
-    S.time = 0; S.timing = false; S.score = 0; S.cp = 0; S.finished = false; S.crashT = 0;
+    S.time = 0; S.timing = false; S.score = 0; S.cp = 0; S.gate = null; S.finished = false; S.crashT = 0; S.combo = null; S.route = 0;
     snapCamera();
     if (H.score) { H.score.textContent = '0'; H.cp.textContent = `CP 0/${W.checkpoints.length - 1}`; }
     if (S.phase === 'ride' || S.phase === 'done') { S.phase = 'ride'; if (ui.querySelector('.ui-overlay')) buildHUD(), hudRefs(); }
@@ -314,8 +350,8 @@ export function mount(stage) {
   function resetToCheckpoint() {
     if (S.phase !== 'ride') return;
     if (S.finished) { restartRun(); return; }
-    const c = W.checkpoints[S.cp];
-    placeAt(rider, W, c);
+    placeAt(rider, W, S.gate || W.start);
+    if (S.combo) loseCombo();
     S.crashT = 0;
     snapCamera();
   }
@@ -336,6 +372,26 @@ export function mount(stage) {
     }
   }
   function toggleCam() { prefs.cam = prefs.cam === 'chase' ? 'helmet' : 'chase'; savePrefs(); }
+  function toggleUI() { S.hideUI = !S.hideUI; hudEl.style.display = S.hideUI ? 'none' : ''; ui.querySelectorAll('.mr-tr').forEach(e => { e.style.display = S.hideUI ? 'none' : ''; }); }
+  function setRespawn() {
+    if (!rider.ground || rider.crashed) return;
+    S.gate = { x: rider.pos.x, z: rider.pos.z, yaw: rider.yaw, own: true };
+    showMsg('Respawn point set', 1.2); snd('cp');
+  }
+  function sayHey() { showMsg('👋 Hey!', 1); snd('hey'); S.hey = performance.now(); }
+  // combos: tricks landed one after another add up; banked after COMBO_GAP seconds on the ground
+  function addCombo(list, pts) {
+    if (!S.combo) S.combo = { pts: 0, n: 0, t: COMBO_GAP };
+    S.combo.pts += pts; S.combo.n++; S.combo.t = COMBO_GAP;
+  }
+  function bankCombo() {
+    const c = S.combo; S.combo = null;
+    if (!c) return;
+    const total = c.pts * c.n;
+    S.score += total;
+    if (c.n > 1) { showTrick([`Combo x${c.n}`], total, ''); snd('combo'); }
+  }
+  function loseCombo() { if (S.combo && S.combo.n > 1) showMsg('Combo lost!', 1.2); S.combo = null; }
 
   function finishRun() {
     S.finished = true; S.timing = false;
@@ -389,6 +445,8 @@ export function mount(stage) {
     else if (kind === 'cp') { tone(880, 880, 0.12, 0.15, 'triangle'); tone(1175, 1175, 0.2, 0.15, 'triangle', 0.12); }
     else if (kind === 'finish') { [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.25, 0.15, 'triangle', i * 0.12)); burst(1.2, 1500, 0.15, 'bandpass'); }
     else if (kind === 'pop') { burst(0.12, 600, 0.15); }
+    else if (kind === 'combo') { [784, 988, 1175, 1568].forEach((f, i) => tone(f, f, 0.14, 0.12, 'triangle', i * 0.07)); }
+    else if (kind === 'hey') { tone(520, 640, 0.12, 0.18, 'square'); tone(640, 520, 0.16, 0.18, 'square', 0.13); }
     else if (kind === 'click') { tone(3000, 2000, 0.015, 0.03, 'square'); }
   }
   function updateAudio(dt) {
@@ -434,7 +492,7 @@ export function mount(stage) {
     }
     bike.root.matrix.copy(m4); bike.root.matrixWorldNeedsUpdate = true;
     bike.rider.matrix.copy(m4); bike.rider.matrixWorldNeedsUpdate = true;
-    bike.pose({ steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 });
+    bike.pose({ steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 });
   }
   function startCrash() {
     const b = rider;
@@ -534,7 +592,7 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- game step
-  let acc = 0, last = performance.now(), airShow = 0;
+  let acc = 0, last = performance.now(), airShow = 0, routeHide = 0;
   function frame(now) {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
@@ -557,10 +615,16 @@ export function mount(stage) {
       else { crashSim.bike = null; }
       if (S.timing) S.time += dt;
       // start timer, checkpoints, finish
-      if (!S.timing && !S.finished && rider.progress > W.path.start) S.timing = true;
+      if (!S.timing && !S.finished && rider.pos.z > W.startZ + 2) S.timing = true;
       const nextCp = W.checkpoints[S.cp + 1];
-      if (nextCp && rider.progress >= nextCp.i && !rider.crashed) { S.cp++; snd('cp'); showMsg(`Checkpoint ${S.cp}  ·  ${fmt(S.time)}`); }
-      if (!S.finished && rider.progress >= W.path.finish && !rider.crashed) { finishRun(); showMsg(`Finish! ${fmt(S.time)}`, 3); }
+      if (nextCp && !rider.crashed && rider.onTrail) {
+        const g = nextCp.gates.find(g => g.r === rider.route && rider.progress >= g.i) || (rider.pos.z > nextCp.z + 6 ? nextCp.gates.reduce((a, b) => (Math.hypot(a.x - rider.pos.x, a.z - rider.pos.z) < Math.hypot(b.x - rider.pos.x, b.z - rider.pos.z) ? a : b)) : null);
+        if (g) { S.cp++; if (!S.gate || !S.gate.own || S.gate.z < g.z) S.gate = g; snd('cp'); showMsg(`Checkpoint ${S.cp}  ·  ${fmt(S.time)}`); }
+      }
+      if (!S.finished && !rider.crashed && rider.progress >= W.routes[rider.route].finish) { bankCombo(); finishRun(); showMsg(`Finish! ${fmt(S.time)}`, 3); }
+      if (rider.route !== S.route && rider.onTrail) { S.route = rider.route; if (H.route) { H.route.textContent = W.routes[S.route].name; H.route.classList.add('show'); routeHide = 2; } }
+      // combo timer runs while you're riding on the ground (manuals keep it going)
+      if (S.combo && rider.ground && !rider.crashed && !rider.manual) { S.combo.t -= dt; if (S.combo.t <= 0) bankCombo(); }
       emitDust(dt);
       // stuck? remind how to reset
       if (rider.ground && !rider.crashed && rider.speed < 0.6 && !S.finished) { S.stuckT = (S.stuckT || 0) + dt; if (S.stuckT > 3.5) { showMsg(TOUCH ? 'Stuck? Tap ↺ Reset' : 'Stuck? Press R', 2); S.stuckT = 0; } }
@@ -587,13 +651,13 @@ export function mount(stage) {
     for (const e of rider.events) {
       if (e.type === 'trick') {
         if (S.finished) continue;
-        S.score += e.pts; showTrick(e.list, e.pts, e.perfect ? 'Perfect landing!' : ''); snd('trick');
+        addCombo(e.list, e.pts); showTrick(e.list, e.pts, e.perfect ? 'Perfect landing!' : ''); snd('trick');
       } else if (e.type === 'land') {
         snd('land', clamp(e.v / 10, 0.2, 1));
         cam.shake = Math.min(0.25, e.v * 0.02);
         if (e.v > 3) for (let i = 0; i < Math.min(16, e.v * 1.5); i++) dustAt(rider.pos.x, rider.pos.y + 0.1, rider.pos.z, 2.5, 1.1, 1.0);
       } else if (e.type === 'crash') {
-        snd('crash'); cam.shake = 0.35;
+        snd('crash'); cam.shake = 0.35; loseCombo();
         showMsg(e.why === 'tree' ? 'Ouch! Tree!' : e.why === 'edge' ? 'Off the mountain!' : 'Crashed!', 1.4);
       } else if (e.type === 'pop') snd('pop');
     }
@@ -604,7 +668,9 @@ export function mount(stage) {
     H.cp.textContent = `CP ${S.cp}/${W.checkpoints.length - 1}`;
     H.score.textContent = S.score.toLocaleString();
     H.speed.textContent = Math.round(rider.speed * 3.6);
-    H.prog.style.width = clamp((rider.progress - W.path.start) / (W.path.finish - W.path.start), 0, 1) * 100 + '%';
+    H.prog.style.width = clamp((rider.pos.z - W.startZ) / (W.finishZ - W.startZ), 0, 1) * 100 + '%';
+    H.combo.textContent = S.combo ? `Combo x${S.combo.n} · ${(S.combo.pts * S.combo.n).toLocaleString()}` : '';
+    if (routeHide > 0) { routeHide -= dt; if (routeHide <= 0) H.route.classList.remove('show'); }
     if (trickHide > 0) { trickHide -= dt; if (trickHide <= 0) H.trick.classList.remove('show'); }
     if (msgHide > 0) { msgHide -= dt; if (msgHide <= 0) H.msg.classList.remove('show'); }
     // live trick names while in the air
@@ -616,8 +682,7 @@ export function mount(stage) {
       if (Math.abs(sp) > 0.3) parts.push(Math.round(Math.abs(sp) * 2) * 180 + '');
       if (b.whipping) parts.push('Tailwhip');
       if (b.barring) parts.push('Barspin');
-      if (b.superman > 0.5) parts.push('Superman');
-      if (b.nohand > 0.5) parts.push('No hander');
+      for (const k of ['superman', 'nohand', 'table', 'cancan', 'nofoot']) if (b[k] > 0.5) parts.push(TRICKS[k].name);
       for (const k of b.airTricks) if (!parts.includes(TRICKS[k].name)) parts.push(TRICKS[k].name);
       H.air.textContent = parts.length ? parts.join(' + ') : `Air ${b.air.toFixed(1)}s`;
       H.air.classList.add('show');
