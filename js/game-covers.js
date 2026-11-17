@@ -240,7 +240,7 @@ const C = {
 };
 
 // Real snaps from the game (icons/covers/<id>.jpg) win over the drawings.
-const SNAPS = new Set(['sky-pilot', 'kits-karts']);
+const SNAPS = new Set(['sky-pilot', 'kits-karts', 'tank-tantrum']);
 
 export function gameCover(id) {
   if (SNAPS.has(id)) return `<img class="cover" src="icons/covers/${id}.jpg" alt="" draggable="false">`;
