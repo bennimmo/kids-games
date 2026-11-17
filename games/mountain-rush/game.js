@@ -14,7 +14,7 @@ import { buildWorld, MAPS } from './world.js';
 import { MAP_ORDER } from './biomes.js';
 import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.js';
 import { createScene, SUN_DIR } from './scene.js';
-import { createBike, COLORS } from './bike.js';
+import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
 import { makeTextures } from './textures.js';
 import { clamp, lerp } from '../sky-pilot/noise.js';
 
@@ -42,8 +42,8 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0 }, map: 'pine-ridge' };
-    try { return { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; } catch (e) { return d; }
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'downhill', points: 0 };
+    try { const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; p.look = { ...d.look, ...p.look }; return p; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
@@ -86,10 +86,11 @@ export function mount(stage) {
     if (!envTex) envTex = makeEnv();
     if (bike) bike.dispose && bike.dispose();
     loadingUI('Pumping up the tyres', 0.85); await tick();
-    bike = createBike(T, envTex, lookColors());
+    bike = createBike(T, envTex, lookColors(), bikeType());
     bike.root.matrixAutoUpdate = false; bike.rider.matrixAutoUpdate = false;
     scene.scene.add(bike.root); scene.scene.add(bike.rider);
     rider = newRider(W);
+    rider.P = { ...BIKES[bikeType()].stats };
     resize();
     camera.far = Q.viewDist + 140; camera.updateProjectionMatrix();
     snapCamera();
@@ -120,7 +121,20 @@ export function mount(stage) {
     });
   }
 
-  const lookColors = () => ({ frame: COLORS.frame[prefs.look.frame] ?? COLORS.frame[0], jersey: COLORS.jersey[prefs.look.jersey] ?? COLORS.jersey[0] });
+  // outfit: each choice is an index into its list; one past the end = gold (unlocked at GOLD points)
+  const LISTS = { frame: COLORS.frame, jersey: COLORS.jersey, helmet: OUTFIT.helmet, pants: OUTFIT.pants, goggle: OUTFIT.goggle };
+  const pickColor = k => { const L = LISTS[k], i = prefs.look[k] | 0; return i >= L.length ? (prefs.points >= GOLD ? GOLD_HEX : L[0]) : L[i]; };
+  const lookColors = () => ({ frame: pickColor('frame'), jersey: pickColor('jersey'), helmet: pickColor('helmet'), pants: pickColor('pants'), goggle: pickColor('goggle'), open: prefs.look.open ? 1 : 0 });
+  const bikeType = () => (BIKES[prefs.bike] && prefs.points >= BIKES[prefs.bike].unlock ? prefs.bike : 'downhill');
+  function swapBike() {
+    const old = bike;
+    bike = createBike(T, envTex, lookColors(), bikeType());
+    bike.root.matrixAutoUpdate = false; bike.rider.matrixAutoUpdate = false;
+    scene.scene.add(bike.root); scene.scene.add(bike.rider);
+    if (old) { scene.scene.remove(old.root); scene.scene.remove(old.rider); disposeScene(old.root); disposeScene(old.rider); }
+    rider.P = { ...BIKES[bikeType()].stats };
+    placeBike(0);
+  }
 
   // ---------------------------------------------------------------- input
   const keys = new Set();
@@ -273,7 +287,6 @@ export function mount(stage) {
   function menu() {
     S.phase = 'menu';
     hudEl.innerHTML = '';
-    const sw = (kind, list, cur) => list.map((c, i) => `<button class="mr-sw${i === cur ? ' on' : ''}" data-kind="${kind}" data-i="${i}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="colour"></button>`).join('');
     ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel wide">
       <div class="ui-kicker">Downhill</div><h1 class="ui-title">Mountain Rush</h1>
       <div class="mr-maps">${MAP_ORDER.map(id => {
@@ -282,8 +295,7 @@ export function mount(stage) {
         return `<button class="mr-map${id === S.map ? ' on' : ''}" data-map="${id}">${mapPic(...pic)}<div class="nm">${MAPS[id].name}<small>${bt ? 'Best ' + fmt(bt.time) : MAPS[id].sub}</small></div></button>`;
       }).join('')}</div>
       <div class="mr-best">${MAPS[S.map].routes.map(r => r.name).join(' and ')}: two routes that cross. Swap lines whenever you like.</div>
-      <div class="ui-label">Bike</div><div class="mr-swatches">${sw('frame', COLORS.frame, prefs.look.frame)}</div>
-      <div class="ui-label">Jersey</div><div class="mr-swatches">${sw('jersey', COLORS.jersey, prefs.look.jersey)}</div>
+      <div class="ui-row"><button class="ui-btn mr-garageb">🚲 Garage: ${BIKES[bikeType()].name}</button><span class="mr-pts">⭐ ${Math.round(prefs.points).toLocaleString()} trick points</span></div>
       <div class="ui-label">Graphics</div>
       <div class="ui-seg mr-q">${['low', 'mid', 'high'].map(q => `<button data-q="${q}" class="${Q.name === q ? 'on' : ''}">${q === 'low' ? 'Fast' : q === 'mid' ? 'Good' : 'Best'}</button>`).join('')}</div>
       <div class="ui-row"><button class="ui-btn go big mr-go">Ride!</button></div>
@@ -295,16 +307,57 @@ export function mount(stage) {
       S.map = b.dataset.map; prefs.map = S.map; savePrefs();
       build();
     }));
-    ui.querySelectorAll('.mr-sw').forEach(b => click(b, () => {
-      prefs.look[b.dataset.kind] = +b.dataset.i; savePrefs();
-      bike.setLook(lookColors());
-      ui.querySelectorAll(`.mr-sw[data-kind="${b.dataset.kind}"]`).forEach(x => x.classList.toggle('on', x === b));
-    }));
+    click(ui.querySelector('.mr-garageb'), garage);
     ui.querySelectorAll('.mr-q button').forEach(b => click(b, () => {
       if (b.dataset.q === Q.name) return;
       prefs.quality = b.dataset.q; savePrefs(); Q = QUALITY[b.dataset.q];
       build();
     }));
+  }
+  // the garage: pick a bike and an outfit; the bike turns round behind the panel
+  function garage() {
+    S.phase = 'garage';
+    const gold = prefs.points >= GOLD;
+    const sw = kind => {
+      const L = LISTS[kind], cur = prefs.look[kind] | 0;
+      return L.map((c, i) => `<button class="mr-sw${i === cur ? ' on' : ''}" data-kind="${kind}" data-i="${i}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="colour"></button>`).join('')
+        + `<button class="mr-sw gold${cur >= L.length ? ' on' : ''}" data-kind="${kind}" data-i="${L.length}" ${gold ? '' : 'disabled'} aria-label="gold" title="${gold ? 'Gold' : 'Gold: ' + GOLD.toLocaleString() + ' points'}">${gold ? '' : '🔒'}</button>`;
+    };
+    ui.innerHTML = `<div class="ui-overlay mr-garage"><div class="ui-panel left">
+      <div class="ui-kicker">Garage</div><h2 class="ui-title">Your bike</h2>
+      <div class="mr-pts">⭐ ${Math.round(prefs.points).toLocaleString()} trick points. Earn more to unlock bikes and gold.</div>
+      <div class="mr-bikes">${BIKE_ORDER.map(id => {
+        const B2 = BIKES[id], locked = prefs.points < B2.unlock;
+        return `<button class="mr-bike${id === bikeType() ? ' on' : ''}" data-bike="${id}" ${locked ? 'disabled' : ''}><b>${B2.name}</b><small>${locked ? '🔒 ' + B2.unlock.toLocaleString() + ' points' : B2.sub}</small></button>`;
+      }).join('')}</div>
+      <div class="ui-label">Frame</div><div class="mr-swatches">${sw('frame')}</div>
+      <div class="ui-label">Jersey</div><div class="mr-swatches">${sw('jersey')}</div>
+      <div class="ui-label">Trousers</div><div class="mr-swatches">${sw('pants')}</div>
+      <div class="ui-label">Helmet</div><div class="mr-swatches">${sw('helmet')}</div>
+      <div class="ui-seg mr-htype">${OUTFIT.helmetType.map((n, i) => `<button data-i="${i}" class="${(prefs.look.open | 0) === i ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <div class="ui-label">Goggles</div><div class="mr-swatches">${sw('goggle')}</div>
+      <div class="ui-row"><button class="ui-btn go mr-done">Done</button></div>
+    </div></div>`;
+    ui.querySelectorAll('.mr-sw').forEach(b => click(b, () => {
+      prefs.look[b.dataset.kind] = +b.dataset.i; savePrefs();
+      bike.setLook(lookColors());
+      ui.querySelectorAll(`.mr-sw[data-kind="${b.dataset.kind}"]`).forEach(x => x.classList.toggle('on', x === b));
+    }));
+    ui.querySelectorAll('.mr-htype button').forEach(b => click(b, () => {
+      prefs.look.open = +b.dataset.i; savePrefs(); bike.setLook(lookColors());
+      ui.querySelectorAll('.mr-htype button').forEach(x => x.classList.toggle('on', x === b));
+    }));
+    ui.querySelectorAll('.mr-bike').forEach(b => click(b, () => {
+      prefs.bike = b.dataset.bike; savePrefs(); swapBike();
+      ui.querySelectorAll('.mr-bike').forEach(x => x.classList.toggle('on', x === b));
+    }));
+    click(ui.querySelector('.mr-done'), menu);
+  }
+  function addPoints(n) {
+    const before = prefs.points;
+    prefs.points += n; savePrefs();
+    for (const id of BIKE_ORDER) if (before < BIKES[id].unlock && prefs.points >= BIKES[id].unlock) showMsg(`🔓 ${BIKES[id].name} bike unlocked!`, 3);
+    if (before < GOLD && prefs.points >= GOLD) showMsg('🔓 Gold paint unlocked!', 3);
   }
   // little picture of a map for the menu cards
   function mapPic(sky, far, near, trail) {
@@ -389,6 +442,7 @@ export function mount(stage) {
     if (!c) return;
     const total = c.pts * c.n;
     S.score += total;
+    addPoints(total);
     if (c.n > 1) { showTrick([`Combo x${c.n}`], total, ''); snd('combo'); }
   }
   function loseCombo() { if (S.combo && S.combo.n > 1) showMsg('Combo lost!', 1.2); S.combo = null; }
@@ -629,14 +683,19 @@ export function mount(stage) {
       // stuck? remind how to reset
       if (rider.ground && !rider.crashed && rider.speed < 0.6 && !S.finished) { S.stuckT = (S.stuckT || 0) + dt; if (S.stuckT > 3.5) { showMsg(TOUCH ? 'Stuck? Tap ↺ Reset' : 'Stuck? Press R', 2); S.stuckT = 0; } }
       else S.stuckT = 0;
-    } else if (S.phase === 'menu') {
+    } else if (S.phase === 'menu' || S.phase === 'garage') {
       // slow orbit round the rider at the start
       S.time += dt;
     }
     if (!(window.__mr && window.__mr.hold)) placeBike(dt);
-    if (S.phase === 'menu') {
-      const b = rider, a = S.time * 0.15 + 2.2;
-      camera.position.set(b.pos.x + Math.sin(a) * 5.5, b.pos.y + 1.6, b.pos.z + Math.cos(a) * 5.5);
+    const showroom = S.phase === 'garage';
+    if (showroom !== !!camera.view?.enabled) {
+      const w = root.clientWidth || innerWidth, h = root.clientHeight || innerHeight;
+      if (showroom && w > 700) camera.setViewOffset(w, h, -w * 0.22, 0, w, h); else camera.clearViewOffset();
+    }
+    if (S.phase === 'menu' || showroom) {
+      const b = rider, a = S.time * (showroom ? 0.35 : 0.15) + 2.2, d = showroom ? 3.6 : 5.5;
+      camera.position.set(b.pos.x + Math.sin(a) * d, b.pos.y + (showroom ? 1.2 : 1.6), b.pos.z + Math.cos(a) * d);
       camera.up.set(0, 1, 0);
       camera.lookAt(b.pos.x, b.pos.y + 0.8, b.pos.z);
       bike.head.visible = true;

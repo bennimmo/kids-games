@@ -45,6 +45,7 @@ export function newRider(world) {
     // state
     crashed: false, crashT: 0, finished: false, events: [],
     cp: 0, progress: 0, route: 0, onTrail: true,
+    P: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 },     // bike stats (bike.js BIKES)
   };
   placeAt(b, world, world.start);
   return b;
@@ -136,9 +137,9 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // forces along the bike
   const gF = -G * f.y, gS = -G * s.y;
-  const pedalA = b.pedal * Math.max(0, 8 - 0.48 * Math.max(0, vF));
+  const pedalA = b.pedal * b.P.pedal * Math.max(0, 8 - 0.48 * Math.max(0, vF));
   const roll = (onDirt ? 0.22 : 0.9) * world.B.roll * Math.sign(vF);
-  const drag = 0.0062 * vF * Math.abs(vF);
+  const drag = 0.0062 * b.P.drag * vF * Math.abs(vF);
   // pumping: crouch on the way down a roller / landing to gain speed
   const pumpA = inp.pump && f.y < -0.03 ? clamp(-f.y * 6, 0, 1) * 1.6 : 0;
   let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1);
@@ -148,7 +149,7 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // sideways: grip, or slide (drift) when asking too much
   vS += gS * dt;
-  const grip = (onDirt ? 9.5 : 7.5) * world.B.grip * n.y * (b.brake > 0.5 ? 0.75 : 1);
+  const grip = (onDirt ? 9.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1);
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
@@ -167,7 +168,7 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // pop off the ground
   if (popNow && speed > 0.5 || popNow && b.charge > 0.2) {
-    const pop = 2.4 + 2.4 * b.charge;
+    const pop = (2.4 + 2.4 * b.charge) * b.P.pop;
     b.vel.x += n.x * pop; b.vel.y += n.y * pop; b.vel.z += n.z * pop;
     b.charge = 0;
     takeOff(b);
@@ -187,7 +188,7 @@ function groundStep(b, world, inp, dt, popNow) {
     const hv = Math.hypot(b.vel.x, b.vel.z) || 1, dx = b.vel.x / hv * 0.8, dz = b.vel.z / hv * 0.8;
     const kap = (world.height(b.pos.x + dx, b.pos.z + dz) - 2 * h + world.height(b.pos.x - dx, b.pos.z - dz)) / 0.64;
     const need = -kap * hv * hv;
-    if (need > G * 1.6 || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+    if (need > G * b.P.soak || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
   }
   b.pos.y = h;
   if (into < 0) {   // ground came up: lose the bit going into it (suspension soaks it up)
@@ -252,8 +253,8 @@ function airStep(b, world, inp, dt) {
 
   // flips and spins (only once properly in the air)
   const can = b.air > 0.12;
-  const wantFlip = can && !inp.flipLock ? -b.lean * 7.2 : 0;            // down / back = backflip (nose up)
-  const wantSpin = can && !inp.spinLock ? -b.steer * 7.6 : 0;           // right = spin right
+  const wantFlip = can && !inp.flipLock ? -b.lean * 7.2 * b.P.spin : 0;            // down / back = backflip (nose up)
+  const wantSpin = can && !inp.spinLock ? -b.steer * 7.6 * b.P.spin : 0;           // right = spin right
   b.flipV = lerp(b.flipV, wantFlip, 1 - Math.exp(-dt * (Math.abs(wantFlip) > 0.1 ? 5 : 7)));
   b.spinV = lerp(b.spinV, wantSpin, 1 - Math.exp(-dt * (Math.abs(wantSpin) > 0.1 ? 6 : 8)));
   b.flip += b.flipV * dt; b.spin += b.spinV * dt;
@@ -264,10 +265,10 @@ function airStep(b, world, inp, dt) {
   // tricks
   if (can && inp.whip && !b.whipEdge && !b.whipping) { b.whipping = true; b.whip = 0; }
   b.whipEdge = inp.whip;
-  if (b.whipping) { b.whip += dt * TAU / 0.55; if (b.whip >= TAU) { b.whip = 0; b.whipping = false; b.airTricks.push('whip'); } }
+  if (b.whipping) { b.whip += dt * TAU / 0.55 * b.P.spin; if (b.whip >= TAU) { b.whip = 0; b.whipping = false; b.airTricks.push('whip'); } }
   if (can && inp.barspin && !b.barEdge && !b.barring) { b.barring = true; b.bar = 0; }
   b.barEdge = inp.barspin;
-  if (b.barring) { b.bar += dt * TAU / 0.42; if (b.bar >= TAU) { b.bar = 0; b.barring = false; b.airTricks.push('barspin'); } }
+  if (b.barring) { b.bar += dt * TAU / 0.42 * b.P.spin; if (b.bar >= TAU) { b.bar = 0; b.barring = false; b.airTricks.push('barspin'); } }
   for (const k of HOLDS) {
     const on = can && !!inp[k];
     b[k] = lerp(b[k], on ? 1 : 0, 1 - Math.exp(-dt * (on ? 6.5 : 9.5)));

@@ -11,21 +11,46 @@ const HT_BOT = V(0, 0.84, 0.39), HT_TOP = V(0, 1.0, 0.305);
 const STEER_AXIS = HT_TOP.clone().sub(F_AXLE).normalize();       // up along the head tube
 const SEAT_TOP = V(0, 0.93, -0.4);
 
+// The bikes. Stats change how they ride (physics.js), look changes the model.
+//   size: whole bike scale (BMX is small), shock: rear suspension, dual: dual-crown fork, rigid: no fork travel
+export const BIKES = {
+  downhill: { name: 'Downhill', sub: 'Fast and steady. Soaks up bumps', unlock: 0, size: 1, shock: true, dual: true,
+    stats: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 } },
+  enduro: { name: 'Enduro', sub: 'Light. Pedals and turns well', unlock: 0, size: 0.97, shock: true, dual: false,
+    stats: { pedal: 1.2, drag: 1.06, grip: 1.05, spin: 1.1, pop: 1.05, soak: 1.45 } },
+  dirtjump: { name: 'Dirt Jump', sub: 'Pops high, spins fast', unlock: 5000, size: 0.9, shock: false, dual: false,
+    stats: { pedal: 1.15, drag: 1.12, grip: 0.92, spin: 1.3, pop: 1.25, soak: 1.25 } },
+  bmx: { name: 'BMX', sub: 'Tiny trick machine. Slow downhill', unlock: 15000, size: 0.72, shock: false, dual: false, rigid: true,
+    stats: { pedal: 1.3, drag: 1.25, grip: 0.86, spin: 1.45, pop: 1.3, soak: 1.1 } },
+};
+export const BIKE_ORDER = ['downhill', 'enduro', 'dirtjump', 'bmx'];
+// outfit options; a gold set unlocks at GOLD points
+export const GOLD = 20000;
+export const OUTFIT = {
+  helmet: [0xffffff, 0x111111, 0xe53935, 0x1e88e5, 0xfdd835, 0x43a047, 0xff7043, 0x8e24aa],
+  pants: [0x23262d, 0x3b4a5a, 0x5a4636, 0x1e3a5f, 0x7a1f1f, 0x2f4f2f, 0xd0d0d0, 0x111111],
+  goggle: [0xffb300, 0x00b0ff, 0xff4081, 0x76ff03, 0xeeeeee, 0x212121],
+  helmetType: ['Full face', 'Open face'],
+};
+export const GOLD_HEX = 0xd4a017;
+
 export const COLORS = {
   frame: [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0x212121, 0xff7043, 0x8e24aa, 0xf5f5f5],
   jersey: [0x1e88e5, 0xe53935, 0x111111, 0xfdd835, 0x43a047, 0xff7043, 0x8e24aa, 0xffffff],
 };
 
-export function createBike(T, env, look = {}) {
+export function createBike(T, env, look = {}, type = 'downhill') {
+  const BK = BIKES[type] || BIKES.downhill;
   const root = new THREE.Group();           // placed from physics each frame
   const body = new THREE.Group(); root.add(body);   // the whole bike; tilts sideways for a table top
+  const sizer = new THREE.Group(); sizer.scale.setScalar(BK.size); body.add(sizer);
   const mats = makeMaterials(T, env, look);
 
   // --------------------------------------------------------------- frame (can tailwhip around the steering axis)
   const whipPivot = new THREE.Group(); whipPivot.position.copy(HT_TOP);
   const whipAxis = STEER_AXIS.clone();
   const frame = new THREE.Group(); frame.position.copy(HT_TOP).negate();
-  whipPivot.add(frame); body.add(whipPivot);
+  whipPivot.add(frame); sizer.add(whipPivot);
   const tube = (a, b, r, m, r2) => {
     const d = b.clone().sub(a), len = d.length();
     const g = new THREE.CylinderGeometry(r2 ?? r, r, len, 12, 1);
@@ -46,7 +71,7 @@ export function createBike(T, env, look = {}) {
     frame.add(tube(V(s * 0.02, 0.72, -0.27), V(s * 0.07, R_AXLE.y + 0.02, R_AXLE.z), 0.014, mats.frame)); // seatstays
   }
   // rear shock with a spring
-  {
+  if (BK.shock) {
     const a = V(0, 0.55, 0.05), b = V(0, 0.73, -0.25);
     frame.add(tube(a, b, 0.022, mats.metal));
     const spring = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.007, 6, 14), mats.spring);
@@ -76,15 +101,15 @@ export function createBike(T, env, look = {}) {
   addDecal(frame, mats);
 
   // --------------------------------------------------------------- front end: fork, wheel, bars (steers + barspins)
-  const steer = new THREE.Group(); steer.position.copy(HT_TOP); body.add(steer);
+  const steer = new THREE.Group(); steer.position.copy(HT_TOP); sizer.add(steer);
   const front = new THREE.Group(); front.position.copy(HT_TOP).negate(); steer.add(front);
   const crown = HT_BOT.clone().add(STEER_AXIS.clone().multiplyScalar(-0.06));
   for (const s of [-1, 1]) {
     front.add(tube(V(s * 0.075, crown.y, crown.z), V(s * 0.075, F_AXLE.y + 0.18, F_AXLE.z - 0.09), 0.02, mats.metal));     // stanchions
     front.add(tube(V(s * 0.075, F_AXLE.y + 0.22, F_AXLE.z - 0.11), V(s * 0.075, F_AXLE.y, F_AXLE.z), 0.026, mats.fork));   // lowers
-    front.add(tube(V(s * 0.075, HT_TOP.y + 0.03, HT_TOP.z - 0.04), V(s * 0.075, crown.y, crown.z), 0.018, mats.metal));    // dual crown uppers
+    if (BK.dual) front.add(tube(V(s * 0.075, HT_TOP.y + 0.03, HT_TOP.z - 0.04), V(s * 0.075, crown.y, crown.z), 0.018, mats.metal));    // dual crown uppers
   }
-  for (const y of [crown.y, HT_TOP.y + 0.03]) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.06), mats.dark); c.position.set(0, y, y === crown.y ? crown.z : HT_TOP.z - 0.04); c.castShadow = true; front.add(c); }
+  for (const y of BK.dual ? [crown.y, HT_TOP.y + 0.03] : [crown.y]) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.06), mats.dark); c.position.set(0, y, y === crown.y ? crown.z : HT_TOP.z - 0.04); c.castShadow = true; front.add(c); }
   const BAR_C = V(0, HT_TOP.y + 0.08, HT_TOP.z - 0.02);
   const barGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.8, 8); barGeo.rotateZ(Math.PI / 2);
   const bar = new THREE.Mesh(barGeo, mats.dark); bar.position.copy(BAR_C); bar.castShadow = true; front.add(bar);
@@ -116,6 +141,7 @@ export function createBike(T, env, look = {}) {
   {
     const shell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 22, 16), mats.helmet); shell.scale.set(0.95, 1, 1.12); shell.castShadow = true; head.add(shell);
     const chin = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 8, 18, Math.PI), mats.helmet); chin.rotation.set(Math.PI / 2 + 0.5, 0, 0); chin.position.set(0, -0.07, 0.06); head.add(chin);
+    chin.visible = !look.open; head.userData.chin = chin;
     const peak = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.015, 0.12), mats.helmet); peak.position.set(0, 0.08, 0.17); peak.rotation.x = -0.25; head.add(peak);
     const gog = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.06, 20, 1, true, -1.1, 2.2), mats.goggle); gog.position.set(0, 0.0, 0.03); gog.scale.set(1, 1, 1.05); head.add(gog);
     const strap = new THREE.Mesh(new THREE.TorusGeometry(0.158, 0.012, 4, 24), mats.strap); strap.rotation.x = Math.PI / 2; strap.position.y = 0.0; head.add(strap);
@@ -168,6 +194,8 @@ export function createBike(T, env, look = {}) {
 
     let hip = V(0, 1.06 - 0.2 * c - 0.05 * m, -0.33 - 0.04 * c + 0.1 * l - 0.22 * m);
     let sh = V(0, 1.45 - 0.18 * c - 0.05 * m, 0.0 + 0.04 * c + 0.12 * l - 0.2 * m);
+    // smaller bikes: rider crouches lower and closer
+    if (BK.size < 1) { const k = 0.45 + 0.55 * BK.size; hip.y *= k; sh.y *= k; hip.z *= BK.size; sh.z = sh.z * BK.size + (1 - BK.size) * 0.15; }
     // grips follow the bars
     const grip = i => { const w = GRIPS[i].clone(); front.localToWorld(w); return w.applyMatrix4(inv); };
     let hands = [grip(0), grip(1)];
@@ -223,7 +251,7 @@ export function createBike(T, env, look = {}) {
   }
   pose({ steer: 0, crouch: 0, lean: 0, crank: 0, wheel: 0, superman: 0, nohand: 0, whip: 0, bar: 0, manual: 0 });
 
-  function setLook(look2) { applyLook(mats, look2); }
+  function setLook(look2) { applyLook(mats, look2); if (head.userData.chin) head.userData.chin.visible = !look2.open; }
   return { root, rider, pose, setLook, mats, head, headPos: () => head.position };
 }
 
@@ -304,6 +332,10 @@ function applyLook(m, look) {
   if (look.jersey !== undefined) m.jersey.color.setHex(look.jersey);
   if (look.helmet !== undefined) m.helmet.color.setHex(look.helmet);
   if (look.pants !== undefined) m.pants.color.setHex(look.pants);
+  if (look.goggle !== undefined) m.goggle.color.setHex(look.goggle);
+  const gold = c => c === GOLD_HEX;
+  m.frame.metalness = gold(look.frame) ? 0.9 : 0.35; m.frame.roughness = gold(look.frame) ? 0.25 : 0.32;
+  m.helmet.metalness = gold(look.helmet) ? 0.9 : 0.1;
 }
 
 export { STEER_AXIS };
