@@ -35,11 +35,11 @@ export const BIOMES = {
 };
 
 export const MAPS = {
-  'pine-ridge': { name: 'Pine Ridge', sub: 'Forest flow, berms and jumps', biome: 'forest', seed: 7, W: 520, L: 1300, top: 330, hills: 34, ridges: 10,
-    routes: [{ name: 'Flow line', kinds: ['kicker', 'rollers', 'table', 'drop', 'kicker', 'rocks', 'double', 'table', 'rollers'] }, { name: 'Tech line', kinds: ['drop', 'rocks', 'gap', 'drop', 'kicker', 'rocks', 'gap'] }] },
-  'red-rock': { name: 'Red Rock', sub: 'Desert canyons, big drops', biome: 'desert', seed: 23, W: 560, L: 1250, top: 300, hills: 40, ridges: 18,
-    routes: [{ name: 'Canyon line', kinds: ['table', 'kicker', 'drop', 'rollers', 'gap', 'table', 'drop'] }, { name: 'Mesa line', kinds: ['drop', 'gap', 'drop', 'rocks', 'gap', 'drop'] }] },
-  'snow-peak': { name: 'Snow Peak', sub: 'Icy top, fast and slippy', biome: 'snow', seed: 41, W: 520, L: 1350, top: 380, hills: 30, ridges: 14,
-    routes: [{ name: 'Glacier line', kinds: ['table', 'rollers', 'kicker', 'table', 'double', 'rollers'] }, { name: 'Couloir line', kinds: ['drop', 'kicker', 'rocks', 'drop', 'gap', 'drop'] }] },
+  'pine-ridge': { name: 'Pine Ridge', sub: 'Forest flow, berms and jumps', style: { twist: 1, width: 0, minG: 0.07, maxG: 0.36, drop: 1 }, biome: 'forest', seed: 7, W: 520, L: 1300, top: 330, hills: 34, ridges: 10,
+    routes: [{ name: 'Flow line', kinds: ['kicker', 'rollers', 'stepup', 'table', 'drop', 'tech', 'double', 'stepup', 'rollers'] }, { name: 'Tech line', kinds: ['tech', 'drop', 'gap', 'stepup', 'tech', 'rocks', 'drop', 'gap'] }] },
+  'red-rock': { name: 'Red Rock', sub: 'Wide, steep and fast. Big drops', biome: 'desert', seed: 23, W: 560, L: 1250, top: 330, hills: 40, ridges: 18, style: { twist: 0.6, width: 0.9, minG: 0.09, maxG: 0.42, drop: 1.5 },
+    routes: [{ name: 'Canyon line', kinds: ['table', 'stepup', 'drop', 'rollers', 'tech', 'gap', 'table', 'stepup'] }, { name: 'Mesa line', kinds: ['tech', 'drop', 'gap', 'stepup', 'drop', 'tech', 'gap'] }] },
+  'snow-peak': { name: 'Snow Peak', sub: 'Twisty, slippy, tight berms', biome: 'snow', seed: 41, W: 520, L: 1350, top: 380, hills: 30, ridges: 14, style: { twist: 1.35, width: -0.3, minG: 0.08, maxG: 0.34, drop: 1 },
+    routes: [{ name: 'Glacier line', kinds: ['table', 'stepup', 'rollers', 'kicker', 'tech', 'double', 'stepup'] }, { name: 'Couloir line', kinds: ['tech', 'drop', 'stepup', 'tech', 'gap', 'drop'] }] },
 };
 export const MAP_ORDER = ['pine-ridge', 'red-rock', 'snow-peak'];

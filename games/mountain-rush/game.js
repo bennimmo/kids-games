@@ -44,7 +44,7 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'downhill', points: 0, online: true };
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'talon', points: 0, online: true };
     try { const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; p.look = { ...d.look, ...p.look }; return p; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -159,7 +159,7 @@ export function mount(stage) {
   const LISTS = { frame: COLORS.frame, jersey: COLORS.jersey, helmet: OUTFIT.helmet, pants: OUTFIT.pants, goggle: OUTFIT.goggle };
   const pickColor = k => { const L = LISTS[k], i = prefs.look[k] | 0; return i >= L.length ? (prefs.points >= GOLD ? GOLD_HEX : L[0]) : L[i]; };
   const lookColors = () => ({ frame: pickColor('frame'), jersey: pickColor('jersey'), helmet: pickColor('helmet'), pants: pickColor('pants'), goggle: pickColor('goggle'), open: prefs.look.open ? 1 : 0 });
-  const bikeType = () => (BIKES[prefs.bike] && prefs.points >= BIKES[prefs.bike].unlock ? prefs.bike : 'downhill');
+  const bikeType = () => (BIKES[prefs.bike] && prefs.points >= BIKES[prefs.bike].unlock ? prefs.bike : 'talon');
   function swapBike() {
     const old = bike;
     bike = createBike(T, envTex, lookColors(), bikeType());
@@ -607,7 +607,7 @@ export function mount(stage) {
   // ---------------------------------------------------------------- bike drawing
   const frameOut = { up: new THREE.Vector3(), fwd: new THREE.Vector3() };
   const m4 = new THREE.Matrix4(), mA = new THREE.Matrix4(), mB = new THREE.Matrix4(), xAxis = new THREE.Vector3();
-  const vis = { roll: 0, manual: 0, up: new THREE.Vector3(0, 1, 0) };
+  const vis = { roll: 0, manual: 0, up: new THREE.Vector3(0, 1, 0), com: new THREE.Vector3(0, COM, 0), sf: 0.25, vf: 0, sr: 0.25, vr: 0 };
   const crashSim = { bike: null, rider: null };
   function placeBike(dt) {
     const b = rider;
@@ -621,20 +621,26 @@ export function mount(stage) {
     vis.manual = lerp(vis.manual, b.manual ? 0.42 + b.manualBal * 0.12 : 0, 1 - Math.exp(-dt * 10));
     xAxis.crossVectors(up, fwd).normalize();
     m4.makeBasis(xAxis, up, fwd);
-    if (b.ground) m4.setPosition(b.pos.x, b.pos.y, b.pos.z);
-    else {
-      const c = b.takeoffUp;
-      const com = new THREE.Vector3(b.pos.x + c.x * COM, b.pos.y + c.y * COM, b.pos.z + c.z * COM);
-      mA.makeTranslation(0, -COM, 0);
-      m4.setPosition(com).multiply(mA);
-    }
+    // the bike turns round its middle; that middle point glides smoothly between riding and flying
+    const want = b.ground ? up : b.takeoffUp;
+    vis.com.lerp(new THREE.Vector3(want.x * COM, want.y * COM, want.z * COM), dt > 0 ? 1 - Math.exp(-dt * 14) : 1);
+    mA.makeTranslation(0, -COM, 0);
+    m4.setPosition(b.pos.x + vis.com.x, b.pos.y + vis.com.y, b.pos.z + vis.com.z).multiply(mA);
     if (vis.manual > 0.01) {
       mA.makeTranslation(0, 0, -0.62); mB.makeRotationX(-vis.manual);
       m4.multiply(mA).multiply(mB); mA.makeTranslation(0, 0, 0.62); m4.multiply(mA);
     }
     bike.root.matrix.copy(m4); bike.root.matrixWorldNeedsUpdate = true;
     bike.rider.matrix.copy(m4); bike.rider.matrixWorldNeedsUpdate = true;
-    lastPose = { steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 };
+    // suspension: springs that squash on landings and bumps, stretch out in the air
+    if (dt > 0) {
+      const bump = b.ground ? (b.rough * 0.25 + Math.min(0.08, b.speed * 0.004)) * (Math.random() - 0.5) : 0;
+      const tgt = b.ground ? 0.25 + 0.15 * Math.max(0, b.crouch) + bump : 0.03;
+      const st = (s0, v0, k, c) => { const a = (tgt - s0) * k - v0 * c; v0 += a * dt; s0 = clamp(s0 + v0 * dt, 0, 1); return [s0, v0]; };
+      [vis.sf, vis.vf] = st(vis.sf, vis.vf, 160, 15); [vis.sr, vis.vr] = st(vis.sr, vis.vr, 110, 12);
+      if (vis.manual > 0.1) vis.sr = Math.max(vis.sr, 0.45);
+    }
+    lastPose = { suspF: vis.sf, suspR: vis.sr, steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 };
     bike.pose(lastPose);
   }
   function startCrash() {
@@ -782,6 +788,12 @@ export function mount(stage) {
       // combo timer runs while you're riding on the ground (manuals keep it going)
       if (S.combo && rider.ground && !rider.crashed && !rider.manual) { S.combo.t -= dt; if (S.combo.t <= 0) bankCombo(); }
       emitDust(dt);
+      // warn when coming into the rocks too fast
+      if (!rider.crashed && rider.ground && rider.speed > 9.5) {
+        const hv = Math.hypot(rider.vel.x, rider.vel.z) || 1, ax = rider.pos.x + rider.vel.x / hv * 14, az = rider.pos.z + rider.vel.z / hv * 14;
+        if (W.roughAt(ax, az) > 0.4 && performance.now() - (S.warnT || 0) > 4000) { S.warnT = performance.now(); showMsg('🪨 Rocks! Slow down!', 1.5); }
+      }
+      if (rider.rattle > 0.3) cam.shake = Math.max(cam.shake, rider.rattle * 0.12);
       // stuck? remind how to reset
       if (rider.ground && !rider.crashed && rider.speed < 0.6 && !S.finished) { S.stuckT = (S.stuckT || 0) + dt; if (S.stuckT > 3.5) { showMsg(TOUCH ? 'Stuck? Tap ↺ Reset' : 'Stuck? Press R', 2); S.stuckT = 0; } }
       else S.stuckT = 0;
@@ -817,11 +829,12 @@ export function mount(stage) {
         addCombo(e.list, e.pts); showTrick(e.list, e.pts, e.perfect ? 'Perfect landing!' : ''); snd('trick');
       } else if (e.type === 'land') {
         snd('land', clamp(e.v / 10, 0.2, 1));
+        vis.vf += Math.min(9, e.v * 0.55); vis.vr += Math.min(9, e.v * 0.5);
         cam.shake = Math.min(0.25, e.v * 0.02);
         if (e.v > 3) for (let i = 0; i < Math.min(16, e.v * 1.5); i++) dustAt(rider.pos.x, rider.pos.y + 0.1, rider.pos.z, 2.5, 1.1, 1.0);
       } else if (e.type === 'crash') {
         snd('crash'); cam.shake = 0.35; loseCombo();
-        showMsg(e.why === 'tree' ? 'Ouch! Tree!' : e.why === 'edge' ? 'Off the mountain!' : 'Crashed!', 1.4);
+        showMsg({ tree: 'Ouch! Tree!', edge: 'Off the mountain!', rocks: 'Too fast for the rocks!', wall: 'Bonk! Ride round or jump it' }[e.why] || 'Crashed!', 1.4);
       } else if (e.type === 'pop') snd('pop');
     }
   }

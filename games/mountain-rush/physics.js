@@ -44,7 +44,7 @@ export function newRider(world) {
     crank: 0, wheel: 0, slide: 0, speed: 0, pedal: 0, brake: 0,
     // state
     crashed: false, crashT: 0, finished: false, events: [],
-    cp: 0, progress: 0, route: 0, onTrail: true,
+    cp: 0, progress: 0, route: 0, onTrail: true, rough: 0, rattle: 0,
     P: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 },     // bike stats (bike.js BIKES)
   };
   placeAt(b, world, world.start);
@@ -56,7 +56,7 @@ export function placeAt(b, world, p) {
   b.yaw = p.yaw; b.vel.x = b.vel.y = b.vel.z = 0;
   b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
   b.whip = b.bar = 0; for (const k of HOLDS) b[k] = 0; b.holdT = {}; b.whipping = b.barring = false;
-  b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = [];
+  b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = []; b.rattle = 0;
   b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0;
   world.normal(b.pos.x, b.pos.z, b.n); copy(b.up, b.n);
 }
@@ -79,6 +79,7 @@ const tmpF = {}, tmpS = {}, tmpN = {}, tmpT = {}, tmpB = {};
 export function stepRider(b, world, inp, dt) {
   b.events.length = 0;
   if (b.crashed) { b.crashT += dt; return; }
+  inp = { ...inp, steer: inp.steer || 0, throttle: inp.throttle || 0 };
 
   // smooth the controls a little so keyboards feel like a stick
   b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? 9 : 14)));
@@ -130,6 +131,11 @@ function groundStep(b, world, inp, dt, popNow) {
   let vF = dot(b.vel, f), vS = dot(b.vel, s);
   const speed = Math.hypot(vF, vS);
   const onDirt = world.trailMask(b.pos.x, b.pos.z) > 0.4;
+  // rock gardens on the tech sections: fine slowly; too fast and they shake you off
+  b.rough = world.roughAt(b.pos.x, b.pos.z);
+  const safe = 8.5 + (b.P.soak - 1.6) * 4;
+  if (b.rough > 0.4 && speed > safe && !b.crashed) { b.rattle += (speed - safe) * dt * 0.55 * b.rough; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
+  else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
   // steering: tighter when slow
   const rate = lerp(2.4, 1.05, clamp(Math.abs(vF) / 16, 0, 1)) * (b.manual > 0.3 ? 0.6 : 1);
@@ -178,8 +184,11 @@ function groundStep(b, world, inp, dt, popNow) {
   }
 
   // move, then see if the ground is still under us
+  const ox = b.pos.x, oy = b.pos.y, oz = b.pos.z;
   b.pos.x += b.vel.x * dt; b.pos.y += b.vel.y * dt; b.pos.z += b.vel.z * dt;
-  const h = world.height(b.pos.x, b.pos.z);
+  let h = world.height(b.pos.x, b.pos.z);
+  // ran into a wall (the side of a jump, a step-up face): stop against it, don't pop up on top
+  if (h - b.pos.y > 0.35) { if (hitWall(b, world, ox, oy, oz)) return; h = world.height(b.pos.x, b.pos.z); }
   const n2 = world.normal(b.pos.x, b.pos.z, tmpT);
   const into = dot(b.vel, n2);
   if (b.pos.y > h + 0.03 || (into > 0.3 && b.pos.y > h - 0.05)) {
@@ -188,7 +197,7 @@ function groundStep(b, world, inp, dt, popNow) {
     const hv = Math.hypot(b.vel.x, b.vel.z) || 1, dx = b.vel.x / hv * 0.8, dz = b.vel.z / hv * 0.8;
     const kap = (world.height(b.pos.x + dx, b.pos.z + dz) - 2 * h + world.height(b.pos.x - dx, b.pos.z - dz)) / 0.64;
     const need = -kap * hv * hv;
-    if (need > G * b.P.soak || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+    if (need > G * b.P.soak * (b.rough > 0.3 && speed < 9 ? 1.6 : 1) || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
   }
   b.pos.y = h;
   if (into < 0) {   // ground came up: lose the bit going into it (suspension soaks it up)
@@ -205,6 +214,17 @@ function groundStep(b, world, inp, dt, popNow) {
   b.wheel += vF * dt / 0.36;
   if (b.pedal > 0) b.crank += dt * (4 + vF * 0.5);
   else b.crank = lerp(b.crank, Math.round(b.crank / Math.PI) * Math.PI, 0.08);
+}
+
+// back off a wall; true if it was hard enough to crash
+function hitWall(b, world, ox, oy, oz) {
+  const n = world.normal(b.pos.x, b.pos.z, tmpB);
+  let nx = n.x, nz = n.z; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;      // points away from the high side
+  b.pos.x = ox; b.pos.z = oz; b.pos.y = Math.max(oy, world.height(ox, oz));
+  const into = -(b.vel.x * nx + b.vel.z * nz);
+  if (into > 0) { b.vel.x += nx * into * 1.2; b.vel.z += nz * into * 1.2; }
+  if (into > 6.5) { crash(b, 'wall'); return true; }
+  return false;
 }
 
 function endManual(b) {
@@ -280,7 +300,9 @@ function airStep(b, world, inp, dt) {
   b.wheel += hs * dt / 0.36 * 0.98;
 
   // landing?
-  const h = world.height(b.pos.x, b.pos.z);
+  let h = world.height(b.pos.x, b.pos.z);
+  // flew into the side of something much higher than you: bump off it
+  if (h - b.pos.y > 0.5) { const px = b.pos.x - b.vel.x * dt, pz = b.pos.z - b.vel.z * dt; if (hitWall(b, world, px, b.pos.y, pz)) return; h = world.height(b.pos.x, b.pos.z); }
   if (b.pos.y <= h) {
     if (b.air < 0.06 && b.vel.y > 0) b.pos.y = h + 0.005;    // just left a lip: don't land straight back on it
     else land(b, world, h);
@@ -337,6 +359,9 @@ function land(b, world, h) {
   b.ground = true; b.flip = b.spin = 0; b.flipV = b.spinV = 0;
   b.whip = 0; b.whipping = false; b.bar = 0; b.barring = false; for (const k of HOLDS) b[k] = 0; b.holdT = {};
   copy(b.up, n);
+  // landing in the rocks too fast shakes you
+  const rgh = world.roughAt(b.pos.x, b.pos.z), safe = 8.5 + (b.P.soak - 1.6) * 4, hsp = Math.hypot(b.vel.x, b.vel.z);
+  if (rgh > 0.4 && hsp > safe) { b.rattle += 0.35 + (hsp - safe) * 0.08; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
   b.events.push({ type: 'land', v: into, air: b.air, perfect, cased: cased && err > 0.85 });
   if (list.length && pts > 0) b.events.push({ type: 'trick', list, pts, perfect });
   b.air = 0;
