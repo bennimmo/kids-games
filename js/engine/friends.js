@@ -78,6 +78,7 @@ let outgoing = null;                  // { code, name, status: asking|no|full|no
 let outUnsub = null, outTimer = null, outToken = 0;
 let group = null;                     // { id, peers: Map(uid -> peer), unsubs, live, timer }
 let mic = null, micStatus = 'off', muted = false; // micStatus: off | asking | on | denied
+let wantCam = false;                               // start the camera when the call connects (video call)
 let cam = null, camStatus = 'off';                 // camera: off | asking | on | denied (off unless tapped)
 let invites = [];                     // [{ uid, name, face, game, code, at }] from friends
 const dismissed = new Set();          // 'uid:code' already answered
@@ -309,7 +310,9 @@ function mergeKnocks() {
 }
 const cleanGroup = g => (typeof g === 'string' && /^c[a-z0-9]{16}$/.test(g) ? g : '');
 
-export async function accept(pid) {
+export async function accept(pid, video) {
+  wantCam = !!video;
+  if (video && group && group.peers.size) startCam();
   const k = knocks.find(x => x.pid === pid);
   if (!k || answered.has(k.room + pid)) return;
   answered.add(k.room + pid);
@@ -317,6 +320,7 @@ export async function accept(pid) {
   const meta = ref(`${k.room}/meta`);
   try {
     if (k.room[0] !== 'h') { // picture code: just friends, no call
+      wantCam = false;
       saveFriend(pid.slice(0, -2), k.name, k.face);
       await fb.D.update(meta, { [`ok/${pid}`]: 'f' });
       return;
@@ -350,7 +354,7 @@ function stopAsking(keepStatus) {
   }
   if (!keepStatus) outgoing = null;
 }
-export function cancelAsk() { stopAsking(); emit(); }
+export function cancelAsk() { wantCam = false; stopAsking(); emit(); }
 
 export async function askFriend(theirCode) {
   stopAsking();
@@ -374,7 +378,7 @@ export async function askFriend(theirCode) {
     D.onDisconnect(kr).remove();
     await D.set(kr, plain({ name, face: myFace(), group: group && group.peers.size ? group.id : undefined }));
     if (token !== outToken) return;
-    const finish = status => { if (token !== outToken) return; stopAsking(true); outgoing = { ...outgoing, status }; emit(); };
+    const finish = status => { if (token !== outToken) return; wantCam = false; stopAsking(true); outgoing = { ...outgoing, status }; emit(); };
     outTimer = setTimeout(() => finish('none'), KNOCK_WAIT_MS);
     outUnsub = D.onValue(ref(`${theirCode}/meta`), s => {
       const m = s.val();
@@ -423,7 +427,7 @@ async function joinGroup(id) {
   keep();
   g.timer = setInterval(keep, 20000);
   emit();
-  startMic();
+  startMic().then(() => { if (wantCam && group === g) { wantCam = false; startCam(); } });
 
   let first = true, online = true;
   g.unsubs.push(D.onValue(D.ref(fb.db, '.info/connected'), s => {
@@ -724,7 +728,12 @@ async function openHome() {
 }
 
 // Call a saved friend (they get the "is calling" pop-up wherever they are).
-export function callFriend(uid) { return askFriend(homeId(uid)); }
+export function callFriend(uid, video) {
+  if (video && group && group.peers.size) startCam();
+  const p = askFriend(homeId(uid));
+  wantCam = !!video;
+  return p;
+}
 
 // What I'm playing ('' = menu): friends see it on my bubble and in their list.
 export function setWhere(gameId) {

@@ -494,6 +494,8 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .fb-dock.open .fb-ring:not([hidden]) { display: grid; }
 @media (hover: hover) { .fb:hover .fb-ring:not([hidden]) { display: grid; } }
 .fb.calling .fb-ring:not([hidden]) { display: grid; animation: ring .4s ease-in-out infinite alternate; }
+.fb-vring { right: auto; left: -4px; background: #3b82f6; }
+.frow-btn.fvring { background: #3b82f6; margin-right: 6px; }
 .fb:not(.incall) .fb-face { animation: none; }
 .fbar-plus { position: absolute; top: -4px; right: -4px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; background: #fff; color: #1b7a43; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
 .fbar-plus .ic { stroke-width: 3.4; }
@@ -514,3 +516,4 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .fb.big .fb-face { width: 150px; height: 150px; }
 .fb.big .fb-name { max-width: 150px; }
 .fb-face { transition: width .2s, height .2s; }
+.app-btn.fk-video.name-ok { background: #3b82f6; }
