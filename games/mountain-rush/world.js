@@ -148,7 +148,7 @@ export function buildWorld(mapId = 'pine-ridge') {
         }
         if (f.kind === 'drop') {
           if (sc > f.s - f.run && sc < f.s) h += f.d * smooth(f.s - f.run, f.s - f.run * 0.35, sc);
-          else if (sc >= f.s && sc < f.end) { h += f.d * 0.45 * (1 - smooth(f.s, f.end, sc)); jump = 1; }
+          else if (sc >= f.s && sc < f.end) { h += f.d * 0.45 * Math.pow(1 - (sc - f.s) / (f.end - f.s), 1.8); jump = 1; }
           if (sc > f.s - 3 && sc < f.s) jump = 1;
           continue;
         }

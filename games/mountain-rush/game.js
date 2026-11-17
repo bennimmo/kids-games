@@ -44,7 +44,7 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'talon', points: 0, online: true };
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'trek', points: 0, online: true };
     try { const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; p.look = { ...d.look, ...p.look }; return p; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -159,7 +159,7 @@ export function mount(stage) {
   const LISTS = { frame: COLORS.frame, jersey: COLORS.jersey, helmet: OUTFIT.helmet, pants: OUTFIT.pants, goggle: OUTFIT.goggle };
   const pickColor = k => { const L = LISTS[k], i = prefs.look[k] | 0; return i >= L.length ? (prefs.points >= GOLD ? GOLD_HEX : L[0]) : L[i]; };
   const lookColors = () => ({ frame: pickColor('frame'), jersey: pickColor('jersey'), helmet: pickColor('helmet'), pants: pickColor('pants'), goggle: pickColor('goggle'), open: prefs.look.open ? 1 : 0 });
-  const bikeType = () => (BIKES[prefs.bike] && prefs.points >= BIKES[prefs.bike].unlock ? prefs.bike : 'talon');
+  const bikeType = () => (BIKES[prefs.bike] && prefs.points >= BIKES[prefs.bike].unlock ? prefs.bike : 'trek');
   function swapBike() {
     const old = bike;
     bike = createBike(T, envTex, lookColors(), bikeType());

@@ -104,7 +104,7 @@ export function createOnline(ctx) {
       const lookKey = JSON.stringify([d.bk, d.lk]);
       if (!r || r.lookKey !== lookKey) {
         if (r) dropRemote(r);
-        const bike = ctx.makeBike(typeof d.bk === 'string' ? d.bk : 'talon', lookFrom(d.lk));
+        const bike = ctx.makeBike(typeof d.bk === 'string' ? d.bk : 'trek', lookFrom(d.lk));
         bike.root.matrixAutoUpdate = false; bike.rider.matrixAutoUpdate = false;
         sc.add(bike.root); sc.add(bike.rider);
         const tag = nameTag(cleanName(d.n) || 'Rider'); sc.add(tag);

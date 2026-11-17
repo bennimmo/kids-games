@@ -222,7 +222,7 @@ function hitWall(b, world, ox, oy, oz) {
   let nx = n.x, nz = n.z; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l;      // points away from the high side
   b.pos.x = ox; b.pos.z = oz; b.pos.y = Math.max(oy, world.height(ox, oz));
   const into = -(b.vel.x * nx + b.vel.z * nz);
-  if (into > 0) { b.vel.x += nx * into * 1.2; b.vel.z += nz * into * 1.2; }
+  if (into > 0) { b.vel.x += nx * into * 1.05; b.vel.z += nz * into * 1.05; }
   if (into > 6.5) { crash(b, 'wall'); return true; }
   return false;
 }
@@ -304,7 +304,9 @@ function airStep(b, world, inp, dt) {
   // flew into the side of something much higher than you: bump off it
   if (h - b.pos.y > 0.5) { const px = b.pos.x - b.vel.x * dt, pz = b.pos.z - b.vel.z * dt; if (hitWall(b, world, px, b.pos.y, pz)) return; h = world.height(b.pos.x, b.pos.z); }
   if (b.pos.y <= h) {
-    if (b.air < 0.06 && b.vel.y > 0) b.pos.y = h + 0.005;    // just left a lip: don't land straight back on it
+    // just left a lip and only brushing it: keep flying, don't count a landing
+    const nn = world.normal(b.pos.x, b.pos.z, tmpT), hitV = -dot(b.vel, nn);
+    if (b.air < 0.12 && hitV < 2.2) { b.pos.y = h + 0.005; if (hitV > 0) { b.vel.x += nn.x * hitV; b.vel.y += nn.y * hitV; b.vel.z += nn.z * hitV; } }
     else land(b, world, h);
   }
 }
@@ -313,6 +315,15 @@ function land(b, world, h) {
   b.pos.y = h;
   const n = world.normal(b.pos.x, b.pos.z, tmpN);
   copy(b.n, n);
+  // a tiny skim (wheels barely left the ground, no tricks): just carry on riding, no thud, no lost speed
+  const skimV = -dot(b.vel, n);
+  if (b.air < 0.22 && skimV < 3.5 && Math.abs(b.flip) < 0.3 && Math.abs(b.spin) < 0.3 && !b.whipping && !b.barring) {
+    if (skimV > 0) { b.vel.x += n.x * skimV; b.vel.y += n.y * skimV; b.vel.z += n.z * skimV; }
+    b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
+    for (const k of HOLDS) b[k] = 0; b.holdT = {};
+    copy(b.up, n);
+    return;
+  }
   // the way the ground goes, in the direction we're moving
   const vh = Math.hypot(b.vel.x, b.vel.z) || 1;
   const t = { x: b.vel.x / vh, y: 0, z: b.vel.z / vh };
