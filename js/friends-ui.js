@@ -9,7 +9,7 @@ import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
+  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
@@ -21,7 +21,7 @@ const gameOf = id => GAMES.find(g => g.id === id);
 // "Playing Kit's Karts" / "On the menu" / "Not on"
 const whereText = (online, game) => !online ? 'Not on' : (gameOf(game) ? `Playing ${gameOf(game).name}` : 'On the menu');
 
-let layer, dock, list, micBtn, hangBtn, badge, knockEl, inviteEl, panel = null;
+let layer, dock, list, micBtn, hangBtn, badge, knockEl, inviteEl, panel = null, camBtn, meEl;
 const quiet = new Set(); // friends I've muted (just on this device)
 let openTimer = null;
 function openDock(on) {
@@ -69,7 +69,12 @@ function wireDrag() {
   });
   const end = e => {
     if (!start || e.pointerId !== start.id) return;
-    if (!start.moved && !e.target.closest('button')) openDock(!dock.classList.contains('open')); // tap = show buttons
+    if (!start.moved && !e.target.closest('button')) {
+      // tap = show buttons; tapping a friend's video also makes it bigger (tap again: smaller)
+      const vid = e.target.closest('.fb.video');
+      if (vid) { vid.classList.toggle('big'); openDock(true); } else openDock(!dock.classList.contains('open'));
+      placeDock();
+    }
     if (start.moved) {
       dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight };
       try { localStorage.setItem(DOCK_KEY, JSON.stringify(dockPos)); } catch (er) { /* */ }
@@ -118,18 +123,28 @@ function renderBubbles(s) {
     el.querySelector('.fb-where').textContent = whereText(true, f.game);
     el.title = `${f.name}: ${whereText(true, f.game)}`;
     const v = el.querySelector('video'), a = el.querySelector('audio');
-    // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
-    const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
-    if (v.srcObject !== vs) v.srcObject = vs;
+    // Video only gets the stream while their camera is on (iPad: two players on one voice can sound wrong).
+    const vt = f.stream && f.stream.getVideoTracks()[0];
+    const showVid = !!(f.inCall && f.cam && vt && vt.readyState === 'live');
+    const vs = showVid ? f.stream : null;
+    if (v.srcObject !== vs) { v.srcObject = vs; if (vs) v.play().catch(() => {}); }
     const q = quiet.has(f.uid);
     playVoice(a, f.stream, q);
     el.classList.toggle('quiet', q);
     el.querySelector('.fb-quiet').textContent = q ? '🔈' : '🔊';
-    el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
+    el.classList.toggle('video', showVid);
+    if (!showVid) el.classList.remove('big');
   }
   for (const u of quiet) if (!want.has(u) || !want.get(u).inCall) quiet.delete(u);
   tidyVoices(new Set(s.buddies.filter(f => f.inCall && !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
   dock.classList.toggle('incall', s.inGroup);
+  // my camera: button + my own little (mirrored) bubble while it's on
+  camBtn.hidden = !s.inGroup;
+  camBtn.innerHTML = s.camStatus === 'asking' ? '⏳' : s.camStatus === 'denied' ? '🚫' : icon('camera');
+  camBtn.classList.toggle('off', s.camStatus !== 'on');
+  const mv = meEl.querySelector('video');
+  if (mv.srcObject !== (s.myCam || null)) { mv.srcObject = s.myCam || null; if (s.myCam) mv.play().catch(() => {}); }
+  meEl.hidden = !s.myCam;
   micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   badge.hidden = !(s.muted || s.micStatus === 'denied');
@@ -358,7 +373,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera" hidden>${icon('camera')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb fb-me on video" hidden><div class="fb-face"><video playsinline autoplay muted></video></div><div class="fb-name">Me</div></div><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
@@ -371,6 +386,13 @@ export function mountFriends({ editName }) {
     if (hangBtn.classList.contains('sure')) { openDock(false); leaveGroup(); return; }
     hangBtn.classList.add('sure'); hangBtn.innerHTML = icon('check');
     openDock(true);
+  });
+  camBtn = layer.querySelector('.fb-cam');
+  meEl = layer.querySelector('.fb-me');
+  camBtn.addEventListener('click', () => {
+    sound.pop();
+    openDock(true);
+    if (friendState().camStatus === 'on') stopCam(); else startCam();
   });
   micBtn.addEventListener('click', () => {
     const s = friendState();

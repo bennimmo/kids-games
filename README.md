@@ -53,6 +53,7 @@ Then open http://localhost:8000
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.
 - Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
+- 📷 Video: camera off until you tap 📷 in the bubble buttons. Small (240px, 15fps, ~150kbps). Your own mirrored "Me" bubble shows while it's on. Tap a friend's video to make it bigger.
 - 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
 - Some networks block direct links: a TURN server would fix that (not added yet).

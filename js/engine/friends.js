@@ -78,6 +78,7 @@ let outgoing = null;                  // { code, name, status: asking|no|full|no
 let outUnsub = null, outTimer = null, outToken = 0;
 let group = null;                     // { id, peers: Map(uid -> peer), unsubs, live, timer }
 let mic = null, micStatus = 'off', muted = false; // micStatus: off | asking | on | denied
+let cam = null, camStatus = 'off';                 // camera: off | asking | on | denied (off unless tapped)
 let invites = [];                     // [{ uid, name, face, game, code, at }] from friends
 const dismissed = new Set();          // 'uid:code' already answered
 let playing = null;                   // { game, code } room I'm in (from together.js)
@@ -92,9 +93,9 @@ let presenceUnsubs = new Map();
 const subs = new Set();
 const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
-  inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing,
+  inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing, camStatus, myCam: cam,
   invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
-  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '' })) : [],
+  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam })) : [],
   declines: declines.slice(),
   // Bubbles: friends who are on now (in a call with me or not).
   buddies: buddies(),
@@ -180,6 +181,49 @@ export async function chooseMic(id) {
   old.getTracks().forEach(x => x.stop());
   emit();
 }
+// ------------------------------------------------------------ camera (small video in the bubbles)
+
+const CAM_BITRATE = 150000; // bubbles are tiny: keep it light on wifi and battery
+export async function startCam() {
+  if (cam || camStatus === 'asking' || !group) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camStatus = 'denied'; emit(); return; }
+  camStatus = 'asking'; emit();
+  try {
+    const c = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 240 }, height: { ideal: 240 }, frameRate: { ideal: 15, max: 15 } },
+      audio: false,
+    });
+    if (!group) { c.getTracks().forEach(t => t.stop()); camStatus = 'off'; emit(); return; }
+    cam = c; camStatus = 'on';
+    group.peers.forEach(addCam);
+    if (group.writeMe) group.writeMe();
+  } catch (e) { camStatus = 'denied'; }
+  emit();
+}
+export function stopCam() {
+  if (cam) cam.getTracks().forEach(t => t.stop());
+  cam = null;
+  if (camStatus !== 'denied') camStatus = 'off';
+  if (group) {
+    group.peers.forEach(p => { if (p.camSender) p.camSender.replaceTrack(null).catch(() => {}); });
+    if (group.writeMe) group.writeMe();
+  }
+  emit();
+}
+function addCam(p) {
+  if (!cam || p.pc.signalingState === 'closed') return;
+  const t = cam.getVideoTracks()[0];
+  if (!t) return;
+  if (p.camSender) { p.camSender.replaceTrack(t).catch(() => {}); return; } // no new hand-shake needed
+  p.camSender = p.pc.addTrack(t, cam);
+  try {
+    const prm = p.camSender.getParameters();
+    if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}];
+    prm.encodings[0].maxBitrate = CAM_BITRATE;
+    p.camSender.setParameters(prm).catch(() => {});
+  } catch (e) { /* not supported: browser picks */ }
+}
+
 function stopMic() {
   if (mic) mic.getTracks().forEach(t => t.stop());
   mic = null; micStatus = 'off'; emit();
@@ -370,7 +414,7 @@ async function joinGroup(id) {
     if (group !== g) return;
     D.onDisconnect(meR).remove();
     D.onDisconnect(liveR).remove();
-    D.set(meR, { name: myName(), face: myFace(), sid, game: where }).catch(() => {});
+    D.set(meR, { name: myName(), face: myFace(), sid, game: where, cam: !!cam }).catch(() => {});
   };
   g.writeMe = writeMe;
   await D.remove(liveR).catch(() => {}); // old messages from before a reload
@@ -404,6 +448,7 @@ async function joinGroup(id) {
       p.name = cleanName(m.name) || '?';
       p.face = cleanFace(m.face);
       p.game = typeof m.game === 'string' ? m.game.slice(0, 30) : '';
+      p.cam = m.cam === true;
       if (p.name !== '?') saveFriend(u, p.name, p.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
@@ -429,6 +474,7 @@ export async function leaveGroup() {
   clearTimeout(g.aloneTimer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
+  stopCam();
   stopMic();
   emit();
   const { D, uid } = fb;
@@ -488,8 +534,13 @@ function makePeer(g, theirUid, theirSid) {
   pc.ontrack = e => {
     // A bit more buffer: smooths bumpy wifi instead of speeding voices up to catch up.
     try { if ('jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 250; else if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0.25; } catch (er) { /* */ }
-    peer.stream = e.streams[0] || peer.stream || new MediaStream();
-    if (!e.streams[0]) peer.stream.addTrack(e.track);
+    // One stream per friend holding their voice and (if on) camera, whichever arrives first.
+    if (!peer.stream) peer.stream = new MediaStream();
+    if (!peer.stream.getTracks().includes(e.track)) {
+      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => peer.stream.removeTrack(t));
+      peer.stream.addTrack(e.track);
+    }
+    e.track.onunmute = e.track.onmute = () => emit();
     emit();
   };
 
@@ -502,6 +553,7 @@ function makePeer(g, theirUid, theirSid) {
   dc.onclose = () => setStatus('connecting');
   peer.dc = dc;
   addMic(peer);
+  addCam(peer);
 
   async function handle(msg) {
     if (closed || !msg) return;
@@ -570,11 +622,11 @@ function buddies() {
     const p = group && group.peers.get(c.uid);
     if (!pr.on && !p) continue;
     out.push({ uid: c.uid, name: p ? p.name : c.name, face: p ? (p.face || '') : c.face, game: p ? (p.game || '') : (pr.game || ''),
-      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null,
+      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam),
       calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking') });
   }
   if (group) for (const p of group.peers.values()) if (!out.some(o => o.uid === p.uid)) {
-    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, calling: false });
+    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, calling: false });
   }
   return out;
 }

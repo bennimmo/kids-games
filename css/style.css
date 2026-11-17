@@ -499,3 +499,18 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .fbar-plus .ic { stroke-width: 3.4; }
 
 .fadded { font-weight: 700; color: #1b7a43; background: #d7f5e1; border-radius: 16px; padding: 8px 16px; }
+
+/* camera */
+.fb-cam {
+  width: 48px; height: 48px; border: 3px solid #fff; border-radius: 50%; background: var(--btn-ok); color: #fff; font-size: 22px; cursor: pointer;
+  box-shadow: 0 4px 10px -2px rgba(0,0,0,.35); padding: 0; display: grid; place-items: center;
+}
+.fb-cam[hidden] { display: none; }
+.fb-cam.off { background: linear-gradient(180deg, #b0bec5, #78909c); }
+.fb-me[hidden] { display: none; }
+.fb-me .fb-face { background: #222; width: 52px; height: 52px; }
+.fb-me video { transform: scaleX(-1); }
+.fb.big { width: 156px; }
+.fb.big .fb-face { width: 150px; height: 150px; }
+.fb.big .fb-name { max-width: 150px; }
+.fb-face { transition: width .2s, height .2s; }
