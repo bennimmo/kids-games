@@ -415,7 +415,7 @@ export function mount(stage) {
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
     // lean into turns
-    const targetRoll = b.ground ? clamp(-b.steer * Math.min(1, b.speed / 9) * 0.55, -0.6, 0.6) : vis.roll * 0.95;
+    const targetRoll = b.ground ? clamp(b.steer * Math.min(1, b.speed / 9) * 0.55, -0.6, 0.6) : vis.roll * 0.95;
     vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 8));
     up.applyAxisAngle(fwd, vis.roll);
     vis.manual = lerp(vis.manual, b.manual ? 0.42 + b.manualBal * 0.12 : 0, 1 - Math.exp(-dt * 10));
