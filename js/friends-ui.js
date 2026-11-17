@@ -49,7 +49,10 @@ let dockPos = loadDock();
 function placeDock() {
   dock.classList.toggle('left', dockPos.side === 'left');
   const h = dock.offsetHeight || 0;
-  const top = Math.max(96, Math.min(innerHeight - h - 12, dockPos.y * innerHeight - h / 2));
+  // dockPos.t = where the top sits, so friends don't shift when bubbles come and go.
+  if (dockPos.t == null && h) dockPos.t = (dockPos.y * innerHeight - h / 2) / innerHeight; // fix it after first showing
+  const want = dockPos.t != null ? dockPos.t * innerHeight : dockPos.y * innerHeight - h / 2;
+  const top = Math.max(96, Math.min(innerHeight - h - 12, want));
   dock.style.top = top + 'px';
 }
 
@@ -76,7 +79,7 @@ function wireDrag() {
       placeDock();
     }
     if (start.moved) {
-      dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight };
+      dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight, t: dock.offsetTop / innerHeight };
       try { localStorage.setItem(DOCK_KEY, JSON.stringify(dockPos)); } catch (er) { /* */ }
     }
     dock.classList.remove('dragging');
@@ -99,7 +102,7 @@ function renderBubbles(s) {
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><div class="fb-name"></div><div class="fb-where"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><div class="fb-where"></div></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
       el.querySelector('.fb-quiet').addEventListener('click', () => {
         sound.pop();
         quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
@@ -373,7 +376,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera" hidden>${icon('camera')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb fb-me on video" hidden><div class="fb-face"><video playsinline autoplay muted></video></div><div class="fb-name">Me</div></div><div class="fb-list"></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera" hidden>${icon('camera')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div><div class="fb fb-me on video" hidden><div class="fb-face"><video playsinline autoplay muted></video></div><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');

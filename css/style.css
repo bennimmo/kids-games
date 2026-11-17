@@ -517,3 +517,24 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .fb.big .fb-name { max-width: 150px; }
 .fb-face { transition: width .2s, height .2s; }
 .app-btn.fk-video.name-ok { background: #3b82f6; }
+
+/* Buttons pop out to the side (and the call tools above), so the bubbles never move under your finger. */
+.fb-tools {
+  position: absolute; bottom: 100%; right: 0; padding-bottom: 10px; flex-direction: row-reverse;
+}
+.fb-dock.left .fb-tools { right: auto; left: 0; flex-direction: row; }
+.fb-badge { position: absolute; bottom: calc(100% + 10px); right: 14px; }
+.fb-dock.left .fb-badge { right: auto; left: 14px; }
+.fb-side {
+  display: none; position: absolute; top: 12px; right: 100%; padding-right: 8px;
+  flex-direction: row-reverse; align-items: center; gap: 8px;
+}
+.fb-dock.left .fb-side { right: auto; left: 100%; padding-right: 0; padding-left: 8px; flex-direction: row; }
+.fb-dock.open .fb-side, .fb.calling .fb-side, .fb.quiet .fb-side { display: flex; }
+@media (hover: hover) { .fb-dock:hover .fb-side { display: flex; } }
+.fb-side .fb-ring, .fb-side .fb-quiet, .fb-side .fb-where, .fb-side .fb-vring { position: static; animation: none; }
+.fb-side .fb-ring { width: 40px; height: 40px; font-size: 20px; }
+.fb-side .fb-quiet { width: 40px; height: 40px; font-size: 20px; }
+.fb-dock.left .fb-where { left: auto; }
+@media (hover: hover) { .fb-dock:hover .fb-where { display: block; } }
+.fb.calling .fb-side .fb-ring:not([hidden]) { animation: ring .4s ease-in-out infinite alternate; }
