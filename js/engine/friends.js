@@ -712,8 +712,14 @@ async function openHome() {
       .map(([pid, k]) => ({ pid, room: id, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group), saved: true }));
     mergeKnocks();
   }));
+  // Self-repair: an old tab's late "gone" (onDisconnect) can mark me offline while I'm here.
+  let leaving = false;
+  home.unsubs.push(D.onValue(ref(`${id}/meta/on`), s => {
+    if (s.val() !== true && !leaving) setTimeout(() => { if (!leaving) put().catch(() => {}); }, 1500);
+  }));
   watchPresence();
-  window.addEventListener('pagehide', () => { D.update(ref(`${id}/meta`), { on: false }).catch(() => {}); });
+  window.addEventListener('pagehide', () => { leaving = true; D.update(ref(`${id}/meta`), { on: false }).catch(() => {}); });
+  window.addEventListener('pageshow', () => { if (leaving) { leaving = false; put().catch(() => {}); } });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') put().catch(() => {}); });
 }
 
