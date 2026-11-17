@@ -83,3 +83,9 @@
 .mr-bike[disabled] { opacity: .5; cursor: default; }
 .mr-sw.gold { background: linear-gradient(135deg, #f7e08a, #d4a017 50%, #a0740c); font-size: 14px; color: #fff; }
 .mr-sw[disabled] { opacity: .6; cursor: default; }
+.mr-online { position: absolute; left: 92px; top: 22px; font-size: 16px; font-weight: 900; padding: 4px 12px; border-radius: 12px; background: rgba(14,18,24,.45); }
+.mr-online:empty { display: none; }
+.mr-boardlist { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.mr-boardlist div { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 17px; }
+.mr-boardlist i { font-style: normal; font-weight: 900; font-variant-numeric: tabular-nums; }
+.mr-roomstrip { width: 100%; }

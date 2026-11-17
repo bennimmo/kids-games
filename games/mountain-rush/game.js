@@ -16,6 +16,8 @@ import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
 import { makeTextures } from './textures.js';
+import { createOnline } from './online.js';
+import { togetherButton, takeJoinCode } from '../../js/engine/together.js';
 import { clamp, lerp } from '../sky-pilot/noise.js';
 
 const PREFS_KEY = 'mountain-rush-v1';
@@ -42,7 +44,7 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'downhill', points: 0 };
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'downhill', points: 0, online: true };
     try { const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; p.look = { ...d.look, ...p.look }; return p; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -63,6 +65,35 @@ export function mount(stage) {
   const S = { phase: 'loading', paused: false, map: MAPS[prefs.map] ? prefs.map : 'pine-ridge', time: 0, timing: false, score: 0, cp: 0, gate: null, finished: false, crashT: 0, msgT: 0, combo: null, hideUI: false, route: 0 };
   let alive = true, raf = 0, W = null, scene = null, bike = null, rider = null, Q = QUALITY[prefs.quality] || QUALITY.high;
   const camera = new THREE.PerspectiveCamera(70, 1, 0.08, 600);
+  let inviteCode = takeJoinCode('mountain-rush');
+  let lastPose = null;
+  const q4 = new THREE.Quaternion(), p3 = new THREE.Vector3(), s3 = new THREE.Vector3();
+  const r2 = v => Math.round(v * 100) / 100;
+  const online = createOnline({
+    scene: () => scene.scene,
+    world: () => W,
+    makeBike: (type, look) => createBike(T, envTex, look, type),
+    wantPublic: () => prefs.online,
+    me: () => {
+      bike.root.matrix.decompose(p3, q4, s3);
+      const P = lastPose || {};
+      return {
+        p: [r2(p3.x), r2(p3.y), r2(p3.z)], q: [q4.x, q4.y, q4.z, q4.w].map(v => Math.round(v * 1000) / 1000), v: [r2(rider.vel.x), r2(rider.vel.y), r2(rider.vel.z)],
+        ps: [P.steer, P.crouch, P.superman, P.nohand, P.table, P.cancan, P.nofoot, P.whip, P.bar, P.manual, P.crank].map(v => r2(v || 0)),
+        bk: bikeType(), lk: [pickColor('frame'), pickColor('jersey'), pickColor('helmet'), pickColor('pants'), pickColor('goggle'), prefs.look.open ? 1 : 0],
+        cr: rider.crashed ? 1 : 0, hey: S.hey || 0,
+      };
+    },
+    onPlayers: () => { refreshRoomBits(); },
+    onMeta: m => {
+      if (m.map && m.map !== S.map && !online.isHost() && MAPS[m.map]) { S.map = m.map; build(); return; }
+      if (m.race && m.race.id !== S.raceSeen) { S.raceSeen = m.race.id; if (online.now() < m.race.t + 3000) startRaceCountdown(m.race); }
+      refreshRoomBits();
+    },
+    onLeft: gone => { if (gone) showMsgSafe('Your friend has left'); if (S.phase === 'menu') menu(); },
+    onJoin: name => showMsgSafe(`👋 ${name || 'A rider'} is here`),
+    onHey: name => { showMsgSafe(`👋 ${name || 'Rider'} says hey!`); snd('hey'); },
+  });
   const cam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), yaw: 0, fov: 70, shake: 0 };
 
   // ---------------------------------------------------------------- loading
@@ -74,6 +105,7 @@ export function mount(stage) {
 
   async function build() {
     S.phase = 'loading';
+    online.clear();
     loadingUI('Shaping the mountain', 0.05); await tick();
     if (!alive) return;
     W = buildWorld(S.map);
@@ -99,6 +131,8 @@ export function mount(stage) {
     if (!alive) return;
     S.phase = 'menu';
     menu();
+    const code = inviteCode; inviteCode = null;
+    if (code) online.joinCode(code).then(r => { if (!r) showMenuNote('That ride has finished'); else menu(); }).catch(() => showMenuNote('Could not join'));
   }
 
   function makeEnv() {
@@ -231,6 +265,7 @@ export function mount(stage) {
       <div class="mr-prog"><i></i>${W.checkpoints.slice(1).map(c => `<em style="left:${(c.z - W.startZ) / (W.finishZ - W.startZ) * 100}%"></em>`).join('')}</div>
       <div class="mr-score"><span>Tricks</span><b>0</b><div class="mr-combo"></div></div>
       <div class="mr-route"></div>
+      <div class="mr-online"></div>
       <div class="mr-speed"><b>0</b><small>km/h</small></div>
       <div class="mr-trick"><div class="t"></div><div class="p"></div></div>
       <div class="mr-airname"></div>
@@ -245,7 +280,7 @@ export function mount(stage) {
   }
   const H = {};
   function hudRefs() {
-    for (const [k, sel] of Object.entries({ time: '.mr-time', cp: '.mr-cp', combo: '.mr-combo', route: '.mr-route', prog: '.mr-prog i', score: '.mr-score b', speed: '.mr-speed b', trick: '.mr-trick', trickT: '.mr-trick .t', trickP: '.mr-trick .p', air: '.mr-airname', msg: '.mr-msg' })) H[k] = hudEl.querySelector(sel);
+    for (const [k, sel] of Object.entries({ time: '.mr-time', cp: '.mr-cp', onl: '.mr-online', combo: '.mr-combo', route: '.mr-route', prog: '.mr-prog i', score: '.mr-score b', speed: '.mr-speed b', trick: '.mr-trick', trickT: '.mr-trick .t', trickP: '.mr-trick .p', air: '.mr-airname', msg: '.mr-msg' })) H[k] = hudEl.querySelector(sel);
   }
   const fmt = t => { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`; };
   let trickHide = 0, msgHide = 0;
@@ -299,6 +334,11 @@ export function mount(stage) {
       <div class="ui-label">Graphics</div>
       <div class="ui-seg mr-q">${['low', 'mid', 'high'].map(q => `<button data-q="${q}" class="${Q.name === q ? 'on' : ''}">${q === 'low' ? 'Fast' : q === 'mid' ? 'Good' : 'Best'}</button>`).join('')}</div>
       <div class="ui-row"><button class="ui-btn go big mr-go">Ride!</button></div>
+      ${online.net.room ? `<div class="ui-label">Riding with friends</div><div class="mr-roomstrip">${online.stripHTML()}</div>
+        <div class="ui-row">${online.isHost() ? '<button class="ui-btn primary mr-race">🏁 Race!</button>' : '<span class="mr-best">Your friend can start a race</span>'}<button class="ui-btn ghost mr-leave">Leave friends</button></div>`
+        : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
+      <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">🌍 See everyone online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
+      <div class="mr-note mr-best"></div>
       ${controlsHTML()}
     </div></div>`;
     click(ui.querySelector('.mr-go'), startRide);
@@ -308,6 +348,11 @@ export function mount(stage) {
       build();
     }));
     click(ui.querySelector('.mr-garageb'), garage);
+    const tb = ui.querySelector('[data-together]');
+    if (tb) click(tb, async () => { tb.disabled = true; try { const r = await online.hostRoom(S.map); if (r) menu(); else tb.disabled = false; } catch (e) { tb.disabled = false; showMenuNote('Could not go online'); } });
+    click(ui.querySelector('.mr-race'), () => online.startRace());
+    click(ui.querySelector('.mr-leave'), () => { online.leaveRoom(); menu(); });
+    ui.querySelectorAll('.mr-onl button').forEach(b => click(b, () => { prefs.online = b.dataset.o === '1'; savePrefs(); ui.querySelectorAll('.mr-onl button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-q button').forEach(b => click(b, () => {
       if (b.dataset.q === Q.name) return;
       prefs.quality = b.dataset.q; savePrefs(); Q = QUALITY[b.dataset.q];
@@ -393,7 +438,8 @@ export function mount(stage) {
     restartRun();
     S.phase = 'ride';
   }
-  function restartRun() {
+  function restartRun(keepRace) {
+    if (!keepRace) { S.racing = false; S.raceT = 0; }
     placeAt(rider, W, W.start);
     S.time = 0; S.timing = false; S.score = 0; S.cp = 0; S.gate = null; S.finished = false; S.crashT = 0; S.combo = null; S.route = 0;
     snapCamera();
@@ -414,9 +460,10 @@ export function mount(stage) {
       const ov = document.createElement('div');
       ov.className = 'ui-overlay mr-pausepanel';
       ov.innerHTML = `<div class="ui-panel"><div class="ui-kicker">Mountain Rush</div><h2 class="ui-title">Paused</h2>
-        <div class="ui-row"><button class="ui-btn go mr-res1">Resume</button><button class="ui-btn mr-res2">Restart</button><button class="ui-btn ghost mr-res3">Menu</button></div>${controlsHTML()}</div>`;
+        <div class="ui-row"><button class="ui-btn go mr-res1">Resume</button><button class="ui-btn mr-res2">Restart</button>${online.isHost() ? '<button class="ui-btn primary mr-res4">🏁 Race friends</button>' : ''}<button class="ui-btn ghost mr-res3">Menu</button></div>${online.net.room ? `<div class="mr-roomstrip">${online.stripHTML()}</div>` : ''}${controlsHTML()}</div>`;
       ui.appendChild(ov);
       click(ov.querySelector('.mr-res1'), togglePause);
+      click(ov.querySelector('.mr-res4'), () => { ov.remove(); S.phase = 'ride'; online.startRace(); });
       click(ov.querySelector('.mr-res2'), () => { ov.remove(); S.phase = 'ride'; restartRun(); });
       click(ov.querySelector('.mr-res3'), () => { menu(); placeAt(rider, W, W.start); snapCamera(); });
     } else if (S.phase === 'paused') {
@@ -431,7 +478,27 @@ export function mount(stage) {
     S.gate = { x: rider.pos.x, z: rider.pos.z, yaw: rider.yaw, own: true };
     showMsg('Respawn point set', 1.2); snd('cp');
   }
-  function sayHey() { showMsg('👋 Hey!', 1); snd('hey'); S.hey = performance.now(); }
+  function sayHey() { showMsg('👋 Hey!', 1); snd('hey'); S.hey = Date.now(); }
+  const showMsgSafe = (t, d) => { if (H.msg && hudEl.contains(H.msg)) showMsg(t, d); };
+  function showMenuNote(t) { const n = ui.querySelector('.mr-note'); if (n) n.textContent = t; }
+  // ---- friends room + races
+  function refreshRoomBits() {
+    if (S.phase === 'menu' && online.net.room && !ui.querySelector('.mr-roomstrip')) { menu(); return; }
+    ui.querySelectorAll('.mr-roomstrip').forEach(e => { e.innerHTML = online.stripHTML(); });
+    const rb = ui.querySelector('.mr-board'); if (rb) rb.innerHTML = boardHTML();
+  }
+  function boardHTML() {
+    if (!online.net.room || !S.raceId) return '';
+    const rows = online.list().filter(p => p.race === S.raceId && Number.isFinite(p.time)).sort((a, b) => a.time - b.time);
+    if (!rows.length) return '<div class="mr-best">Waiting for riders to finish…</div>';
+    return `<div class="mr-boardlist">${rows.map((p, i) => `<div><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'}</span><b>${p.face || '🙂'} ${p.name}</b><i>${fmt(p.time)}</i></div>`).join('')}</div>`;
+  }
+  function startRaceCountdown(race) {
+    if (S.phase !== 'ride') { if (!hudEl.querySelector('.mr-time')) startRide(); else { ui.querySelectorAll('.ui-overlay').forEach(o => o.remove()); S.phase = 'ride'; } }
+    S.raceId = race.id; S.raceT = race.t; S.cdShown = undefined;
+    restartRun(true);
+    S.racing = true; S.timing = false;
+  }
   // combos: tricks landed one after another add up; banked after COMBO_GAP seconds on the ground
   function addCombo(list, pts) {
     if (!S.combo) S.combo = { pts: 0, n: 0, t: COMBO_GAP };
@@ -449,6 +516,8 @@ export function mount(stage) {
 
   function finishRun() {
     S.finished = true; S.timing = false;
+    const raceRun = S.racing && S.raceId;
+    if (raceRun) online.postResult(S.raceId, S.time);
     const best = prefs.best[S.map];
     const newBest = !best || S.time < best.time;
     const newScore = !best || S.score > (best.score || 0);
@@ -461,9 +530,11 @@ export function mount(stage) {
       const ov = document.createElement('div'); ov.className = 'ui-overlay';
       ov.innerHTML = `<div class="ui-panel"><div class="ui-kicker">${W.name}</div><h2 class="ui-title">Finished!</h2>
         <div class="mr-res"><div><span>Time</span><b>${fmt(S.time)}</b>${newBest ? '<span>Best!</span>' : ''}</div><div><span>Tricks</span><b>${S.score.toLocaleString()}</b>${newScore && S.score ? '<span>Best!</span>' : ''}</div><div><span>Best time</span><b>${fmt(prefs.best[S.map].time)}</b></div></div>
-        <div class="ui-row"><button class="ui-btn go big mr-again">Ride again</button><button class="ui-btn ghost mr-menu">Menu</button></div></div>`;
+        ${raceRun ? `<div class="ui-label">Race</div><div class="mr-board">${boardHTML()}</div>` : ''}
+        <div class="ui-row"><button class="ui-btn go big mr-again">Ride again</button>${raceRun && online.isHost() ? '<button class="ui-btn primary mr-race2">Race again</button>' : ''}<button class="ui-btn ghost mr-menu">Menu</button></div></div>`;
       ui.appendChild(ov);
       click(ov.querySelector('.mr-again'), () => { ov.remove(); S.phase = 'ride'; restartRun(); });
+      click(ov.querySelector('.mr-race2'), () => online.startRace());
       click(ov.querySelector('.mr-menu'), () => { menu(); placeAt(rider, W, W.start); snapCamera(); });
     }, 1200);
   }
@@ -546,7 +617,8 @@ export function mount(stage) {
     }
     bike.root.matrix.copy(m4); bike.root.matrixWorldNeedsUpdate = true;
     bike.rider.matrix.copy(m4); bike.rider.matrixWorldNeedsUpdate = true;
-    bike.pose({ steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 });
+    lastPose = { steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 };
+    bike.pose(lastPose);
   }
   function startCrash() {
     const b = rider;
@@ -669,7 +741,11 @@ export function mount(stage) {
       else { crashSim.bike = null; }
       if (S.timing) S.time += dt;
       // start timer, checkpoints, finish
-      if (!S.timing && !S.finished && rider.pos.z > W.startZ + 2) S.timing = true;
+      if (S.racing && S.raceT) {
+        const left = (S.raceT - online.now()) / 1000;
+        if (left > 0) { placeAt(rider, W, W.start); S.time = 0; const n = Math.ceil(left); if (n !== S.cdShown && n <= 3) { S.cdShown = n; showMsg(String(n), 0.9); snd('cp'); } }
+        else if (S.cdShown !== 0) { S.cdShown = 0; S.timing = true; S.time = -left; showMsg('GO!', 1); snd('combo'); }
+      } else if (!S.timing && !S.finished && rider.pos.z > W.startZ + 2) S.timing = true;
       const nextCp = W.checkpoints[S.cp + 1];
       if (nextCp && !rider.crashed && rider.onTrail) {
         const g = nextCp.gates.find(g => g.r === rider.route && rider.progress >= g.i) || (rider.pos.z > nextCp.z + 6 ? nextCp.gates.reduce((a, b) => (Math.hypot(a.x - rider.pos.x, a.z - rider.pos.z) < Math.hypot(b.x - rider.pos.x, b.z - rider.pos.z) ? a : b)) : null);
@@ -701,6 +777,8 @@ export function mount(stage) {
       bike.head.visible = true;
       if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
     } else if (!(window.__mr && window.__mr.hold)) updateCamera(dt);
+    online.tick(dt, S.map, S.phase === 'ride' || S.phase === 'paused' || S.phase === 'done');
+    online.update(dt);
     scene.update(dt, camera, rider.pos);
     updateHUD(dt);
     updateAudio(dt);
@@ -723,7 +801,9 @@ export function mount(stage) {
   }
   function updateHUD(dt) {
     if (S.phase !== 'ride' && S.phase !== 'done' || !H.time) return;
-    H.time.textContent = fmt(S.time);
+    H.time.textContent = fmt(Math.max(0, S.time));
+    const nOn = online.remotes.size;
+    H.onl.textContent = nOn ? `${online.net.room ? '👫' : '🌍'} ${nOn + 1} riding` : '';
     H.cp.textContent = `CP ${S.cp}/${W.checkpoints.length - 1}`;
     H.score.textContent = S.score.toLocaleString();
     H.speed.textContent = Math.round(rider.speed * 3.6);
@@ -768,7 +848,7 @@ export function mount(stage) {
 
   // testing hook
   if (PARAMS.has('mrtest')) window.__mr = {
-    S, get rider() { return rider; }, get W() { return W; }, get scene() { return scene; }, startRide, keys, camera,
+    S, get rider() { return rider; }, get W() { return W; }, get scene() { return scene; }, startRide, keys, camera, online, menu,
     // run the game for `sec` seconds with fixed inputs, without waiting for frames (for tests)
     sim(sec, inp = {}, stopWhen) {
       const full = { steer: 0, throttle: 0, jump: false, ...inp };
@@ -789,6 +869,7 @@ export function mount(stage) {
 
   return () => {
     alive = false;
+    online.leaveAll();
     cancelAnimationFrame(raf);
     ro.disconnect();
     window.removeEventListener('keydown', onKey);
