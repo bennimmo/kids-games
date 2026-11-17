@@ -1,7 +1,7 @@
 // Computer tanks. Tries lots of shots in its head and picks the closest,
 // then wobbles it a bit (a lot on easy). Runs on one device; the shot it
 // picks is sent like anyone else's, so trig is fine in here.
-import { W, WATER_Y, DT, MAX_SPEED } from './sim.js';
+import { WATER_Y, DT, MAX_SPEED } from './sim.js';
 
 const FUN = ['chicken', 'cupcake', 'sock', 'mole', 'boot', 'firework', 'cloud', 'shrink', 'whoopee', 'magnet'];
 
@@ -12,7 +12,7 @@ function landing(world, sx, sy, vx, vy, grav, ownerI) {
     vy += world.g * grav * DT;
     vx += world.wind * 7 * DT;
     x += vx * DT; y += vy * DT;
-    if (y > WATER_Y || x < -300 || x > W + 300) return { x, y, water: true };
+    if (y > WATER_Y || x < -300 || x > world.W + 300) return { x, y, water: true };
     if (i > 20) {
       for (const t of world.tanks) {
         if (t.alive && t.i !== ownerI && Math.hypot(x - t.x, y - t.y + 12) < 18) return { x, y, tank: t };
@@ -34,7 +34,7 @@ export function planShot(world, level) {
   let w = 'shell';
   const fun = FUN.filter(id => me.ammo[id] > 0);
   if (fun.length && Math.random() < (level === 'easy' ? 0.35 : 0.5)) w = fun[Math.floor(Math.random() * fun.length)];
-  if (w === 'whoopee' && !(target.x < 250 || target.x > W - 250)) w = 'shell';
+  if (w === 'whoopee' && !(target.x < 250 || target.x > world.W - 250)) w = 'shell';
   if (w === 'magnet' && Math.abs(target.x - me.x) < 300) w = 'shell';
   if (me.hp < 35 && me.ammo.toilet > 0 && Math.random() < 0.3) {
     return { x: me.x, y: me.y, f: me.face, w: 'toilet', vx: 0, vy: 0, picked: [] };

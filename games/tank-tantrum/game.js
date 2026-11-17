@@ -369,12 +369,13 @@ export function mount(stage) {
     cam.y = wy - (py - view.height / 2) / z;
     clampCam();
   }
-  function fitZoom() { return Math.min(view.width / W, view.height / (H - 100)); }
+  function fitZoom() { return Math.min(view.width / mapW(), view.height / (H - 100)); }
+  function mapW() { return match ? match.world.W : W; }
   function camTarget() {
     const w = replay ? replay.world : match.world;
     if (overview && !replay && w.phase !== 'over') {
       const z = fitZoom();   // whole map, with the sea line just above the buttons
-      return { x: W / 2, y: WATER_Y + 30 - (view.height / 2 - 110) / z, z };
+      return { x: mapW() / 2, y: WATER_Y + 30 - (view.height / 2 - 110) / z, z };
     }
     const z = baseZoom() * userZoom;
     if (w.projectiles.length) {
@@ -391,7 +392,8 @@ export function mount(stage) {
   function clampCam() {
     const hw = view.width / 2 / cam.z, hh = view.height / 2 / cam.z;
     const pad = overview ? 0 : 320;   // a bit of sea past each end, so edge tanks can be in the middle
-    cam.x = W + pad * 2 < hw * 2 ? W / 2 : Math.min(W + pad - hw, Math.max(hw - pad, cam.x));
+    const MW = mapW();
+    cam.x = MW + pad * 2 < hw * 2 ? MW / 2 : Math.min(MW + pad - hw, Math.max(hw - pad, cam.x));
     const top = -500 + hh, bottom = H + (overview ? 400 : 200) - hh;
     cam.y = bottom < top ? (top + bottom) / 2 : Math.min(bottom, Math.max(top, cam.y));
   }

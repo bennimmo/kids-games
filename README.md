@@ -182,8 +182,9 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - Your turn (45 s): ◀ ▶ drive (fuel runs out), 🎒 pick a weapon, drag back from your tank like a slingshot, let go to fire.
 - Keys: ← → drive, ↑ ↓ aim, hold Space for power, Q / E change weapon.
-- 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb.
+- 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb (drills out, BOOM, zooms back, BOOM).
 - 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
+- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400 (`mapWidth` in `sim.js`).
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
 - Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).

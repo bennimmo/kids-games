@@ -14,6 +14,6 @@ export const WEAPONS = [
   { id: 'magnet', icon: '🧲', name: 'Magnet Mine', desc: 'Pulls tanks in, then BOOM', ammo: 1 },
   { id: 'toilet', icon: '🚽', name: 'Teleport Toilet', desc: 'Flush yourself somewhere new', ammo: 1, noAim: true },
   { id: 'firework', icon: '🎆', name: 'Firework Party', desc: 'Showers sparks everywhere', ammo: 1 },
-  { id: 'yoyo', icon: '🪀', name: 'Yo-Yo Bomb', desc: 'Flies out and comes back', ammo: 2 },
+  { id: 'yoyo', icon: '🪀', name: 'Yo-Yo Bomb', desc: 'Drills out, BOOM, zooms back, BOOM', ammo: 2 },
 ];
 export const WEAPON = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
