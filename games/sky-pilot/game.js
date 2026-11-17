@@ -297,7 +297,7 @@ export function mount(stage) {
     const has = code => keys.has(code);
     const any = (name) => has(K[name]) || (solo && has(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(has));
     const hit = (name) => pressed.includes(K[name]) || (solo && pressed.includes(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(c => pressed.includes(c)));
-    const inv = -1;   // always pilot style: ↑ / stick forward = nose down, ↓ / pull back = nose up
+    const inv = -1;   // always pilot style: ↑ / stick forward = nose down, ↓ / pull back = nose up (tilt: top of phone toward you = nose up)
     let tp = ((any('up') ? 1 : 0) - (any('down') ? 1 : 0)) * inv;
     let tr = (any('right') ? 1 : 0) - (any('left') ? 1 : 0);
     let ty = (any('yawR') ? 1 : 0) - (any('yawL') ? 1 : 0);
@@ -330,7 +330,7 @@ export function mount(stage) {
     if (T && T.stick.active) analog = { roll: T.stick.x, pitch: -T.stick.y * inv };
     if (T && T.brake) brake = true;
     if (T && T.actions.length) { actions.push(...T.actions); T.actions.length = 0; }
-    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer, 3, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) * inv };
+    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer, 3, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) };
     // smooth keys, take analog straight
     const ease = (cur, tgt) => cur + clamp(tgt - cur, -dt * (tgt === 0 ? 5 : 3), dt * (tgt === 0 ? 5 : 3));
     const inp = s.input;
@@ -1401,7 +1401,7 @@ export function mount(stage) {
   const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); };
   document.addEventListener('visibilitychange', onVisible);
 
-  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
+  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
 
   return () => {
     alive = false;
