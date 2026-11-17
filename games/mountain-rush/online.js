@@ -8,9 +8,9 @@
 //
 // Each device sends its own rider ~8 times a second: position, rotation, speed and pose.
 import * as THREE from '../../js/vendor/three.module.min.js';
-import { createRoom, joinRoom, joinPublic } from '../../js/engine/net.js';
+import { createRoom, joinRoom, joinPublic, firebaseCore } from '../../js/engine/net.js';
 import { playTogether, joined, leftRoom, people, playerInfo, lobbyHTML } from '../../js/engine/together.js';
-import { myName, cleanName, nameHTML } from '../../js/engine/profile.js';
+import { myName, myFace, cleanName, nameHTML } from '../../js/engine/profile.js';
 
 const GAME = 'mountain-rush';
 const MAX_REMOTES = 10;
@@ -169,7 +169,30 @@ export function createOnline(ctx) {
 
   async function leaveAll() { leaveRoom(); leavePublic(); }
 
-  return { net, clear: clearRemotes, goRoom, goPublic, leavePublic, hostRoom, joinCode, leaveRoom, leaveAll, tick, update, others, list, isHost, now, startRace, postResult, stripHTML, remotes };
+  // ------------------------------------------------------------ fastest times board (one per map, kept for good)
+  const LOCAL = new URLSearchParams(location.search).get('net') === 'local';
+  async function submitBest(map, time, score) {
+    if (LOCAL) return;
+    try {
+      const { D, db, uid } = await firebaseCore();
+      const ref = D.ref(db, `games/${GAME}/rooms/lb-${map}/players/${uid}_b`);
+      const old = (await D.get(ref)).val();
+      if (old && old.time <= time && (old.score || 0) >= score) return;
+      await D.set(ref, { name: cleanName(myName()) || 'Rider', face: myFace() || '🙂', time: old && old.time < time ? old.time : Math.round(time * 100) / 100, score: Math.max(score, (old && old.score) || 0), at: Date.now() });
+    } catch (e) { /* offline */ }
+  }
+  async function board(map) {
+    if (LOCAL) return [];
+    try {
+      const { D, db, uid } = await firebaseCore();
+      const v = (await D.get(D.ref(db, `games/${GAME}/rooms/lb-${map}/players`))).val() || {};
+      return Object.entries(v).filter(([, e]) => e && Number.isFinite(e.time) && e.time > 20)
+        .map(([pid, e]) => ({ me: pid.startsWith(uid + '_'), name: cleanName(e.name) || 'Rider', face: e.face || '🙂', time: e.time, score: e.score || 0 }))
+        .sort((a, b) => a.time - b.time).slice(0, 10);
+    } catch (e) { return []; }
+  }
+
+  return { net, submitBest, board, clear: clearRemotes, goRoom, goPublic, leavePublic, hostRoom, joinCode, leaveRoom, leaveAll, tick, update, others, list, isHost, now, startRace, postResult, stripHTML, remotes };
 }
 
 function lookFrom(lk) {

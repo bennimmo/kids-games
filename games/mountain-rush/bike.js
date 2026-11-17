@@ -120,31 +120,55 @@ export function createBike(T, env, look = {}, type = 'downhill') {
 
   // --------------------------------------------------------------- rider (its own group so it can fly off in a crash)
   const rider = new THREE.Group();
-  const limb = (r0, r1, m) => { const g = new THREE.CylinderGeometry(r1, r0, 1, 10, 1); g.translate(0, 0.5, 0); const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; rider.add(mesh); return mesh; };
-  const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), m); mesh.scale.set(sx, sy, sz); mesh.castShadow = true; rider.add(mesh); return mesh; };
-  const P = {
-    thigh: [limb(0.085, 0.07, mats.pants), limb(0.085, 0.07, mats.pants)],
-    shin: [limb(0.065, 0.05, mats.pants), limb(0.065, 0.05, mats.pants)],
-    knee: [ball(0.075, mats.pad), ball(0.075, mats.pad)],
-    shoe: [ball(0.06, mats.shoe, 1, 0.7, 2), ball(0.06, mats.shoe, 1, 0.7, 2)],
-    upper: [limb(0.055, 0.048, mats.jersey), limb(0.055, 0.048, mats.jersey)],
-    fore: [limb(0.047, 0.04, mats.jersey), limb(0.047, 0.04, mats.jersey)],
-    elbow: [ball(0.05, mats.jersey), ball(0.05, mats.jersey)],
-    hand: [ball(0.045, mats.glove), ball(0.045, mats.glove)],
-    shoulder: [ball(0.065, mats.jersey), ball(0.065, mats.jersey)],
-    hips: ball(0.16, mats.pants, 1.1, 0.75, 0.9),
+  const add = (g, m, shadow = true) => { const mesh = new THREE.Mesh(g, m); mesh.castShadow = shadow; rider.add(mesh); return mesh; };
+  // smooth tapered limb, 1 m long along +y (scaled to fit between two joints each frame)
+  const limbGeo = (r0, r1, bulge = 0, at = 0.4, seg = 14) => {
+    const pts = [new THREE.Vector2(0.0001, -0.04)];
+    for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(r0 + (r1 - r0) * t + bulge * Math.exp(-((t - at) ** 2) / 0.06), t)); }
+    pts.push(new THREE.Vector2(0.0001, 1.04));
+    return new THREE.LatheGeometry(pts, seg);
   };
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.32, 6, 14), mats.jersey);
-  torso.castShadow = true; rider.add(torso);
-  const pack = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.16, 4, 10), mats.dark); pack.castShadow = true; rider.add(pack);
+  const P = {
+    thigh: [0, 1].map(() => add(limbGeo(0.088, 0.066, 0.012, 0.35), mats.pants)),
+    shin: [0, 1].map(() => add(limbGeo(0.066, 0.052, 0.01, 0.3), mats.pants)),
+    knee: [0, 1].map(() => add(new THREE.SphereGeometry(1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), mats.pad)),
+    shoe: [0, 1].map(() => add(shoeGeo(), mats.shoe)),
+    sole: [0, 1].map(() => add(new THREE.BoxGeometry(0.1, 0.022, 0.27), mats.sole, false)),
+    upper: [0, 1].map(() => add(limbGeo(0.058, 0.048, 0.008, 0.4), mats.sleeve)),
+    fore: [0, 1].map(() => add(limbGeo(0.047, 0.036, 0.006, 0.25), mats.sleeve)),
+    elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1, 14, 10), mats.pad)),
+    cuff: [0, 1].map(() => add(new THREE.CylinderGeometry(0.042, 0.04, 0.07, 12), mats.glove)),
+    hand: [0, 1].map(() => add(handGeo(), mats.glove)),
+    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.07, 16, 12), mats.sleeve)),
+  };
+  // body: one smooth shape from hips to collar; shorts over the hips
+  const torsoGeo = new THREE.LatheGeometry([[0.0001, -0.02], [0.15, 0], [0.142, 0.18], [0.135, 0.3], [0.15, 0.5], [0.165, 0.7], [0.168, 0.82], [0.13, 0.93], [0.07, 0.99], [0.055, 1.02], [0.0001, 1.03]].map(([r, y]) => new THREE.Vector2(r, y)), 24);
+  const torso = add(torsoGeo, mats.jersey);
+  const shorts = add(new THREE.LatheGeometry([[0.0001, -0.12], [0.13, -0.1], [0.155, -0.02], [0.148, 0.08], [0.13, 0.12], [0.0001, 0.13]].map(([r, y]) => new THREE.Vector2(r, y)), 24), mats.pants);
+  const neck = add(new THREE.CylinderGeometry(0.046, 0.052, 0.08, 12), mats.skin);
+  const pack = add(roundBox(0.2, 0.26, 0.08, 0.035), mats.packM);
+  const straps = [0, 1].map(() => add(new THREE.TorusGeometry(0.11, 0.012, 6, 16, Math.PI), mats.strap, false));
   const head = new THREE.Group(); head.scale.setScalar(0.86); rider.add(head);
   {
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.16, 22, 16), mats.helmet); shell.scale.set(0.95, 1, 1.12); shell.castShadow = true; head.add(shell);
-    const chin = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 8, 18, Math.PI), mats.helmet); chin.rotation.set(Math.PI / 2 + 0.5, 0, 0); chin.position.set(0, -0.07, 0.06); head.add(chin);
-    chin.visible = !look.open; head.userData.chin = chin;
-    const peak = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.015, 0.12), mats.helmet); peak.position.set(0, 0.08, 0.17); peak.rotation.x = -0.25; head.add(peak);
-    const gog = new THREE.Mesh(new THREE.CylinderGeometry(0.155, 0.155, 0.06, 20, 1, true, -1.1, 2.2), mats.goggle); gog.position.set(0, 0.0, 0.03); gog.scale.set(1, 1, 1.05); head.add(gog);
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.158, 0.012, 4, 24), mats.strap); strap.rotation.x = Math.PI / 2; strap.position.y = 0.0; head.add(strap);
+    const H = (g, m) => { const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; head.add(mesh); return mesh; };
+    // face underneath (seen through the opening)
+    const face = H(new THREE.SphereGeometry(0.115, 18, 14), mats.skin); face.scale.set(0.92, 1.05, 1); face.position.set(0, -0.025, 0.035);
+    // helmet shell: a smooth dome, longer front to back
+    const shell = H(new THREE.SphereGeometry(0.162, 28, 20, 0, Math.PI * 2, 0, Math.PI * 0.58), mats.helmet); shell.scale.set(0.95, 1.02, 1.12); shell.position.y = 0.005;
+    const back = H(new THREE.SphereGeometry(0.158, 24, 12, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.55, Math.PI * 0.25), mats.helmet); back.scale.set(0.95, 1, 1.1);
+    const inner = H(new THREE.SphereGeometry(0.155, 20, 14), mats.helmetIn); inner.material.side = THREE.BackSide; inner.scale.set(0.94, 1, 1.1);
+    // chin bar (full face)
+    const chin = H(new THREE.TorusGeometry(0.13, 0.032, 10, 24, Math.PI), mats.helmet); chin.rotation.set(Math.PI / 2 + 0.25, 0, 0); chin.position.set(0, -0.085, 0.01); chin.scale.set(0.92, 1.2, 1.25);
+    const vent = H(new THREE.BoxGeometry(0.07, 0.02, 0.025), mats.dark); vent.position.set(0, -0.085, 0.165);
+    chin.visible = vent.visible = !look.open; head.userData.chin = chin; head.userData.vent = vent;
+    // peak
+    const peak = H(roundBox(0.2, 0.012, 0.11, 0.005), mats.helmet); peak.rotation.x = 0.1; peak.position.set(0, 0.075, 0.17);
+    // vents on top
+    for (const x of [-0.05, 0, 0.05]) { const v = H(new THREE.BoxGeometry(0.018, 0.012, 0.09), mats.dark); v.position.set(x, 0.158, 0.02); v.rotation.x = 0.15; }
+    // goggles: frame + shiny lens + strap round the helmet
+    const gframe = H(new THREE.CylinderGeometry(0.152, 0.152, 0.068, 24, 1, true, -1.05, 2.1), mats.goggleFrame); gframe.position.set(0, 0.012, 0.03); gframe.scale.set(1, 1, 1.08);
+    const lens = H(new THREE.CylinderGeometry(0.156, 0.156, 0.05, 24, 1, true, -0.9, 1.8), mats.goggle); lens.position.set(0, 0.012, 0.032); lens.scale.set(1, 1, 1.08);
+    const strap = H(new THREE.TorusGeometry(0.16, 0.013, 4, 32), mats.strap); strap.rotation.x = Math.PI / 2; strap.position.y = 0.012; strap.scale.set(0.95, 1.1, 1);
   }
 
   // --------------------------------------------------------------- posing
@@ -163,6 +187,15 @@ export function createBike(T, env, look = {}, type = 'downhill') {
     m.position.copy(a); m.quaternion.setFromUnitVectors(V(0, 1, 0), d.divideScalar(len)); m.scale.set(1, len, 1);
   };
   const lerpV = (a, b, t) => a.clone().lerp(b, t);
+  const strapQ = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.PI / 2);
+  const ox = V(0, 0, 0), oz = V(0, 0, 0), om = new THREE.Matrix4();
+  // point a mesh's +y along yDir, turned so its +x is square to `hint`
+  const orient = (m, yDir, hint) => {
+    const y = yDir.clone().normalize();
+    ox.crossVectors(hint, y); if (ox.lengthSq() < 1e-6) ox.set(1, 0, 0); ox.normalize();
+    oz.crossVectors(ox, y).normalize();
+    om.makeBasis(ox, y, oz); m.quaternion.setFromRotationMatrix(om);
+  };
   const tmp = { k: V(0, 0, 0), e: V(0, 0, 0) };
   const steerQ = new THREE.Quaternion(), whipQ = new THREE.Quaternion();
 
@@ -227,32 +260,115 @@ export function createBike(T, env, look = {}, type = 'downhill') {
       const foot = ik(hips[i], feet[i], 0.46, 0.46, V(sx * 0.35, 0.1, 1), tmp.k);
       const knee = tmp.k.clone();
       between(P.thigh[i], hips[i], knee); between(P.shin[i], knee, foot);
-      P.knee[i].position.copy(knee).add(V(0, 0, 0.03));
-      P.shoe[i].position.copy(foot).add(V(0, -0.02, 0.03));
-      P.shoe[i].rotation.set(0, 0, 0);
+      const shinDir = foot.clone().sub(knee).normalize();
+      const kneeFwd = V(0, 0, 1).sub(shinDir.clone().multiplyScalar(shinDir.z)).normalize();
+      orient(P.knee[i], shinDir.clone().negate().lerp(kneeFwd, 0.75).normalize(), shinDir);
+      P.knee[i].position.copy(knee).addScaledVector(kneeFwd, 0.035).addScaledVector(shinDir, 0.05);
+      P.knee[i].scale.set(0.068, 0.1, 0.062);
+      P.shoe[i].position.copy(foot).add(V(0, -0.015, 0.035)); P.shoe[i].rotation.set(0.05, 0, 0);
+      P.sole[i].position.copy(foot).add(V(0, -0.05, 0.035)); P.sole[i].rotation.set(0.05, 0, 0);
       // arms
       const hand = ik(shoulders[i], hands[i], 0.31, 0.3, V(sx * 1, -0.4, -0.5), tmp.e);
       const elbow = tmp.e.clone();
       between(P.upper[i], shoulders[i], elbow); between(P.fore[i], elbow, hand);
-      P.elbow[i].position.copy(elbow); P.hand[i].position.copy(hand); P.shoulder[i].position.copy(shoulders[i]);
+      const foreDir = hand.clone().sub(elbow).normalize();
+      P.elbow[i].position.copy(elbow).add(V(sx * 0.008, 0, -0.022)); P.elbow[i].scale.set(0.045, 0.06, 0.04);
+      P.cuff[i].position.copy(hand).addScaledVector(foreDir, -0.06); P.cuff[i].quaternion.setFromUnitVectors(V(0, 1, 0), foreDir);
+      P.hand[i].position.copy(hand); orient(P.hand[i], foreDir, V(0, 1, 0));
+      P.shoulder[i].position.copy(shoulders[i]);
     }
-    P.hips.position.copy(hip);
-    // torso from hips to neck
-    const neck = sh.clone();
-    const mid = hip.clone().lerp(neck, 0.52);
-    torso.position.copy(mid);
-    const up = neck.clone().sub(hip); const tl = up.length(); up.normalize();
-    torso.quaternion.setFromUnitVectors(V(0, 1, 0), up);
-    torso.scale.set(1.2, tl / 0.62, 0.85);
-    pack.position.copy(mid).add(V(0, 0.05, -0.16).applyQuaternion(torso.quaternion)); pack.quaternion.copy(torso.quaternion);
+    // body: hips to neck, facing forward
+    const neckP = sh.clone().add(V(0, 0.02, 0));
+    const up = neckP.clone().sub(hip); const tl = up.length(); up.normalize();
+    const side = V(1, 0, 0), fwd = new THREE.Vector3().crossVectors(side, up).normalize(); side.crossVectors(up, fwd).normalize();
+    const basis = new THREE.Matrix4().makeBasis(side, up, fwd);
+    torso.quaternion.setFromRotationMatrix(basis); torso.position.copy(hip).addScaledVector(up, -0.06);
+    torso.scale.set(1.18, tl * 1.08, 0.78);
+    shorts.quaternion.copy(torso.quaternion); shorts.position.copy(hip); shorts.scale.set(1.02, 1, 0.82);
+    neck.position.copy(neckP).addScaledVector(up, 0.045); neck.quaternion.copy(torso.quaternion);
+    pack.quaternion.copy(torso.quaternion); pack.position.copy(hip).addScaledVector(up, tl * 0.66).addScaledVector(fwd, -0.14);
+    straps.forEach((st, i) => { st.quaternion.copy(torso.quaternion).multiply(strapQ); st.position.copy(hip).addScaledVector(up, tl * 0.78).addScaledVector(side, i ? -0.09 : 0.09).addScaledVector(fwd, -0.02); });
     // head: above the neck, looking ahead
-    head.position.copy(neck).addScaledVector(up, 0.2).add(V(0, 0, 0.06));
+    head.position.copy(neckP).addScaledVector(up, 0.155).addScaledVector(fwd, 0.05);
     head.rotation.set(0.25 - 0.3 * c * 0 + (s * 0.6), 0, 0);
   }
   pose({ steer: 0, crouch: 0, lean: 0, crank: 0, wheel: 0, superman: 0, nohand: 0, whip: 0, bar: 0, manual: 0 });
 
-  function setLook(look2) { applyLook(mats, look2); if (head.userData.chin) head.userData.chin.visible = !look2.open; }
+  function setLook(look2) { applyLook(mats, look2); if (head.userData.chin) head.userData.chin.visible = head.userData.vent.visible = !look2.open; }
   return { root, rider, pose, setLook, mats, head, headPos: () => head.position };
+}
+
+// shoe: rounded box, toe a bit narrower (built along +z, sole at y = 0)
+function shoeGeo() {
+  const g = new THREE.BoxGeometry(0.1, 0.075, 0.26, 4, 3, 6);
+  const pa = g.attributes.position;
+  for (let i = 0; i < pa.count; i++) {
+    let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+    const t = (z + 0.13) / 0.26;                  // 0 heel .. 1 toe
+    x *= 1 - 0.18 * t * t; y *= 1 - 0.25 * t * t;
+    // round the edges
+    const k = 0.75 + 0.25 * Math.cos(Math.max(Math.abs(x) / 0.05, Math.abs(y) / 0.0375) * 1.2);
+    pa.setXYZ(i, x * (0.9 + 0.1 * k), y + 0.01, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+// gloved hand gripping: palm + curled fingers + thumb, along +y
+function handGeo() {
+  const palm = new THREE.SphereGeometry(0.042, 14, 10); palm.scale(1, 1.25, 0.75);
+  const fing = new THREE.TorusGeometry(0.03, 0.017, 8, 12, Math.PI * 1.2); fing.rotateY(Math.PI / 2); fing.translate(0, 0.045, 0.012);
+  const thumb = new THREE.CapsuleGeometry(0.012, 0.035, 4, 8); thumb.rotateZ(0.6); thumb.translate(-0.03, 0.03, 0.02);
+  return mergeAll([palm, fing, thumb]);
+}
+function roundBox(w, h, d, r) {
+  const g = new THREE.BoxGeometry(w, h, d, 6, 6, 4);
+  const pa = g.attributes.position, v = new THREE.Vector3();
+  const hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r;
+  for (let i = 0; i < pa.count; i++) {
+    v.set(pa.getX(i), pa.getY(i), pa.getZ(i));
+    const c = new THREE.Vector3(Math.max(-hx, Math.min(hx, v.x)), Math.max(-hy, Math.min(hy, v.y)), Math.max(-hz, Math.min(hz, v.z)));
+    const dlt = v.clone().sub(c); if (dlt.lengthSq() > 0) dlt.setLength(r);
+    pa.setXYZ(i, c.x + dlt.x, c.y + dlt.y, c.z + dlt.z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function mergeAll(list) {
+  const pos = [], nrm = [], idx = []; let vo = 0;
+  for (const g0 of list) {
+    const g = g0.index ? g0 : g0;
+    const p = g.attributes.position.array, n = g.attributes.normal.array;
+    for (let i = 0; i < p.length; i++) { pos.push(p[i]); nrm.push(n[i]); }
+    if (g.index) for (const i of g.index.array) idx.push(i + vo); else for (let i = 0; i < p.length / 3; i++) idx.push(i + vo);
+    vo += p.length / 3;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); out.setIndex(idx);
+  return out;
+}
+
+// jersey / trouser patterns, grey so the chosen colour tints them; knit bump for the cloth
+let clothTex = null;
+function cloth() {
+  if (clothTex) return clothTex;
+  const mk = (w, h, draw) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; };
+  const jersey = mk(512, 256, (g, w, h) => {
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
+    // darker side panels (u = 0.25 and 0.75 are the sides; u 0 front, 0.5 back)
+    for (const cx of [0.25, 0.75]) { const gr = g.createLinearGradient((cx - 0.12) * w, 0, (cx + 0.12) * w, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.3, 'rgba(0,0,0,.45)'); gr.addColorStop(0.7, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect((cx - 0.12) * w, 0, 0.24 * w, h); }
+    // chest stripes
+    g.fillStyle = 'rgba(255,255,255,1)'; g.fillRect(0, h * 0.3, w, h * 0.05);
+    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, h * 0.36, w, h * 0.03);
+    // number on the back
+    g.fillStyle = 'rgba(0,0,0,.7)'; g.font = '900 72px Nunito, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('7', w * 0.5, h * 0.42);
+    // collar
+    g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, 0, w, h * 0.04);
+  });
+  jersey.colorSpace = THREE.SRGBColorSpace;
+  const knit = mk(128, 128, (g, w, h) => { const im = g.createImageData(w, h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 128 + 50 * Math.sin(x * 1.6) * Math.sin(y * 0.8 + (x % 2) * 1.5) + (Math.random() - 0.5) * 30; const i = (y * w + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; } g.putImageData(im, 0, 0); });
+  knit.repeat.set(6, 6);
+  clothTex = { jersey, knit };
+  return clothTex;
 }
 
 function makeWheel(m) {
@@ -314,11 +430,17 @@ function makeMaterials(T, env, look) {
     tire: std({ color: 0x1c1c1c, roughness: 0.9, bumpMap: T.tread, bumpScale: 3 }),
     grip: std({ color: 0x222222, roughness: 0.95 }),
     plate: std({ color: 0xffffff, roughness: 0.6 }),
-    jersey: std({ color: 0x1e88e5, roughness: 0.85, envMapIntensity: 0.4 }),
-    pants: std({ color: 0x23262d, roughness: 0.9, envMapIntensity: 0.3 }),
-    pad: std({ color: 0x111215, roughness: 0.7 }),
-    shoe: std({ color: 0x202226, roughness: 0.8 }),
-    glove: std({ color: 0x15161a, roughness: 0.85 }),
+    sleeve: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, bumpMap: cloth().knit, bumpScale: 0.6, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
+    jersey: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, map: cloth().jersey, bumpMap: cloth().knit, bumpScale: 0.6, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
+    pants: phys({ color: 0x23262d, roughness: 0.88, envMapIntensity: 0.3, bumpMap: cloth().knit, bumpScale: 0.8, sheen: 0.4, sheenRoughness: 0.6, sheenColor: 0xbfc4cc }),
+    pad: phys({ color: 0x2a2c31, roughness: 0.45, clearcoat: 0.4, envMapIntensity: 0.6 }),
+    shoe: std({ color: 0x202226, roughness: 0.75 }),
+    sole: std({ color: 0xd9d9d0, roughness: 0.9 }),
+    glove: phys({ color: 0x15161a, roughness: 0.75, sheen: 0.3, sheenColor: 0x777777 }),
+    skin: std({ color: 0xd9a27e, roughness: 0.6, envMapIntensity: 0.3 }),
+    helmetIn: std({ color: 0x15161a, roughness: 0.9 }),
+    goggleFrame: std({ color: 0x18191d, roughness: 0.5 }),
+    packM: phys({ color: 0x2b2f36, roughness: 0.7, sheen: 0.3, sheenColor: 0x999999 }),
     helmet: phys({ color: 0xffffff, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05 }),
     goggle: phys({ color: 0xffb300, roughness: 0.05, metalness: 0.9, envMapIntensity: 1.6, side: THREE.DoubleSide }),
     strap: std({ color: 0x111111, roughness: 0.8 }),
@@ -329,7 +451,7 @@ function makeMaterials(T, env, look) {
 
 function applyLook(m, look) {
   if (look.frame !== undefined) m.frame.color.setHex(look.frame);
-  if (look.jersey !== undefined) m.jersey.color.setHex(look.jersey);
+  if (look.jersey !== undefined) { m.jersey.color.setHex(look.jersey); m.sleeve.color.setHex(look.jersey); }
   if (look.helmet !== undefined) m.helmet.color.setHex(look.helmet);
   if (look.pants !== undefined) m.pants.color.setHex(look.pants);
   if (look.goggle !== undefined) m.goggle.color.setHex(look.goggle);

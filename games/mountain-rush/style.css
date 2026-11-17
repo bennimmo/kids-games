@@ -42,10 +42,14 @@
 /* touch controls */
 .mr-pad { position: absolute; left: 18px; bottom: 18px; width: 170px; height: 170px; border-radius: 50%; background: rgba(14,18,24,.28); border: 2px solid rgba(255,255,255,.3); pointer-events: auto; touch-action: none; }
 .mr-pad i { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 4px 14px rgba(0,0,0,.3); }
-.mr-tbtns { position: absolute; right: 16px; bottom: 16px; display: grid; grid-template-columns: repeat(3, 66px); grid-template-rows: repeat(3, 66px); gap: 10px; pointer-events: auto; }
+.mr-tbtns { position: absolute; right: 16px; bottom: 16px; display: grid; grid-template-columns: repeat(4, 62px); grid-template-rows: repeat(3, 62px); gap: 9px; pointer-events: auto; }
 .mr-tb { border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(14,18,24,.4); color: #fff; font-weight: 900; font-size: 13px; line-height: 1.05; display: grid; place-items: center; touch-action: none; padding: 0; }
 .mr-tb.on { background: rgba(255,183,77,.75); }
-.mr-tb.jump { grid-column: 2 / 4; grid-row: 3; border-radius: 33px; font-size: 20px; background: rgba(76,175,80,.55); }
+.mr-tb.reset { grid-column: 4; grid-row: 1; }
+.mr-tb.tweak { grid-column: 1; grid-row: 3; }
+.mr-tb.jump { grid-column: 2 / 4; grid-row: 3; border-radius: 31px; font-size: 20px; background: rgba(33,150,243,.5); }
+.mr-tb.pedal { grid-column: 4; grid-row: 2 / 4; border-radius: 31px; font-size: 16px; background: rgba(76,175,80,.6); }
+.mr-tb.pedal.on { background: rgba(139,195,74,.9); }
 .mr-tb.reset { background: rgba(229,57,53,.45); }
 
 /* menus (use shared .ui-panel look) */
@@ -89,3 +93,5 @@
 .mr-boardlist div { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 17px; }
 .mr-boardlist i { font-style: normal; font-weight: 900; font-variant-numeric: tabular-nums; }
 .mr-roomstrip { width: 100%; }
+.mr-lb { width: 100%; }
+.mr-boardlist div.me { outline: 2px solid var(--accent); }

@@ -272,6 +272,8 @@ export function createScene(world, T, Q) {
 
   // ---------------------------------------------------------------- dust
   const dust = makeDust(T, Q, world);
+  const skids = makeSkids(B);
+  scene.add(skids.mesh);
   scene.add(dust.points);
 
   // ---------------------------------------------------------------- per frame
@@ -296,7 +298,7 @@ export function createScene(world, T, Q) {
     props.update(dt);
   }
 
-  return { scene, sun, update, dust, props, uniforms };
+  return { scene, sun, update, dust, skids, props, uniforms };
 }
 
 // ------------------------------------------------------------------ pine tree: trunk, inner body, branch cards
@@ -661,6 +663,36 @@ function makeProps(world, T) {
     group.add(im);
   }
   return { group, update(dt) { /* flags could wave later */ } };
+}
+
+// ------------------------------------------------------------------ tyre marks: a ring of dark strips laid on the ground
+function makeSkids(B) {
+  const N = 600, pos = new Float32Array(N * 4 * 3), alpha = new Float32Array(N * 4), idx = [];
+  for (let i = 0; i < N; i++) { const v = i * 4; idx.push(v, v + 1, v + 2, v + 2, v + 1, v + 3); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aA', new THREE.BufferAttribute(alpha, 1));
+  g.setIndex(idx);
+  const col = new THREE.Color(B.snow ? 0x9aa6b2 : B.terrace ? 0x6e3e24 : 0x3a2a1c);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, fog: true,
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uC: { value: col } }]),
+    vertexShader: `attribute float aA; varying float vA; #include <fog_pars_vertex>
+      void main(){ vA = aA; vec4 mvPosition = modelViewMatrix * vec4(position,1.); gl_Position = projectionMatrix * mvPosition; #include <fog_vertex> }`.replace(/#include <(\w+)>/g, m => '\n' + m + '\n'),
+    fragmentShader: `uniform vec3 uC; varying float vA; #include <fog_pars_fragment>
+      void main(){ gl_FragColor = vec4(uC, vA * 0.55); #include <fog_fragment> #include <colorspace_fragment> }`.replace(/#include <(\w+)>/g, m => '\n' + m + '\n'),
+  });
+  const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 1;
+  let next = 0;
+  function add(x0, y0, z0, x1, y1, z1, w, a) {
+    const dx = x1 - x0, dz = z1 - z0, l = Math.hypot(dx, dz) || 1, nx = -dz / l * w / 2, nz = dx / l * w / 2;
+    const i = next; next = (next + 1) % N;
+    const p = i * 12;
+    pos.set([x0 + nx, y0 + 0.02, z0 + nz, x0 - nx, y0 + 0.02, z0 - nz, x1 + nx, y1 + 0.02, z1 + nz, x1 - nx, y1 + 0.02, z1 - nz], p);
+    alpha.set([a, a, a, a], i * 4);
+    g.attributes.position.needsUpdate = true; g.attributes.aA.needsUpdate = true;
+  }
+  return { mesh, add };
 }
 
 // ------------------------------------------------------------------ dust puffs (one draw call)

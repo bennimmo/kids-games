@@ -202,8 +202,9 @@ export function mount(stage) {
   function released(code) {
     if (code === 'KeyC' && !cUsed && S.phase === 'ride') toggleCam();
   }
-  const touchState = { x: 0, y: 0, jump: false, whip: false, bar: false, sup: false, noh: false, man: false, tweak: false };
+  const touchState = { x: 0, y: 0, pedal: false, jump: false, whip: false, bar: false, sup: false, noh: false, man: false, tweak: false };
   let padPrev = {};
+  const airLatch = { armed: false };
   function readInput() {
     const k = c => keys.has(c);
     const L = k('ArrowLeft'), R = k('ArrowRight'), U = k('ArrowUp'), D = k('ArrowDown');
@@ -228,8 +229,11 @@ export function mount(stage) {
     if (tweak && air) { inp.spinLock = true; if (L) inp.cancan = true; else if (R) inp.nofoot = true; else inp.table = true; inp.steer = 0; }
     // touch
     if (TOUCH) {
+      // touch: stick steers and leans (down brakes on the ground); the pedal button pedals
       if (Math.abs(touchState.x) > 0.05) inp.steer = touchState.x;
-      if (Math.abs(touchState.y) > 0.05) inp.throttle = touchState.y;
+      if (air) { if (Math.abs(touchState.y) > 0.25) inp.throttle = touchState.y; }
+      else if (touchState.pedal) inp.throttle = 1;
+      else if (touchState.y < -0.35) inp.throttle = touchState.y;
       inp.jump = inp.jump || touchState.jump; inp.whip = inp.whip || touchState.whip; inp.barspin = inp.barspin || touchState.bar;
       inp.superman = inp.superman || touchState.sup; inp.nohand = inp.nohand || touchState.noh; inp.manual = inp.manual || touchState.man;
       if (touchState.tweak && air) { inp.spinLock = true; if (touchState.x < -0.4) inp.cancan = true; else if (touchState.x > 0.4) inp.nofoot = true; else inp.table = true; inp.steer = 0; }
@@ -254,6 +258,11 @@ export function mount(stage) {
       if (edge(10) || edge(11)) toggleCam();
       for (let i = 0; i < gp.buttons.length; i++) padPrev[gp.index + ':' + i] = bt(i);
     }
+    // whatever you were holding when you left the ground (pedalling, leaning) doesn't flip you:
+    // flips only start once you've let go and pressed again
+    if (air) {
+      if (!airLatch.armed) { if (Math.abs(inp.throttle) < 0.2) airLatch.armed = true; else inp.throttle = 0; }
+    } else airLatch.armed = false;
     inp.steer = clamp(inp.steer, -1, 1); inp.throttle = clamp(inp.throttle, -1, 1);
     return inp;
   }
@@ -307,8 +316,8 @@ export function mount(stage) {
     pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
     ui.appendChild(pad);
     const box = document.createElement('div'); box.className = 'mr-tbtns';
-    const btns = [['whip', 'Tail<br>whip'], ['bar', 'Bar<br>spin'], ['reset', '↺<br>Reset'], ['sup', 'Super<br>man'], ['noh', 'No<br>hands'], ['man', 'Man<br>ual'], ['tweak', 'Tweak']];
-    box.innerHTML = btns.map(([k, l]) => `<button class="mr-tb ${k}" data-k="${k}">${l}</button>`).join('') + '<button class="mr-tb jump" data-k="jump">JUMP</button>';
+    const btns = [['whip', 'Tail<br>whip'], ['bar', 'Bar<br>spin'], ['sup', 'Super<br>man'], ['reset', '↺<br>Reset'], ['noh', 'No<br>hands'], ['man', 'Man<br>ual'], ['tweak', 'Tweak'], ['jump', 'JUMP'], ['pedal', 'PEDAL']];
+    box.innerHTML = btns.map(([k, l]) => `<button class="mr-tb ${k}" data-k="${k}">${l}</button>`).join('');
     box.querySelectorAll('.mr-tb').forEach(b => {
       const k = b.dataset.k;
       b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); if (k === 'reset') { resetToCheckpoint(); return; } touchState[k] = true; b.classList.add('on'); });
@@ -339,6 +348,7 @@ export function mount(stage) {
         : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
       <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">🌍 See everyone online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
       <div class="mr-note mr-best"></div>
+      <div class="ui-label">Fastest on ${MAPS[S.map].name}</div><div class="mr-lb mr-best">Loading…</div>
       ${controlsHTML()}
     </div></div>`;
     click(ui.querySelector('.mr-go'), startRide);
@@ -348,6 +358,11 @@ export function mount(stage) {
       build();
     }));
     click(ui.querySelector('.mr-garageb'), garage);
+    const lbMap = S.map;
+    online.board(lbMap).then(list => {
+      const el = ui.querySelector('.mr-lb'); if (!el || S.map !== lbMap) return;
+      el.innerHTML = list.length ? `<div class="mr-boardlist">${list.slice(0, 5).map((p, i) => `<div class="${p.me ? 'me' : ''}"><span>${['🥇', '🥈', '🥉'][i] || i + 1 + '.'}</span><b>${p.face} ${p.name}</b><i>${fmt(p.time)}</i></div>`).join('')}</div>` : 'No times yet. Finish a run to be first!';
+    });
     const tb = ui.querySelector('[data-together]');
     if (tb) click(tb, async () => { tb.disabled = true; try { const r = await online.hostRoom(S.map); if (r) menu(); else tb.disabled = false; } catch (e) { tb.disabled = false; showMenuNote('Could not go online'); } });
     click(ui.querySelector('.mr-race'), () => online.startRace());
@@ -416,7 +431,8 @@ export function mount(stage) {
   }
   function controlsHTML() {
     if (TOUCH) return `<div class="ui-label">How to ride</div><div class="mr-keys">
-      <kbd>Stick</kbd><span>Steer. Up = pedal, down = brake. In the air: flip and spin</span>
+      <kbd>Stick</kbd><span>Steer. Pull down to brake. In the air: flip and spin (let go of the stick before you take off)</span>
+      <kbd>Pedal</kbd><span>Hold the big green button to pedal</span>
       <kbd>Jump</kbd><span>Hold to crouch, let go to pop. Pop at the top of a jump to go higher</span>
       <kbd>Tricks</kbd><span>In the air: Tailwhip, Barspin, Superman, No hands. Tweak = table top (stick left: can-can, right: no footer). Let go before you land!</span>
       <kbd>Combo</kbd><span>Land tricks one after another to build a combo. Crash and you lose it</span>
@@ -523,6 +539,7 @@ export function mount(stage) {
     const newScore = !best || S.score > (best.score || 0);
     prefs.best[S.map] = { time: newBest ? S.time : best.time, score: Math.max(S.score, best ? best.score : 0) };
     savePrefs();
+    if (prefs.online) online.submitBest(S.map, prefs.best[S.map].time, prefs.best[S.map].score);
     snd('finish');
     setTimeout(() => {
       if (!alive || !S.finished) return;
@@ -654,9 +671,18 @@ export function mount(stage) {
   function dustAt(x, y, z, spread, life, size) {
     scene.dust.puff(x + (Math.random() - 0.5) * 0.4, y, z + (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * spread, Math.random() * spread * 0.5, (Math.random() - 0.5) * spread, size, life, 2.2, 0.45);
   }
-  let dustAcc = 0;
+  let dustAcc = 0, skidLast = null;
   function emitDust(dt) {
     const b = rider;
+    // tyre marks when sliding or braking hard
+    const marking = b.ground && !b.crashed && (b.slide > 0.25 || (b.brake > 0.5 && b.speed > 5));
+    if (marking) {
+      const f0 = bikeFrame(b, frameOut).fwd, x = b.pos.x - f0.x * 0.62, z = b.pos.z - f0.z * 0.62, y = W.height(x, z);
+      if (skidLast && Math.hypot(x - skidLast.x, z - skidLast.z) > 0.25) {
+        if (Math.hypot(x - skidLast.x, z - skidLast.z) < 2) scene.skids.add(skidLast.x, skidLast.y, skidLast.z, x, y, z, 0.12, Math.min(1, 0.4 + b.slide));
+        skidLast = { x, y, z };
+      } else if (!skidLast) skidLast = { x, y, z };
+    } else skidLast = null;
     if (!b.ground || b.crashed) return;
     const onDirt = W.trailMask(b.pos.x, b.pos.z) > 0.4;
     const rate = (b.slide * 50 + (b.brake > 0.3 && b.speed > 4 ? 25 : 0) + (b.speed > 9 ? (b.speed - 9) * 1.5 : 0)) * (onDirt ? 1 : 0.25);
