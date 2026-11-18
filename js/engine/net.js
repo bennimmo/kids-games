@@ -293,18 +293,33 @@ export async function joinRoom(game, code) {
   return fbJoin(game, code);
 }
 
-// ------------------------------------------------------------ public sky (everyone, no host)
-// One shared area per game that anyone can fly into. Each device writes only its own
-// live/<uid>_<n> entries (removed when it disconnects) and reads everyone else's.
-// Returns { uid, now(), setLive(pid, data), onLive(cb), leave() }.
+// ------------------------------------------------------------ shared world (friends only, no host)
+// Returns { uid, now(), setLive(pid, data), onLive(cb), friendCount(), leave() }.
+// Shared world, FRIENDS ONLY (child safety: you never see anyone who isn't your friend).
+// Each device writes its own entries to its own area  games/<game>/rooms/<area>_<uid>/live
+// and only listens to the areas of its saved friends (kg-friends, see friends.js).
+// Entries carry ok = { friendUid: 1 } so a plane only shows if BOTH have saved each other.
+const FRIENDS_KEY = 'kg-friends';
+export function friendUids() {
+  try {
+    const a = JSON.parse(localStorage.getItem(FRIENDS_KEY) || '[]');
+    return Array.isArray(a) ? [...new Set(a.map(f => f && f.uid).filter(u => typeof u === 'string' && /^[\w-]{6,64}$/.test(u)))].slice(0, 30) : [];
+  } catch (e) { return []; }
+}
 export async function joinPublic(game, area = 'public') {
   if (useLocal) {
+    // tests: one local area, still filtered by the friends list
     const room = localRoom(game, area, false);
-    return { uid: room.uid, now: room.now, setLive: room.setLive, onLive: room.onLive, leave: room.leave };
+    return {
+      uid: room.uid, now: room.now, leave: room.leave,
+      setLive: (pid, data) => room.setLive(pid, data ? { ...data, ok: Object.fromEntries(friendUids().map(u => [u, 1])) } : data),
+      onLive: cb => room.onLive(l => cb(Object.fromEntries(Object.entries(l || {}).filter(([pid, d]) => d && d.ok && d.ok[room.uid] && friendUids().includes(pid.split('_')[0]))))),
+    };
   }
   const fb = await firebase();
   const { D, db, uid } = fb;
-  const base = `games/${game}/rooms/${area}/live`;
+  const areaOf = u => `games/${game}/rooms/${area}_${u}/live`;
+  const base = areaOf(uid);
   const mine = new Set(), unsubs = [];
   let left = false;
   // put our entries back after a reconnect
@@ -313,19 +328,46 @@ export async function joinPublic(game, area = 'public') {
     if (left || !s.val()) return;
     for (const [pid, data] of last) { D.onDisconnect(D.ref(db, `${base}/${pid}`)).remove(); D.set(D.ref(db, `${base}/${pid}`), data).catch(() => {}); }
   }));
+  // friends' areas: follow the friends list as it changes
+  const cbs = new Set(), byFriend = new Map(), watching = new Map();
+  let ok = {};
+  const merged = () => {
+    const out = {};
+    for (const [fu, l] of byFriend) for (const [pid, d] of Object.entries(l || {})) {
+      if (pid.startsWith(fu + '_') && d && typeof d === 'object' && d.ok && d.ok[uid]) out[pid] = d;
+    }
+    return out;
+  };
+  const fire = () => { const m = merged(); cbs.forEach(cb => cb(m)); };
+  const sync = () => {
+    if (left) return;
+    const want = friendUids().filter(u => u !== uid);
+    ok = Object.fromEntries(want.map(u => [u, 1]));
+    for (const [fu, u] of watching) if (!want.includes(fu)) { u(); watching.delete(fu); byFriend.delete(fu); }
+    for (const fu of want) if (!watching.has(fu)) {
+      watching.set(fu, D.onValue(D.ref(db, areaOf(fu)), s => { byFriend.set(fu, s.val() || {}); fire(); }, () => {}));
+    }
+    fire();
+  };
+  sync();
+  const timer = setInterval(sync, 5000);
   return {
     uid, now: fb.now,
     setLive(pid, data) {
       if (left) return Promise.resolve();
       const ref = D.ref(db, `${base}/${pid}`);
       if (!mine.has(pid)) { mine.add(pid); D.onDisconnect(ref).remove(); }
+      if (data) data = { ...data, ok };
       last.set(pid, data);
       return data ? D.set(ref, data).catch(() => {}) : D.remove(ref).catch(() => {});
     },
-    onLive(cb) { const u = D.onValue(D.ref(db, base), s => cb(s.val() || {})); unsubs.push(u); return u; },
+    onLive(cb) { cbs.add(cb); cb(merged()); return () => cbs.delete(cb); },
+    friendCount: () => watching.size,
     async leave() {
       left = true;
+      clearInterval(timer);
       unsubs.forEach(u => u());
+      watching.forEach(u => u()); watching.clear(); cbs.clear();
       await Promise.all([...mine].map(pid => { const ref = D.ref(db, `${base}/${pid}`); D.onDisconnect(ref).cancel(); return D.remove(ref); })).catch(() => {});
     },
   };
