@@ -215,7 +215,11 @@ A simple paint program, like old Windows Paint.
 - Shared code: `js/engine/net.js` (any game can use it).
 - One Realtime Database for all games: `games/<game>/rooms/<code>/...`
 - Room codes are 3 pictures (`CODE_LEN` in net.js), so kids can join without reading.
-- Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules).
+- Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules; not deployed by the site push).
+  - Homes `games/friends/homes/<uid>`: only friends can read / knock / message (`games/friends/allow/<uid>` = who I saved, written only by me).
+  - Shared worlds `games/<game>/pub/<area>/<uid>`: only friends can read; only you write yours.
+  - Key shapes, game names and field sizes are checked.
+- Test the rules: run the Firebase emulators (database 9000, auth 9099) with `database.rules.json`, then open the site with `?emu` on localhost.
 - Test on one computer with 2 tabs, no internet: add `?net=local` to the URL,
   e.g. `http://localhost:8000/?net=local#/race-track`
 

@@ -30,6 +30,7 @@ export const picImg = i => `<img class="pic-img" src="icons/pics/${i.toString(16
 const randomCode = () => Array.from({ length: CODE_LEN }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
 const useLocal = new URLSearchParams(location.search).get('net') === 'local';
+const useEmu = new URLSearchParams(location.search).has('emu') && /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
 // ------------------------------------------------------------ Firebase
 
@@ -45,8 +46,11 @@ function firebase() {
         import(SDK + 'firebase-database.js'),
       ]);
       const app = initializeApp(FIREBASE_CONFIG);
-      const cred = await A.signInAnonymously(A.getAuth(app));
+      const auth = A.getAuth(app);
       const db = D.getDatabase(app);
+      // Tests only: ?emu on localhost uses the Firebase emulators (checks database.rules.json).
+      if (useEmu) { A.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true }); D.connectDatabaseEmulator(db, '127.0.0.1', 9000); }
+      const cred = await A.signInAnonymously(auth);
       let offset = 0;
       D.onValue(D.ref(db, '.info/serverTimeOffset'), s => { offset = s.val() || 0; });
       return { D, db, uid: cred.user.uid, now: () => Date.now() + offset };
@@ -296,8 +300,9 @@ export async function joinRoom(game, code) {
 // ------------------------------------------------------------ shared world (friends only, no host)
 // Returns { uid, now(), setLive(pid, data), onLive(cb), friendCount(), leave() }.
 // Shared world, FRIENDS ONLY (child safety: you never see anyone who isn't your friend).
-// Each device writes its own entries to its own area  games/<game>/rooms/<area>_<uid>/live
+// Each device writes its own entries to its own area  games/<game>/pub/<area>/<uid>
 // and only listens to the areas of its saved friends (kg-friends, see friends.js).
+// The database rules only let you read an area if its owner saved you as a friend.
 // Entries carry ok = { friendUid: 1 } so a plane only shows if BOTH have saved each other.
 const FRIENDS_KEY = 'kg-friends';
 export function friendUids() {
@@ -318,7 +323,7 @@ export async function joinPublic(game, area = 'public') {
   }
   const fb = await firebase();
   const { D, db, uid } = fb;
-  const areaOf = u => `games/${game}/rooms/${area}_${u}/live`;
+  const areaOf = u => `games/${game}/pub/${area}/${u}`;
   const base = areaOf(uid);
   const mine = new Set(), unsubs = [];
   let left = false;

@@ -4,7 +4,7 @@
 //   games/friends/rooms/<code>   my friend code (6 hex = 6 pictures), new on every visit to the menu
 //       host, meta: { name, ok/<pid>: <group>, no/<pid>, full/<pid> }   (written by me)
 //       players/<uid>_k: { name }                                       (a friend knocking)
-//   games/friends/rooms/h<uid>  my home: always there while the app is open, so saved friends can call me
+//   games/friends/homes/<uid>   my home (code "h<uid>"; only friends can read it / knock): always there while the app is open, so saved friends can call me
 //       host, meta: { name, face, on, game, at, invite? }  (on = app open; game = what I'm playing;
 //             invite = { game, code, at }: "come and play my game", seen by every friend, see together.js)
 //       players/<uid>_k: { name, face, group? }   (a friend calling; group = their call to join)
@@ -69,7 +69,18 @@ let sid = randomHex(10); // this page load (new one if we rebuild every link)
 
 let fb = null;
 async function core() { if (!fb) fb = await firebaseCore(); return fb; }
-const ref = p => fb.D.ref(fb.db, `${AREA}/${p}`);
+// Homes ('h' + uid) live in their own place: only friends can read them, only friends can knock (database.rules.json).
+const ref = p => fb.D.ref(fb.db, p[0] === 'h' ? `games/friends/homes/${p.slice(1)}` : `${AREA}/${p}`);
+// Who I've saved: the database rules use this list to let only my friends see my home and knock.
+let allowSent = '';
+function syncAllow() {
+  if (!fb) return;
+  const want = Object.fromEntries(contacts.map(c => [c.uid, true]));
+  const key = JSON.stringify(want);
+  if (key === allowSent) return;
+  allowSent = key;
+  fb.D.set(fb.D.ref(fb.db, `games/friends/allow/${fb.uid}`), contacts.length ? want : null).catch(() => { allowSent = ''; });
+}
 
 // ------------------------------------------------------------ state + events
 
@@ -404,7 +415,7 @@ export async function askFriend(theirCode) {
       } else if (m.full && m.full[pid]) finish('full');
       else if (m.no && m.no[pid]) finish('no');
     });
-  } catch (e) { set('offline'); }
+  } catch (e) { set(e && /permission/i.test(String(e.message || e.code)) ? 'away' : 'offline'); } // not friends (any more)
 }
 
 // ------------------------------------------------------------ the group
@@ -772,11 +783,12 @@ function saveFriend(uid, name, face) {
   contacts = contacts.filter(c => c.uid !== uid && !(c.name === name && c.face === face && face));
   contacts.unshift({ uid, name, face: face || '', at: Date.now() });
   storeFriends();
+  syncAllow();
   watchPresence();
 }
 export function removeFriend(uid) {
   contacts = contacts.filter(c => c.uid !== uid);
-  storeFriends(); watchPresence(); emit();
+  storeFriends(); syncAllow(); watchPresence(); emit();
 }
 const homeId = uid => 'h' + uid;
 // Online = says so AND has checked in lately (a device that just vanishes can't say goodbye).
@@ -784,6 +796,7 @@ const HOME_BEAT_MS = 30000, HOME_STALE_MS = 95000;
 const prOn = pr => !!(pr && pr.on && (pr.at == null || !fb || fb.now() - pr.at < HOME_STALE_MS) && !(pr.gone != null && pr.at === pr.gone));
 
 // Who's on, and what they're playing (read from each saved friend's home).
+const presenceTries = new Map();
 function watchPresence() {
   if (!fb) return;
   const want = new Set(contacts.map(c => c.uid));
@@ -791,6 +804,7 @@ function watchPresence() {
   for (const u of want) {
     if (presenceUnsubs.has(u)) continue;
     presenceUnsubs.set(u, fb.D.onValue(ref(`${homeId(u)}/meta`), s => {
+      presenceTries.delete(u);
       const m = s.val() || {};
       presence.set(u, { on: m.on === true, at: typeof m.at === 'number' ? m.at : null, game: typeof m.game === 'string' ? m.game.slice(0, 30) : '', invite: m.invite && typeof m.invite === 'object' ? m.invite : null });
       const c = contacts.find(x => x.uid === u);
@@ -798,7 +812,13 @@ function watchPresence() {
         c.name = cleanName(m.name) || c.name; c.face = cleanFace(m.face); storeFriends();
       }
       emit();
-    }, () => {}));
+    }, () => {
+      // Not allowed (yet): they haven't saved me back. Try again in a bit.
+      presenceUnsubs.delete(u); presence.delete(u); emit();
+      const n = presenceTries.get(u) || 0;
+      presenceTries.set(u, n + 1);
+      setTimeout(watchPresence, Math.min(30000, 1500 * 2 ** n)); // quick at first (just added each other)
+    }));
   }
 }
 
@@ -808,6 +828,7 @@ async function openHome() {
   const { D, uid } = fb;
   const id = homeId(uid);
   home = { id, unsubs: [] };
+  syncAllow();
   const meta = () => ({ name: myName(), face: myFace(), on: true, game: where, at: D.serverTimestamp(), invite: myInvite });
   const put = async () => {
     D.onDisconnect(ref(`${id}/meta/on`)).set(false);
