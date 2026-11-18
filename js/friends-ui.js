@@ -253,10 +253,10 @@ const OUT_MSG = {
 };
 
 let entry = [];
-let adding = false, editing = false;
+let adding = false, editing = false, sureRm = null;
 function openPanel(add = false) {
   if (panel) return;
-  entry = []; editing = false;
+  entry = []; editing = false; sureRm = null;
   adding = add || !friendState().contacts.length; // no friends yet: straight to adding one
   panel = document.createElement('div');
   panel.className = 'app-help friend-panel';
@@ -276,7 +276,9 @@ function friendRow(c, s) {
   const full = s.friends.length >= MAX_FRIENDS;
   let act = '';
   const chat = c.online && !editing ? `<button class="frow-btn fchat" data-msg="${c.uid}" aria-label="Send a message">${icon('chat')}</button>` : '';
-  if (editing) act = `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
+  if (editing) act = sureRm === c.uid
+    ? `<button class="frow-btn frm sure" data-rm="${c.uid}" aria-label="Yes, remove">${icon('check')}</button>`
+    : `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
   else if (c.inCall) act = `<span class="frow-tag">${icon('phone')} In call</span>`;
   else if (c.calling) act = `<button class="frow-btn fcancel calling" aria-label="Stop">${icon('close')}</button>`;
   else if (c.online && !full) act = `<button class="frow-btn fring fvring" data-call="${c.uid}" data-video="1" aria-label="Video call">${icon('video')}</button><button class="frow-btn fring" data-call="${c.uid}" aria-label="Call">${icon('phone')}</button>`;
@@ -412,11 +414,12 @@ function panelClick(e) {
   const re = () => renderPanel(friendState());
   if (btn.matches('.fclose')) { sound.pop(); closePanel(); }
   else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; cancelAsk(); newCode(); re(); }
-  else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; re(); }
+  else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; sureRm = null; re(); }
   else if (btn.dataset.call) { sound.pop(); callFriend(btn.dataset.call, !!btn.dataset.video); }
   else if (btn.dataset.rm) {
     sound.pop();
-    if (!btn.classList.contains('sure')) { btn.classList.add('sure'); btn.innerHTML = icon('check'); return; }
+    if (sureRm !== btn.dataset.rm) { sureRm = btn.dataset.rm; re(); return; } // tap again to be sure
+    sureRm = null;
     removeFriend(btn.dataset.rm);
   } else if (btn.closest('.fpad')) {
     if (entry.length >= FRIEND_CODE_LEN) return;
