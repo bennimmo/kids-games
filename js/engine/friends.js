@@ -41,19 +41,20 @@ const FRIENDS_KEY = 'kg-friends';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
 const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
-// STUN finds a direct path. TURN = relay for when devices can't link directly (free public
-// Open Relay server: may be slow or down; swap for a paid/own one if it's unreliable).
+// STUN finds a direct path. TURN = relay for when devices can't link directly.
+// Our own free Metered account (20 GB a month). These details are meant to sit in the page;
+// if someone uses up the allowance, make new ones in the Metered dashboard and swap them here.
 const ICE = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: ['stun:stun.relay.metered.ca:80', 'stun:stun.l.google.com:19302'] },
   {
     urls: [
-      'turn:staticauth.openrelay.metered.ca:80',
-      'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
-      'turn:staticauth.openrelay.metered.ca:443',
-      'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
     ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
+    username: '8afd11852f70919b82fce652',
+    credential: 'UwFRBOq7fSXaEVrn',
   },
 ];
 const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
