@@ -315,6 +315,8 @@ export function createScene(world, T, Q) {
 
   // ---------------------------------------------------------------- dust
   const dust = makeDust(T, Q, world);
+  const spray = makeDust(T, Q, world, 0xe8f4fa);       // water spray
+  scene.add(spray.points);
   const skids = makeSkids(B);
   scene.add(skids.mesh);
   scene.add(dust.points);
@@ -341,7 +343,7 @@ export function createScene(world, T, Q) {
     props.update(dt);
   }
 
-  return { scene, sun, update, dust, skids, props, uniforms };
+  return { scene, sun, update, dust, spray, skids, props, uniforms };
 }
 
 // ------------------------------------------------------------------ pine tree: trunk, inner body, branch cards
@@ -768,6 +770,22 @@ function makeProps(world, T) {
       // joists across underneath
       for (let i = 4; i < n - 1; i += 5) { const p = P[i], dx = p.bx - p.ax, dz = p.bz - p.az; put(beamMat, new THREE.BoxGeometry(1, 1, 1), (p.ax + p.bx) / 2, p.y - TH - 0.07, (p.az + p.bz) / 2, Math.atan2(dx, dz), 0.12, 0.14, Math.hypot(dx, dz) + 0.3); }
     } }
+  // water: streams across the trail and the puddle in the tunnel
+  { const waterMat = new THREE.MeshStandardMaterial({ color: world.B.snow ? 0x7fb4c9 : 0x2f5d6b, roughness: 0.06, metalness: 0.35, transparent: true, opacity: 0.82 });
+    for (const w of world.waters || []) { const g = new THREE.PlaneGeometry(w.wid, w.len, 1, 1); g.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(g, waterMat); m.position.set(w.x, w.y, w.z); m.rotation.y = w.yaw; m.receiveShadow = true; group.add(m); } }
+  // wrecked cars to jump over
+  { const box = new THREE.BoxGeometry(1, 1, 1), wheelG = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 12); wheelG.rotateZ(Math.PI / 2);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x1c2428, roughness: 0.25, metalness: 0.4 }), tyre = new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.95 });
+    const paints = [0x8c3b24, 0x4f6a78, 0xb08a2e, 0x6d7a55].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, metalness: 0.25 }));
+    for (const c of world.cars || []) { const body = paints[Math.floor(c.tint * paints.length) % paints.length], s = Math.sin(c.yaw), co = Math.cos(c.yaw);
+      const at = (mat, geo, lx, ly, lz, sx, sy, sz) => put(mat, geo, c.x + lx * co + lz * s, c.y + ly, c.z - lx * s + lz * co, c.yaw, sx, sy, sz);
+      at(body, box, 0, 0.5, 0, 1.72, 0.52, 4.1);            // body
+      at(body, box, 0, 0.3, 2.0, 1.6, 0.2, 0.25); at(body, box, 0, 0.3, -2.0, 1.6, 0.2, 0.25);   // bumpers
+      at(glass, box, 0, 0.98, -0.25, 1.5, 0.44, 1.95);      // windows
+      at(body, box, 0, 1.24, -0.25, 1.56, 0.08, 2.0);       // roof
+      for (const px of [-0.74, 0.74]) for (const pz of [-0.25 - 0.95, -0.25 + 0.95]) at(body, box, px, 0.98, pz, 0.08, 0.46, 0.09);   // pillars
+      for (const px of [-0.8, 0.8]) for (const pz of [-1.3, 1.3]) at(tyre, wheelG, px, 0.28, pz, 1, 1, 1); } }
   // stumps
   { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
     const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);
@@ -825,7 +843,7 @@ function makeSkids(B) {
 }
 
 // ------------------------------------------------------------------ dust puffs (one draw call)
-function makeDust(T, Q, world) {
+function makeDust(T, Q, world, color) {
   const N = Q.particles;
   const pos = new Float32Array(N * 3), size = new Float32Array(N), alpha = new Float32Array(N);
   const vel = new Float32Array(N * 3), life = new Float32Array(N), max = new Float32Array(N), grow = new Float32Array(N), base = new Float32Array(N), op = new Float32Array(N);
@@ -835,7 +853,7 @@ function makeDust(T, Q, world) {
   g.setAttribute('aAlpha', new THREE.BufferAttribute(alpha, 1));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
-    uniforms: { tPuff: { value: T.puff }, uColor: { value: new THREE.Color(world.B.dust) }, uFog: { value: FOG }, uDensity: { value: Q.fog }, uScale: { value: 400 } },
+    uniforms: { tPuff: { value: T.puff }, uColor: { value: new THREE.Color(color || world.B.dust) }, uFog: { value: FOG }, uDensity: { value: Q.fog }, uScale: { value: 400 } },
     vertexShader: `attribute float aSize; attribute float aAlpha; varying float vA; varying float vFog; uniform float uScale, uDensity;
       void main(){ vec4 mv = modelViewMatrix * vec4(position,1.); gl_Position = projectionMatrix * mv; gl_PointSize = aSize * uScale / -mv.z; vA = aAlpha;
         float d = length(mv.xyz); vFog = 1. - exp(-uDensity * uDensity * d * d); }`,

@@ -593,6 +593,7 @@ export function mount(stage) {
     else if (kind === 'pop') { burst(0.12, 600, 0.15); }
     else if (kind === 'combo') { [784, 988, 1175, 1568].forEach((f, i) => tone(f, f, 0.14, 0.12, 'triangle', i * 0.07)); }
     else if (kind === 'hey') { tone(520, 640, 0.12, 0.18, 'square'); tone(640, 520, 0.16, 0.18, 'square', 0.13); }
+    else if (kind === 'splash') { burst(0.35, 2600, 0.3 * v, 'highpass'); burst(0.2, 900, 0.2 * v, 'bandpass'); }
     else if (kind === 'click') { tone(3000, 2000, 0.015, 0.03, 'square'); }
   }
   function updateAudio(dt) {
@@ -845,6 +846,12 @@ export function mount(stage) {
       if (e.type === 'trick') {
         if (S.finished) continue;
         addCombo(e.list, e.pts); showTrick(e.list, e.pts, e.perfect ? 'Perfect landing!' : ''); snd('trick');
+      } else if (e.type === 'splash') {
+        // spray thrown up and out from the wheels
+        const b = rider, n = Math.min(10, 3 + Math.floor(e.v * 0.6)), hs = Math.hypot(b.vel.x, b.vel.z) || 1, fx = b.vel.x / hs, fz = b.vel.z / hs;
+        for (let i = 0; i < n; i++) { const sd = Math.random() < 0.5 ? -1 : 1, out = 1.2 + Math.random() * 2.2 + e.v * 0.12, up = 1.6 + Math.random() * 2.4 + e.v * 0.14;
+          scene.spray.puff(b.pos.x - fx * 0.5 + (Math.random() - 0.5) * 0.5, b.pos.y + 0.25, b.pos.z - fz * 0.5 + (Math.random() - 0.5) * 0.5, fz * sd * out + fx * e.v * 0.25, up, -fx * sd * out + fz * e.v * 0.25, 0.25 + Math.random() * 0.3, 0.45 + Math.random() * 0.35, 1.6, 0.75); }
+        if (!A.splashT || performance.now() - A.splashT > 140) { A.splashT = performance.now(); snd('splash', clamp(e.v / 12, 0.25, 1)); }
       } else if (e.type === 'land') {
         snd('land', clamp(e.v / 10, 0.2, 1));
         vis.vf += Math.min(9, e.v * 0.55); vis.vr += Math.min(9, e.v * 0.5);
@@ -916,7 +923,7 @@ export function mount(stage) {
         if (rider.crashed && !was) startCrash();
         if (rider.crashed) { S.crashT += STEP; drawCrash(STEP); }
         else placeBike(STEP);
-        updateCamera(STEP); scene.dust.update(STEP);
+        updateCamera(STEP); scene.dust.update(STEP); scene.spray.update(STEP);
         if (S.crashT > 1.5) { crashSim.bike = null; resetToCheckpoint(); }
         if (stopWhen && stopWhen(rider)) break;
       }

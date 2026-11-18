@@ -78,6 +78,7 @@ const tmpF = {}, tmpS = {}, tmpN = {}, tmpT = {}, tmpB = {};
 
 export function stepRider(b, world, inp, dt) {
   b.events.length = 0;
+  if (world.setRef) world.setRef(b.pos.y + 0.3);       // which level we're on where a bridge crosses a tunnel
   if (b.crashed) { b.crashT += dt; return; }
   inp = { ...inp, steer: inp.steer || 0, throttle: inp.throttle || 0 };
 
@@ -142,6 +143,10 @@ function groundStep(b, world, inp, dt, popNow) {
   if (b.rough > 0.4 && speed > safe && !b.crashed) { b.rattle += (speed - safe) * dt * 0.55 * b.rough; if (b.rattle > 1) { if (b.noCrash) { b.rattle = 0.4; b.vel.x *= 0.7; b.vel.z *= 0.7; b.events.push({ type: 'save', why: 'rocks' }); } else { crash(b, 'rocks'); return; } } }
   else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
+  // water: drags a little and throws spray
+  const wet = world.waterAt ? world.waterAt(b.pos.x, b.pos.z, b.pos.y) : 0;
+  b.wet = wet;
+  if (wet > 0.02) { b.splashT = (b.splashT || 0) - dt; if (speed > 2 && b.splashT <= 0) { b.splashT = 0.05; b.events.push({ type: 'splash', v: speed, deep: wet }); } }
   // steering: tighter when slow
   // (you can ask for a bit more than the tyres hold: then the back steps out and you scrub speed,
   //  while the front digs in and keeps pulling you round)
@@ -156,7 +161,7 @@ function groundStep(b, world, inp, dt, popNow) {
   const drag = 0.0062 * b.P.drag * vF * Math.abs(vF);
   // pumping: crouch on the way down a roller / landing to gain speed
   const pumpA = inp.pump && f.y < -0.03 ? clamp(-f.y * 6, 0, 1) * 1.6 : 0;
-  let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1);
+  let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1) - (wet > 0.02 ? vF * Math.min(1.6, 0.5 + wet * 3) : 0);
   vF += a * dt;
   if (b.brake > 0) {
     const bd = b.brake * 8 * dt;

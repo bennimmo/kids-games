@@ -122,6 +122,16 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
       if (side) prev = side;
     }
+    // a crossing that got no jump: a tunnel. One trail dips through a deep cutting, the other rides a timber bridge over it
+    prev = 0;
+    for (let j = 40; j < Bl.n - 40; j++) {
+      const i = BtoA.ni[j], side = Math.sign((Bl.x[j] - A.x[i]) * A.tz[i] - (Bl.z[j] - A.z[i]) * A.tx[i]);
+      if (prev && side && side !== prev && BtoA.nd[j] < 2.5 && A.z[i] > 190 && A.z[i] < L - 170) {
+        const ang = Math.abs(Math.asin(clamp(A.tx[i] * Bl.tz[j] - A.tz[i] * Bl.tx[j], -1, 1)));
+        if (ang > 0.6 && !crossings.some(c => Math.abs(c.i[1] - j) < 90)) crossings.push({ i: [i, j], tunnel: true, ang, jumper: -1, upper: crossings.length % 2 });
+      }
+      if (side) prev = side;
+    }
   }
 
   // ---------------------------------------------------------------- features
@@ -138,6 +148,12 @@ export function buildWorld(mapId = 'pine-ridge') {
     const STRAIGHT = new Set(['kicker', 'table', 'gap', 'double', 'triple', 'hip', 'stepdown', 'woodkicker', 'woodstep', 'drop', 'stepup', 'skinny']);
     // cross-over jumps: where the two routes cross, one of them jumps clean over the other
     const taken = new Float32Array(N);
+    for (const c of crossings) if (c.tunnel) {
+      const i0 = c.i[ri], sn = Math.sin(c.ang);
+      if (c.upper === ri) { const span = 2.0 / sn + 1.3; feats.push({ kind: 'bridge', s: i0 - span, end: i0 + span, mid: i0 }); }
+      else { const fl = 2.4 / sn + 1.2; feats.push({ kind: 'cut', s: i0 - fl - 15, end: i0 + fl + 15, fl, mid: i0, D: 2.7, es: 0, sin: sn, water: true, ramp: 15 }); }
+      for (let j = Math.max(0, Math.floor(i0 - 44)); j < Math.min(N, i0 + 44); j++) taken[j] = 1;
+    }
     for (const c of crossings) if (c.jumper === ri) {
       const i0 = c.i[ri], half = c.gap / 2;
       // a low, long take-off (keeps your speed) and a low landing (more hang time), so it clears at a normal pace
@@ -180,7 +196,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
     }
     }
-    let s = 64, k = 0;
+    let s = 64, k = 0, nObst = 0;
     while (s < FINISH - 70) {
       s = Math.round(s);                 // whole metres: the checks below index the route's points
       let maxC = 0, busy = 0;
@@ -201,7 +217,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       // rocks only live in the tech zones (sharp turns round trees), never out on a straight
       if (kind === 'tech' || kind === 'rocks' || kind === 'stairs') kind = grade > 0.13 ? 'drop' : ['rollers', 'table', 'whoops'][k % 3];
       const gapAfter = 17 + r() * 8;
-      const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
+      const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; if (!f.table && !f.off && f.gap >= 9 && nObst++ % 3 !== 2) f.obst = (nObst + ri) % 2 ? 'car' : 'boulder'; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
       if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11, hoop: r() < 0.6 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + gapAfter;
       else if (kind === 'lowtable') s = kick(s, { lk: 4.5, hk: 1.15, gap: 4.5, ll: 7, table: true }).end + gapAfter;
       else if (kind === 'table') s = kick(s, { lk: 6.5, hk: 1.8, gap: 8, table: true }).end + gapAfter;
@@ -256,15 +272,16 @@ export function buildWorld(mapId = 'pine-ridge') {
         for (let q = 0; q < count; q++) {
           const s = Math.round(s0 + pitch * q + (pitch - 20) / 2);
           let c = 0; for (let j = s; j < s + 20; j++) c = Math.max(c, Math.abs(ln.curvS[j]));
-          let kind = ['ladder', 'rockroll', 'rollin'][fk++ % 3];
-          if (c > 0.03 && kind !== 'rockroll') kind = c > 0.05 ? 'rollers' : 'rockroll';
+          let kind = ['ladder', 'rockroll', 'creek', 'rollin'][fk++ % 4];
+          if (c > 0.03 && kind !== 'rockroll' && kind !== 'creek') kind = c > 0.05 ? 'rollers' : 'rockroll';
           let f;
           if (kind === 'ladder') f = { kind, s, len: 16 };
           else if (kind === 'rockroll') f = { kind, s, run: 11, h: 1.6, len: 3.4 };
           else if (kind === 'rollin') f = { kind, s, run: 13, hk: 1.25, top: 3.5, down: 4.6 };
+          else if (kind === 'creek') f = { kind, s: s + 5, len: 8 };
           else f = { kind: 'rollers', s, n: 3, wl: 6, a: 0.4 };
           f.filler = true;
-          f.end = kind === 'ladder' ? s + f.len : kind === 'rockroll' ? s + f.run + f.len : kind === 'rollin' ? s + f.run + f.top + f.down : s + f.n * f.wl;
+          f.end = kind === 'creek' ? f.s + f.len : kind === 'ladder' ? s + f.len : kind === 'rockroll' ? s + f.run + f.len : kind === 'rollin' ? s + f.run + f.top + f.down : s + f.n * f.wl;
           feats.push(f);
         }
         s0 += free;
@@ -317,7 +334,7 @@ export function buildWorld(mapId = 'pine-ridge') {
           const a = Math.abs(sc - f.mid);
           // steep walls, but a ramp out on the jumper's landing side, so coming up short isn't a trap
           const notch = (1 - smooth(1.0, 1.7, a * f.sin)) * (d * f.es > 0 ? 1 : 0);
-          hN += -f.D * (1 - smooth(f.fl, f.fl + 13, a)) * lerp(1 - smooth(1.25, 2.0, Math.abs(d)), 1 - smooth(0.3, 3.2, Math.abs(d)), notch);
+          hN += -f.D * (1 - smooth(f.fl, f.fl + (f.ramp || 13), a)) * lerp(1 - smooth(1.25, 2.0, Math.abs(d)), 1 - smooth(0.3, 3.2, Math.abs(d)), notch);
         } else if (f.kind === 'stepup') {
           jump = 1;
           const g0 = f.lk + f.gap, g1 = g0 + f.face, g2 = g1 + f.top;
@@ -345,7 +362,14 @@ export function buildWorld(mapId = 'pine-ridge') {
           const back = 1.6, low = f.table ? f.hk * 0.8 : f.flat ? 0 : -0.3;
           if (u < f.lk) { hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * (f.wood ? nar(d, 0, 1.55, 0.5) : f.fw ? nar(d, 0, f.fw, f.edge) : nar(d)); }
           else if (u < f.lk + back) { const t = (u - f.lk) / back; hN += lerp(f.hk, low, 0.5 - 0.5 * Math.cos(t * Math.PI)) * (f.wood && !f.table ? nar(d, 0, 1.55, 0.5) : nar(d)); }
-          else if (u < f.lk + f.gap) { hN += low * nar(d); }                                                    // gap (or table top)
+          else if (u < f.lk + f.gap) {
+            hN += low * nar(d);
+            if (f.obst) {
+              const uo = f.lk + back + (f.gap - back) * 0.5;
+              if (f.obst === 'car') { const c = 1.3 * (1 - smooth(0.8, 0.95, Math.abs(u - uo))) * (1 - smooth(1.95, 2.1, Math.abs(d))); hN += c; deck += c; }        // a wrecked car lying across the gap
+              else { const q = ((u - uo) / 1.7) ** 2 + (d / 1.9) ** 2; if (q < 1) { hN += 1.5 * Math.pow(1 - q, 0.55); stone = Math.max(stone, smooth(0, 0.12, 1 - q)); } }   // a big boulder
+            }
+          }                                                    // gap (or table top)
           else {
             const v = u - f.lk - f.gap;
             const hh = v < f.face ? lerp(low, f.hl, smooth(0, f.face, v)) : f.hl * (1 - smooth(0, 1, clamp((v - f.face) / f.ll, 0, 1)));   // back face, then the long landing
@@ -357,6 +381,9 @@ export function buildWorld(mapId = 'pine-ridge') {
           const on = 1 - smooth(f.d0 + f.wd, f.d0 + f.wd + 0.3, dd);                       // sheer drop off the back
           hN += clamp(dd - f.d0, 0, f.wd) * f.sl * fade * on;
           if (fade > 0.25 && dd > f.d0 - 0.15 && dd < f.d0 + f.wd + 0.3) wood = 1;
+        } else if (f.kind === 'creek') {
+          // a stream across the trail: splash through it, or hop it
+          hW += -0.6 * smooth(0, 3, u) * (1 - smooth(f.len - 3, f.len, u));
         } else if (f.kind === 'ladder') {
           const fade = smooth(0, 3.6, u) * (1 - smooth(f.len - 3.6, f.len, u));
           const side = nar(d, 0, 1.05, 0.22);
@@ -499,11 +526,27 @@ export function buildWorld(mapId = 'pine-ridge') {
   };
   const nearRib = id => { for (let ri = 0; ri < NR; ri++) { const i = nearI[ri][id]; if (i >= 0 && nearD[ri][id] < (routes[ri].halfW(i) + RIB + 0.8) ** 2) return true; } return false; };
   const ex = {};
-  const height = (x, z) => {
+  const groundH = (x, z) => {
     const id = cellId(x, z);
     if (nearRib(id)) { shape(x, z, id, ex, false); if (ex.inRib) return ex.h; }
     return gridHeight(x, z);
   };
+  // bridges: a second level over a tunnel. Whoever is asking is on the bridge if they are up at deck height
+  // (physics tells us the rider's height with setRef), otherwise they are down in the cutting.
+  const bridges = []; let ref;
+  const height = (x, z) => {
+    const h = groundH(x, z);
+    if (ref !== undefined) for (const b of bridges) {
+      const dx = x - b.x0, dz = z - b.z0, t = dx * b.ux + dz * b.uz;
+      if (t < 0 || t > b.len || Math.abs(dx * b.uz - dz * b.ux) > b.half) continue;
+      const yb = lerp(b.y0, b.y1, t / b.len);
+      if (ref > yb - 1.1) return Math.max(h, yb);
+    }
+    return h;
+  };
+  const setRef = y => { ref = y; };
+  // the ground you can see (no platforms or wrecks standing on it)
+  const visualH = (x, z) => { const id = cellId(x, z); if (nearRib(id)) { shape(x, z, id, ex, false); if (ex.inRib) return ex.hv; } return gridHeight(x, z); };
   const exact = (x, z, out = {}) => shape(x, z, cellId(x, z), out, false);
   const normal = (x, z, out = {}) => {
     const e = 0.3;
@@ -637,7 +680,37 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (let q = 0; q < 3; q++) { const a = ang + (q - 1) * 0.5 + (r() - 0.5) * 0.3, len = Math.min(ta.d + 0.6, 1.8 + r() * 2.2); roots.push({ x: t.x, z: t.z, y: t.y, rot: a, len }); }
   }
   // timber frames: legs, rails and cross-braces under the plank decks and behind the wall rides
-  const timbers = [], decks = [];
+  const timbers = [], decks = [], waters = [], cars = [];
+  for (const R of routes) for (const f of R.feats) {
+    const at = (sc, dd = 0) => { const i0 = clamp(Math.floor(sc), 0, R.n - 2), fr = sc - i0, x = lerp(R.x[i0], R.x[i0 + 1], fr) + R.tz[i0] * dd, z = lerp(R.z[i0], R.z[i0 + 1], fr) - R.tx[i0] * dd; return { x, z, yaw: Math.atan2(R.tx[i0], R.tz[i0]) }; };
+    if (f.kind === 'bridge') {
+      const a = at(f.s), b2 = at(f.end), len = Math.hypot(b2.x - a.x, b2.z - a.z), ux = (b2.x - a.x) / len, uz = (b2.z - a.z) / len;
+      const br = { x0: a.x, z0: a.z, y0: groundH(a.x, a.z), x1: b2.x, z1: b2.z, y1: groundH(b2.x, b2.z), ux, uz, len, half: 1.7 };
+      bridges.push(br);
+      const pts = [];
+      for (let q = 0; q <= Math.ceil(len / 0.5); q++) { const t = Math.min(len, q * 0.5), x = a.x + ux * t, z = a.z + uz * t, y = lerp(br.y0, br.y1, t / len) + 0.02;
+        pts.push({ x, z, y, ax: x + uz * br.half, az: z - ux * br.half, bx: x - uz * br.half, bz: z + ux * br.half, u: t }); }
+      decks.push({ pts });
+      // hand rails, and two long beams underneath
+      for (const sd of [-1, 1]) { let prev = null;
+        for (let q = 0; q < pts.length; q += 4) { const p = pts[q], x = p.x + uz * sd * 1.62, z = p.z - ux * sd * 1.62;
+          timbers.push({ x0: x, y0: p.y - 0.1, z0: z, x1: x, y1: p.y + 0.95, z1: z, t: 0.11 });
+          if (prev) { timbers.push({ x0: prev.x, y0: prev.y + 0.9, z0: prev.z, x1: x, y1: p.y + 0.9, z1: z, t: 0.09 }); timbers.push({ x0: prev.x, y0: prev.y + 0.45, z0: prev.z, x1: x, y1: p.y + 0.45, z1: z, t: 0.06 }); }
+          prev = { x, y: p.y, z }; }
+        const p0 = pts[0], p1 = pts[pts.length - 1];
+        timbers.push({ x0: p0.x + uz * sd * 1.1, y0: p0.y - 0.3, z0: p0.z - ux * sd * 1.1, x1: p1.x + uz * sd * 1.1, y1: p1.y - 0.3, z1: p1.z - ux * sd * 1.1, t: 0.24 }); }
+    }
+    else if (f.kind === 'cut' && f.water) { const c = at(f.mid); waters.push({ x: c.x, z: c.z, y: groundH(c.x, c.z) + 0.14, yaw: c.yaw, len: 2 * f.fl + 7, wid: 2.5 }); }
+    else if (f.kind === 'creek') { const c = at(f.s + f.len / 2); waters.push({ x: c.x, z: c.z, y: groundH(c.x, c.z) + 0.34, yaw: c.yaw, len: 6.4, wid: 2 * (R.halfW(Math.round(f.s)) + 2.6) }); }
+    else if (f.obst === 'car') { const c = at(f.s + f.lk + 1.6 + (f.gap - 1.6) * 0.5); cars.push({ x: c.x, z: c.z, y: visualH(c.x, c.z), yaw: c.yaw + Math.PI / 2, tint: r() }); }
+  }
+  // how deep the water is here (0 = dry)
+  const waterAt = (x, z, y) => {
+    for (const w of waters) { const dx = x - w.x, dz = z - w.z; if (Math.abs(dx) + Math.abs(dz) > w.len + w.wid || (y !== undefined && y > w.y + 0.5)) continue;
+      const s = Math.sin(w.yaw), c = Math.cos(w.yaw), al = dx * s + dz * c, ac = dx * c - dz * s;
+      if (Math.abs(al) < w.len / 2 && Math.abs(ac) < w.wid / 2) { const dep = w.y - groundH(x, z); if (dep > 0) return dep; } }
+    return 0;
+  };
   for (const R of routes) {
     const pt = (sc, dd) => { const i0 = clamp(Math.floor(sc), 0, R.n - 2), fr = sc - i0, x = lerp(R.x[i0], R.x[i0 + 1], fr) + R.tz[i0] * dd, z = lerp(R.z[i0], R.z[i0 + 1], fr) - R.tx[i0] * dd; return { x, z, y: height(x, z) }; };
     // a row of legs along one side: the foot stands at dPost on the ground found at dGround, the head reaches the deck height found at dTop
@@ -702,7 +775,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
     checkpoints, finish, start, startZ, finishZ, hoops,
-    trees, rocks, plants, logs, pads, roots, stumps, timbers, decks, arrows, warns, flags, banners,
+    trees, rocks, plants, logs, pads, roots, stumps, timbers, decks, waters, cars, bridges, setRef, waterAt, visualH, arrows, warns, flags, banners,
   };
 }
 
