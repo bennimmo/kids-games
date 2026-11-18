@@ -555,3 +555,6 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .vt-res { background: #fafafa; border-radius: 14px; padding: 10px 14px; text-align: left; font-size: 16px; display: flex; flex-direction: column; gap: 4px; }
 .vt-res[hidden] { display: none; }
 .vt-res small { opacity: .75; }
+/* Bubble buttons stay centred beside the face, even when a video bubble is made big. */
+.fb-side, .fb-me .fb-tools { top: 30px; transform: translateY(-50%); }
+.fb.big .fb-side, .fb-me.big .fb-tools { top: 75px; }
