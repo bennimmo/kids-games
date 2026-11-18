@@ -90,12 +90,17 @@ function nameButton() {
   return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span class="name-ico${f ? ' emo' : ''}">${f || icon('user')}</span>${n ? `<b>${nameHTML(n)}</b>` : `<b class="name-pen">${icon('edit')}</b>`}</button>`;
 }
 
-function editName() {
+// forFriends: opened from the friends button before a name was set.
+function editName(forFriends = false) {
+  if (forFriends instanceof Event) forFriends = false;
   const o = document.createElement('div');
   o.className = 'app-help name-edit';
+  const fresh = !myName();
   o.innerHTML = `<form class="app-help-card name-card">
+      ${fresh ? `<div class="name-ask"><h2>${forFriends ? 'First, add your name' : 'What\'s your name?'}</h2>
+        <p>${forFriends ? 'Type your name and pick a picture. Then you can add friends.' : 'Type your name and pick a picture.'}</p></div>` : ''}
       <div class="name-face"></div>
-      <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
+      <input class="name-input" placeholder="Type your name" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
       <div class="face-grid">${FACES.map(f => `<button type="button" data-f="${f}">${f}</button>`).join('')}</div>
       <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">${icon('backspace')}</button><button type="submit" class="app-btn name-ok" aria-label="Done">${icon('check')}</button></div>
     </form>`;
@@ -120,6 +125,7 @@ function editName() {
     o.remove();
     if (changed) nameChanged();
     showMenu();
+    if (forFriends && myName()) window.dispatchEvent(new Event('kg-open-friends'));
   };
   o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); sound.pop(); close(); });
   o.querySelector('.name-clear').addEventListener('click', () => { input.value = ''; input.focus(); });

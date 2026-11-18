@@ -225,7 +225,7 @@ function renderBar(s) {
   bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
-    if (s.codeStatus === 'noname') onEditName();
+    if (s.codeStatus === 'noname') onEditName(true);
     else openPanel();
   });
 }
@@ -414,7 +414,7 @@ export function mountFriends({ editName }) {
   shield(dock); shield(knockEl); shield(inviteEl);
   // Games ask for this ("Play with friends" before linking up).
   window.addEventListener('kg-open-friends', () => {
-    if (friendState().codeStatus === 'noname') onEditName();
+    if (friendState().codeStatus === 'noname') onEditName(true);
     else openPanel();
   });
   wireDrag();

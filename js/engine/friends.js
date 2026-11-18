@@ -760,7 +760,7 @@ export function startFriends() {
 export function nameChanged() {
   const name = myName();
   if (!name) { stopAsking(); dropCode(); codeStatus = 'noname'; emit(); return; }
-  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); return; }
+  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); openHome().catch(() => {}); return; }
   if (code && fb) fb.D.update(ref(`${code}/meta`), { name, face: myFace() }).catch(() => {});
   if (group && group.writeMe) group.writeMe();
   if (home && home.put) home.put().catch(() => {}); else openHome().catch(() => {});
