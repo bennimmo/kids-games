@@ -1,19 +1,20 @@
 // Playing with friends. Uses the shared rooms in js/engine/net.js:
-//   games/beautiful-bells/rooms/<code>/players/<pid> = { name, who, emoji, showoff }  (name = the girl, who = the player)
+//   games/beautiful-bells/rooms/<code>/meta          = { v, hostUid }
+//   games/beautiful-bells/rooms/<code>/players/<pid> = { girl, name, face, ready, emoji, showoff }  (girl = her name, name = the player)
 //   games/beautiful-bells/rooms/<code>/live/<pid>    = { look, t }
 // Everyone makes their own girl; friends' girls are shown live (watch only).
-import { myName, cleanName as cleanWho } from '../../js/engine/profile.js';
-import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
+import { cleanName as cleanWho, myFace, cleanFace } from '../../js/engine/profile.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { playerInfo, people } from '../../js/engine/together.js';
 import { ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS, SKINS, TOP_COLORS, GIRLS } from './items.js';
 import { LOOK_VERSION, newLook } from './look.js';
 
-export { CODE_PICS, codeToPics };
 export const GAME_ID = 'beautiful-bells';
 export const MAX_PLAYERS = 4;
 const AVATARS = ['🦄', '🌸', '⭐', '🦋', '🌈', '🍓', '🐱', '🐰'];
 const SEND_EVERY = 300; // ms
 
-export const makeRoom = () => createRoom(GAME_ID, { v: LOOK_VERSION });
+export const makeRoom = () => createRoom(GAME_ID, { v: LOOK_VERSION });  // the host adds hostUid
 export const findRoom = code => joinRoom(GAME_ID, code);
 
 // ---------- friends' data comes from other devices, so check every bit of it ----------
@@ -60,13 +61,14 @@ export function sanitizeLook(raw) {
 // ---------- a connected room ----------
 export function connect(room, { onChange, onClosed, onShowOff }) {
   const pid = room.uid + '_0'; // database rules: player ids start with "<uid>_"
-  const emoji = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+  const emoji = myFace() || AVATARS[Math.floor(Math.random() * AVATARS.length)];
   let players = {};
   let looks = {};
   let name = 'Friend';
   let showoff = 0;
   let pending = null, timer = null, lastSent = '';
   let metaSeen = false, closed = false;
+  let hostUid = room.isHost ? room.uid : '';
   const seenShowoff = {};
   const unsubs = [];
 
@@ -75,7 +77,7 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
     players = p || {};
     for (const [id, info] of Object.entries(players)) {
       const t = info && typeof info.showoff === 'number' ? info.showoff : 0;
-      if (id !== pid && seenShowoff[id] !== undefined && t > seenShowoff[id]) onShowOff(cleanName(info.name));
+      if (id !== pid && seenShowoff[id] !== undefined && t > seenShowoff[id]) onShowOff(cleanName(info.girl));
       seenShowoff[id] = t;
     }
     emit();
@@ -92,12 +94,14 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
     lastStatus = st;
   }));
   unsubs.push(room.onMeta(m => {
+    if (m && m.hostUid && m.hostUid !== hostUid) { hostUid = m.hostUid; emit(); }
     if (m) metaSeen = true;
     else if (metaSeen && !closed) { closed = true; onClosed(); }
   }));
 
-  const who = myName(); // set on the main menu
-  const sendInfo = () => room.setPlayer(pid, { name, who, emoji, showoff }).catch(() => {});
+  // name + face (set on the main menu) come from playerInfo; girl = her name
+  const sendInfo = () => room.setPlayer(pid, { ...playerInfo(true), girl: name, emoji, showoff }).catch(() => {});
+  sendInfo(); // show up in friends' strip straight away (before picking a girl)
   const flush = () => {
     timer = null;
     if (!pending || closed || lastStatus !== 'ok') return; // resent when back online
@@ -109,17 +113,19 @@ export function connect(room, { onChange, onClosed, onShowOff }) {
 
   return {
     code: room.code,
-    pics: codeToPics(room.code),
+    uid: room.uid,
     emoji,
+    // [{ uid, name, face, ... }] for the shared lobby strip
+    people: () => people(players, hostUid),
     // Friends who have a girl to show (not me).
     friends() {
       return Object.entries(players)
         .filter(([id]) => id !== pid)
         .map(([id, info]) => ({
           id,
-          name: cleanName(info && info.name),
-          who: cleanWho(info && info.who),
-          emoji: AVATARS.includes(info && info.emoji) ? info.emoji : '🙂',
+          name: cleanName(info && info.girl),
+          who: cleanWho(info && info.name),
+          emoji: cleanFace(info && info.face) || (AVATARS.includes(info && info.emoji) ? info.emoji : '🙂'),
           look: looks[id] && sanitizeLook(looks[id].look),
         }));
     },

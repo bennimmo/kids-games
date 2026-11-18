@@ -4,12 +4,19 @@
 //   games/friends/rooms/<code>   my friend code (6 hex = 6 pictures), new on every visit to the menu
 //       host, meta: { name, ok/<pid>: <group>, no/<pid>, full/<pid> }   (written by me)
 //       players/<uid>_k: { name }                                       (a friend knocking)
+//   games/friends/rooms/h<uid>  my home: always there while the app is open, so saved friends can call me
+//       host, meta: { name, face, on, game, at, invite? }  (on = app open; game = what I'm playing;
+//             invite = { game, code, at }: "come and play my game", seen by every friend, see together.js)
+//       players/<uid>_k: { name, face, group? }   (a friend calling; group = their call to join)
+//       players/<uid>_r: { code, at }             (a friend saying "not this time" to my invite)
+// Adding a friend (code) just saves each other: ok/<pid> = 'f'. Calls are separate (the group).
 //   games/friends/rooms/<group>  the group ('c' + 16 random)
-//       players/<uid>_m: { name, face, sid }                                (one per device)
+//       players/<uid>_m: { name, face, sid, game }                         (one per device)
 //       live/<uid>_m/<toUid>/<key>: WebRTC hand-shake messages
 // The link itself is WebRTC, straight between devices, ready for voice/video later
 // (peer.pc is the RTCPeerConnection; tracks friends add arrive as friend.stream).
-// Nothing is kept: entries go when you leave or lose connection. Only the name and picture are shared.
+// Friends you've been in a call with are saved on this device (FRIENDS_KEY) so you can call them again.
+// Only the name, picture and what you're playing are shared.
 
 import { firebaseCore } from './net.js';
 import { myName, cleanName, myFace, cleanFace } from './profile.js';
@@ -22,6 +29,7 @@ let lastEcho = voiceOpts().echo;
 onVoiceOpts(o => {
   soundsBack();
   if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
+  if (group) group.peers.forEach(p => { p.relayOnly = false; try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
 });
 export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
@@ -29,9 +37,27 @@ export const FRIEND_CODE_LEN = 6;
 export const MAX_FRIENDS = 4;
 const AREA = 'games/friends/rooms';
 const KEEP_KEY = 'kg-group';
+const FRIENDS_KEY = 'kg-friends';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
-const ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
+// STUN finds a direct path. TURN = relay for when devices can't link directly.
+// Our own free Metered account (20 GB a month). These details are meant to sit in the page;
+// if someone uses up the allowance, make new ones in the Metered dashboard and swap them here.
+const ICE = [
+  { urls: ['stun:stun.relay.metered.ca:80', 'stun:stun.l.google.com:19302'] },
+  {
+    urls: [
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
+    ],
+    username: '8afd11852f70919b82fce652',
+    credential: 'UwFRBOq7fSXaEVrn',
+  },
+];
+const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const randomHex = n => [...bytes(n)].map(b => (b & 15).toString(16)).join('');
@@ -53,12 +79,38 @@ let outgoing = null;                  // { code, name, status: asking|no|full|no
 let outUnsub = null, outTimer = null, outToken = 0;
 let group = null;                     // { id, peers: Map(uid -> peer), unsubs, live, timer }
 let mic = null, micStatus = 'off', muted = false; // micStatus: off | asking | on | denied
+let wantCam = false;                               // start the camera when the call connects (video call)
+let cam = null, camStatus = 'off';                 // camera: off | asking | on | denied (off unless tapped)
+let invites = [];                     // [{ uid, name, face, game, code, at }] from friends
+const dismissed = new Set();          // 'uid:code' already answered
+let playing = null;                   // { game, code } room I'm in (from together.js)
+const INVITE_MS = 15 * 60 * 1000;
+let declines = [];                    // [{ uid, code }] friends who said no to my invite
+let where = '';                       // game id I'm in ('' = menu)
+let home = null;                      // { id, unsubs }
+let contacts = loadFriends();         // saved friends [{ uid, name, face, at }]
+const presence = new Map();           // uid -> { on, game } from their home
+let presenceUnsubs = new Map();
 
 const subs = new Set();
 const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
-  inGroup: !!group, micStatus, muted,
-  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream })) : [],
+  inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing, camStatus, myCam: cam,
+  invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
+  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam })) : [],
+  declines: declines.slice(),
+  // Bubbles: friends who are on now (in a call with me or not).
+  buddies: buddies(),
+  // Saved friends, online ones first: { uid, name, face, online, game, inCall, calling }
+  contacts: contacts.map(c => {
+    const pr = presence.get(c.uid) || {};
+    const peer = group && group.peers.get(c.uid);
+    return {
+      uid: c.uid, name: c.name, face: c.face, online: !!pr.on || !!peer, game: peer ? (peer.game || '') : (pr.game || ''),
+      inCall: !!peer, calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking'),
+      said: outgoing && outgoing.code === homeId(c.uid) ? outgoing.status : '',
+    };
+  }).sort((a, b) => (b.inCall - a.inCall) || (b.online - a.online) || (b.at || 0) - (a.at || 0)),
 });
 let emitQueued = false;
 function emit() {
@@ -89,6 +141,8 @@ export async function startMic() {
     mic = m; micStatus = 'on';
     mic.getAudioTracks().forEach(t => { t.enabled = !muted; });
     group.peers.forEach(addMic);
+    // Chrome (Android) hides local addresses until the mic is allowed: look for a link again now.
+    group.peers.forEach(p => { if (p.status !== 'on') p.retry(); });
   } catch (e) { micStatus = 'denied'; }
   soundsBack();
   emit();
@@ -129,6 +183,49 @@ export async function chooseMic(id) {
   old.getTracks().forEach(x => x.stop());
   emit();
 }
+// ------------------------------------------------------------ camera (small video in the bubbles)
+
+const CAM_BITRATE = 150000; // bubbles are tiny: keep it light on wifi and battery
+export async function startCam() {
+  if (cam || camStatus === 'asking' || !group) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camStatus = 'denied'; emit(); return; }
+  camStatus = 'asking'; emit();
+  try {
+    const c = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 240 }, height: { ideal: 240 }, frameRate: { ideal: 15, max: 15 } },
+      audio: false,
+    });
+    if (!group) { c.getTracks().forEach(t => t.stop()); camStatus = 'off'; emit(); return; }
+    cam = c; camStatus = 'on';
+    group.peers.forEach(addCam);
+    if (group.writeMe) group.writeMe();
+  } catch (e) { camStatus = 'denied'; }
+  emit();
+}
+export function stopCam() {
+  if (cam) cam.getTracks().forEach(t => t.stop());
+  cam = null;
+  if (camStatus !== 'denied') camStatus = 'off';
+  if (group) {
+    group.peers.forEach(p => { if (p.camSender) p.camSender.replaceTrack(null).catch(() => {}); });
+    if (group.writeMe) group.writeMe();
+  }
+  emit();
+}
+function addCam(p) {
+  if (!cam || p.pc.signalingState === 'closed') return;
+  const t = cam.getVideoTracks()[0];
+  if (!t) return;
+  if (p.camSender) { p.camSender.replaceTrack(t).catch(() => {}); return; } // no new hand-shake needed
+  p.camSender = p.pc.addTrack(t, cam);
+  try {
+    const prm = p.camSender.getParameters();
+    if (!prm.encodings || !prm.encodings.length) prm.encodings = [{}];
+    prm.encodings[0].maxBitrate = CAM_BITRATE;
+    p.camSender.setParameters(prm).catch(() => {});
+  } catch (e) { /* not supported: browser picks */ }
+}
+
 function stopMic() {
   if (mic) mic.getTracks().forEach(t => t.stop());
   mic = null; micStatus = 'off'; emit();
@@ -155,7 +252,7 @@ function dropCode() {
     fb.D.onDisconnect(r).cancel().catch(() => {});
     fb.D.remove(r).catch(() => {});
   }
-  code = null; knocks = []; answered.clear();
+  code = null; codeKnocks = []; mergeKnocks();
 }
 
 // A fresh code (called every time the menu opens).
@@ -176,7 +273,7 @@ export async function newCode() {
     if (token !== codeToken) return;
     const make = () => {
       D.onDisconnect(ref(c)).remove();
-      return D.set(ref(c), { host: uid, created: D.serverTimestamp(), meta: { name: myName() } });
+      return D.set(ref(c), { host: uid, created: D.serverTimestamp(), meta: { name: myName(), face: myFace() } });
     };
     await make();
     if (token !== codeToken) { D.remove(ref(c)).catch(() => {}); return; }
@@ -190,37 +287,59 @@ export async function newCode() {
     }));
     codeUnsubs.push(D.onValue(ref(`${c}/players`), s => {
       const v = s.val() || {};
-      for (const pid of answered) if (!v[pid]) { // they gave up: tidy their answer
-        answered.delete(pid);
+      for (const a of answered) if (a.startsWith(c) && !v[a.slice(c.length)]) { // they gave up: tidy their answer
+        const pid = a.slice(c.length);
+        answered.delete(a);
         D.update(ref(`${c}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
       }
-      knocks = Object.entries(v)
-        .filter(([pid, k]) => pid.endsWith('_k') && !answered.has(pid) && k && cleanName(k.name))
-        .map(([pid, k]) => ({ pid, name: cleanName(k.name) }));
-      emit();
+      codeKnocks = Object.entries(v)
+        .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
+        .map(([pid, k]) => ({ pid, room: c, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group) }));
+      mergeKnocks();
     }));
   } catch (e) {
     if (token === codeToken) { codeStatus = 'offline'; emit(); }
   }
 }
 
-export async function accept(pid) {
-  if (!code || answered.has(pid)) return;
-  answered.add(pid);
-  knocks = knocks.filter(k => k.pid !== pid); emit();
-  const meta = ref(`${code}/meta`);
+// Knocks come in on my code (new friends) and on my home (saved friends calling).
+let codeKnocks = [], homeKnocks = [];
+function mergeKnocks() {
+  const seen = new Set();
+  knocks = [...homeKnocks, ...codeKnocks].filter(k => !answered.has(k.room + k.pid) && !seen.has(k.pid) && seen.add(k.pid));
+  emit();
+}
+const cleanGroup = g => (typeof g === 'string' && /^c[a-z0-9]{16}$/.test(g) ? g : '');
+
+export async function accept(pid, video) {
+  wantCam = !!video;
+  if (video && group && group.peers.size) startCam();
+  const k = knocks.find(x => x.pid === pid);
+  if (!k || answered.has(k.room + pid)) return;
+  answered.add(k.room + pid);
+  knocks = knocks.filter(x => x.pid !== pid); emit();
+  const meta = ref(`${k.room}/meta`);
   try {
+    if (k.room[0] !== 'h') { // picture code: just friends, no call
+      wantCam = false;
+      saveFriend(pid.slice(0, -2), k.name, k.face);
+      await fb.D.update(meta, { [`ok/${pid}`]: 'f' });
+      return;
+    }
     if (group && group.peers.size >= MAX_FRIENDS) { await fb.D.update(meta, { [`full/${pid}`]: true }); return; }
-    if (!group) await joinGroup(randomGroup());
+    // They're already in a call: hop into theirs (if I'm on my own), so friends come along.
+    if (k.group && (!group || !group.peers.size)) await joinGroup(k.group);
+    else if (!group) await joinGroup(randomGroup());
     await fb.D.update(meta, { [`ok/${pid}`]: group.id });
   } catch (e) { /* offline */ }
 }
 
 export function decline(pid) {
-  if (!code || answered.has(pid)) return;
-  answered.add(pid);
-  knocks = knocks.filter(k => k.pid !== pid); emit();
-  fb.D.update(ref(`${code}/meta`), { [`no/${pid}`]: true }).catch(() => {});
+  const k = knocks.find(x => x.pid === pid);
+  if (!k || answered.has(k.room + pid)) return;
+  answered.add(k.room + pid);
+  knocks = knocks.filter(x => x.pid !== pid); emit();
+  fb.D.update(ref(`${k.room}/meta`), { [`no/${pid}`]: true }).catch(() => {});
 }
 
 // ------------------------------------------------------------ asking a friend (their code)
@@ -236,7 +355,7 @@ function stopAsking(keepStatus) {
   }
   if (!keepStatus) outgoing = null;
 }
-export function cancelAsk() { stopAsking(); emit(); }
+export function cancelAsk() { wantCam = false; stopAsking(); emit(); }
 
 export async function askFriend(theirCode) {
   stopAsking();
@@ -254,18 +373,24 @@ export async function askFriend(theirCode) {
     if (!room || !room.host) { set('none'); return; }
     if (room.host === uid) { set('self'); return; }
     set('asking', { name: cleanName(room.meta && room.meta.name) });
+    if (room.meta && room.meta.on === false && theirCode[0] === 'h') { stopAsking(true); outgoing = { ...outgoing, status: 'away' }; emit(); return; }
     const pid = `${uid}_k`;
     const kr = ref(`${theirCode}/players/${pid}`);
     D.onDisconnect(kr).remove();
-    await D.set(kr, { name });
+    await D.set(kr, plain({ name, face: myFace(), group: group && group.peers.size ? group.id : undefined }));
     if (token !== outToken) return;
-    const finish = status => { stopAsking(true); set(status); };
+    const finish = status => { if (token !== outToken) return; wantCam = false; stopAsking(true); outgoing = { ...outgoing, status }; emit(); };
     outTimer = setTimeout(() => finish('none'), KNOCK_WAIT_MS);
     outUnsub = D.onValue(ref(`${theirCode}/meta`), s => {
       const m = s.val();
       if (!m) return finish('none');  // they left / got a new code
+      if (m.on === false) return finish('away'); // closed the app
       if (m.ok && m.ok[pid]) {
         const id = m.ok[pid];
+        if (id === 'f') { // friends now (no call)
+          saveFriend(room.host, cleanName(m.name) || '?', cleanFace(m.face));
+          finish('added'); return;
+        }
         stopAsking(); emit();
         joinGroup(id).catch(() => {});
       } else if (m.full && m.full[pid]) finish('full');
@@ -294,7 +419,7 @@ async function joinGroup(id) {
     if (group !== g) return;
     D.onDisconnect(meR).remove();
     D.onDisconnect(liveR).remove();
-    D.set(meR, { name: myName(), face: myFace(), sid }).catch(() => {});
+    D.set(meR, { name: myName(), face: myFace(), sid, game: where, cam: !!cam }).catch(() => {});
   };
   g.writeMe = writeMe;
   await D.remove(liveR).catch(() => {}); // old messages from before a reload
@@ -303,7 +428,7 @@ async function joinGroup(id) {
   keep();
   g.timer = setInterval(keep, 20000);
   emit();
-  startMic();
+  startMic().then(() => { if (wantCam && group === g) { wantCam = false; startCam(); } });
 
   let first = true, online = true;
   g.unsubs.push(D.onValue(D.ref(fb.db, '.info/connected'), s => {
@@ -327,8 +452,14 @@ async function joinGroup(id) {
       if (!p) { p = makePeer(g, u, m.sid); g.peers.set(u, p); }
       p.name = cleanName(m.name) || '?';
       p.face = cleanFace(m.face);
+      p.game = typeof m.game === 'string' ? m.game.slice(0, 30) : '';
+      p.cam = m.cam === true;
+      if (p.name !== '?') saveFriend(u, p.name, p.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
+    // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
+    if (!g.peers.size && !g.aloneTimer) g.aloneTimer = setTimeout(() => { if (group === g && !g.peers.size) leaveGroup(); }, ALONE_MS);
+    if (g.peers.size && g.aloneTimer) { clearTimeout(g.aloneTimer); g.aloneTimer = null; }
     readSignals(g);
     emit();
   }));
@@ -345,8 +476,10 @@ export async function leaveGroup() {
   group = null;
   forget();
   clearInterval(g.timer);
+  clearTimeout(g.aloneTimer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
+  stopCam();
   stopMic();
   emit();
   const { D, uid } = fb;
@@ -375,7 +508,7 @@ function readSignals(g) {
 function makePeer(g, theirUid, theirSid) {
   const { D } = fb;
   const polite = fb.uid > theirUid;
-  const pc = new RTCPeerConnection({ iceServers: ICE });
+  const pc = new RTCPeerConnection(iceConfig());
   const out = ref(`${g.id}/live/${fb.uid}_m/${theirUid}`);
   let n = 0, makingOffer = false, ignoreOffer = false, closed = false, chain = Promise.resolve();
   const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set() };
@@ -394,6 +527,21 @@ function makePeer(g, theirUid, theirSid) {
     } catch (e) { /* try again on next change */ } finally { makingOffer = false; }
   };
   pc.onicecandidate = e => { if (e.candidate) send({ c: e.candidate.toJSON() }); };
+  // Not linked yet: try again every 15 s (new network paths, e.g. once the mic is allowed).
+  peer.retry = () => { if (!closed && pc.signalingState !== 'closed') { try { pc.restartIce(); } catch (e) { /* */ } } };
+  // Normal mode already tries direct first, then the relay. Still stuck after ~30 s? Force the
+  // relay for this friend (and flip back if that doesn't work either), so nobody needs the 🔧 switch.
+  let stuck = 0;
+  peer.relayOnly = false;
+  const watchdog = setInterval(() => {
+    if (closed) { clearInterval(watchdog); return; }
+    if (peer.status === 'on') { stuck = 0; return; }
+    if (++stuck % 2 === 0 && !voiceOpts().relay) {
+      peer.relayOnly = !peer.relayOnly;
+      try { pc.setConfiguration({ ...iceConfig(), iceTransportPolicy: peer.relayOnly ? 'relay' : 'all' }); } catch (e) { /* */ }
+    }
+    peer.retry();
+  }, 15000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
@@ -403,8 +551,13 @@ function makePeer(g, theirUid, theirSid) {
   pc.ontrack = e => {
     // A bit more buffer: smooths bumpy wifi instead of speeding voices up to catch up.
     try { if ('jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 250; else if ('playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0.25; } catch (er) { /* */ }
-    peer.stream = e.streams[0] || peer.stream || new MediaStream();
-    if (!e.streams[0]) peer.stream.addTrack(e.track);
+    // One stream per friend holding their voice and (if on) camera, whichever arrives first.
+    if (!peer.stream) peer.stream = new MediaStream();
+    if (!peer.stream.getTracks().includes(e.track)) {
+      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => peer.stream.removeTrack(t));
+      peer.stream.addTrack(e.track);
+    }
+    e.track.onunmute = e.track.onmute = () => emit();
     emit();
   };
 
@@ -417,6 +570,7 @@ function makePeer(g, theirUid, theirSid) {
   dc.onclose = () => setStatus('connecting');
   peer.dc = dc;
   addMic(peer);
+  addCam(peer);
 
   async function handle(msg) {
     if (closed || !msg) return;
@@ -438,10 +592,192 @@ function makePeer(g, theirUid, theirSid) {
   peer.close = () => {
     if (closed) return;
     closed = true;
+    clearInterval(watchdog);
     try { pc.close(); } catch (e) { /* already */ }
     D.remove(out).catch(() => {});
   };
   return peer;
+}
+
+// ------------------------------------------------------------ invites ("come and play my game")
+
+// Tell every friend who's on: come and join my room in this game (on my home, they all watch it).
+let myInvite = null;
+export function sendInvite(game, roomCode) {
+  myInvite = { game, code: roomCode, at: fb ? fb.now() : Date.now() };
+  if (home && fb) fb.D.update(ref(`${home.id}/meta`), { invite: myInvite }).catch(() => {});
+  return true;
+}
+export function clearInvite() {
+  myInvite = null;
+  if (home && fb) fb.D.update(ref(`${home.id}/meta`), { invite: null }).catch(() => {});
+}
+function liveInvites() {
+  if (!fb) return [];
+  const out = [];
+  for (const c of contacts) {
+    const pr = presence.get(c.uid);
+    const v = pr && pr.on && pr.invite;
+    if (v && v.game && v.code && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
+  }
+  return out.sort((x, y) => y.at - x.at);
+}
+export function dismissInvite(inv) { dismissed.add(inv.uid + ':' + inv.code); emit(); }
+// "No thanks": the friend who asked sees it (together.js lobby strip).
+export function declineInvite(inv) {
+  dismissInvite(inv);
+  if (!fb) return;
+  const r = ref(`${homeId(inv.uid)}/players/${fb.uid}_r`);
+  fb.D.onDisconnect(r).remove();
+  fb.D.set(r, { code: inv.code, at: fb.now() }).catch(() => {});
+}
+// ------------------------------------------------------------ quick messages
+// Sent to the friend's home room, shown as a speech bubble, then deleted (never kept).
+export const MSG_MAX = 80;
+const msgSubs = new Set();
+export function onMessage(cb) { msgSubs.add(cb); return () => msgSubs.delete(cb); }
+export function sendMessage(uid, text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+  if (!text || !fb) return false;
+  const r = ref(`${homeId(uid)}/players/${fb.uid}_t`);
+  fb.D.onDisconnect(r).remove();
+  fb.D.set(r, { text, at: fb.now() }).catch(() => {});
+  return true;
+}
+function readMessages(id, v) {
+  for (const [pid, m] of Object.entries(v)) {
+    if (!pid.endsWith('_t') || !m) continue;
+    fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {});
+    const uid = pid.slice(0, -2), c = contacts.find(x => x.uid === uid);
+    const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+    if (!c || !text || fb.now() - (m.at || 0) > 120000) continue; // friends only, nothing old
+    msgSubs.forEach(cb => cb({ uid, name: c.name, face: c.face, text }));
+  }
+}
+
+// Friends who are on now: { uid, name, face, game, inCall, status, stream }
+function buddies() {
+  const out = [];
+  for (const c of contacts) {
+    const pr = presence.get(c.uid) || {};
+    const p = group && group.peers.get(c.uid);
+    if (!pr.on && !p) continue;
+    out.push({ uid: c.uid, name: p ? p.name : c.name, face: p ? (p.face || '') : c.face, game: p ? (p.game || '') : (pr.game || ''),
+      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam),
+      calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking') });
+  }
+  if (group) for (const p of group.peers.values()) if (!out.some(o => o.uid === p.uid)) {
+    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, calling: false });
+  }
+  return out;
+}
+// The room I'm playing in (so its invite doesn't pop up), or null.
+export function setPlaying(game, roomCode) { playing = game && roomCode ? { game, code: roomCode } : null; emit(); }
+export const myUid = () => (fb ? fb.uid : null);
+export const ensureCore = () => core();
+
+// ------------------------------------------------------------ saved friends + my home
+
+function loadFriends() {
+  try { const a = JSON.parse(localStorage.getItem(FRIENDS_KEY) || '[]'); return Array.isArray(a) ? a.filter(f => f && typeof f.uid === 'string' && /^[\w-]{6,64}$/.test(f.uid)).slice(0, 30) : []; } catch (e) { return []; }
+}
+function storeFriends() { try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(contacts)); } catch (e) { /* private mode */ } }
+function saveFriend(uid, name, face) {
+  const old = contacts.find(c => c.uid === uid);
+  if (old && old.name === name && old.face === face) return;
+  // Same person on a new device id (cleared browser): keep just the newest.
+  contacts = contacts.filter(c => c.uid !== uid && !(c.name === name && c.face === face && face));
+  contacts.unshift({ uid, name, face: face || '', at: Date.now() });
+  storeFriends();
+  watchPresence();
+}
+export function removeFriend(uid) {
+  contacts = contacts.filter(c => c.uid !== uid);
+  storeFriends(); watchPresence(); emit();
+}
+const homeId = uid => 'h' + uid;
+
+// Who's on, and what they're playing (read from each saved friend's home).
+function watchPresence() {
+  if (!fb) return;
+  const want = new Set(contacts.map(c => c.uid));
+  for (const [u, off] of presenceUnsubs) if (!want.has(u)) { off(); presenceUnsubs.delete(u); presence.delete(u); }
+  for (const u of want) {
+    if (presenceUnsubs.has(u)) continue;
+    presenceUnsubs.set(u, fb.D.onValue(ref(`${homeId(u)}/meta`), s => {
+      const m = s.val() || {};
+      presence.set(u, { on: m.on === true, game: typeof m.game === 'string' ? m.game.slice(0, 30) : '', invite: m.invite && typeof m.invite === 'object' ? m.invite : null });
+      const c = contacts.find(x => x.uid === u);
+      if (c && m.name && (cleanName(m.name) !== c.name || cleanFace(m.face) !== c.face)) { // they changed name/picture
+        c.name = cleanName(m.name) || c.name; c.face = cleanFace(m.face); storeFriends();
+      }
+      emit();
+    }, () => {}));
+  }
+}
+
+async function openHome() {
+  if (home || !myName()) return;
+  await core();
+  const { D, uid } = fb;
+  const id = homeId(uid);
+  home = { id, unsubs: [] };
+  const meta = () => ({ name: myName(), face: myFace(), on: true, game: where, at: D.serverTimestamp(), invite: myInvite });
+  const put = async () => {
+    D.onDisconnect(ref(`${id}/meta/on`)).set(false);
+    D.onDisconnect(ref(`${id}/players`)).remove();
+    const h = await D.get(ref(`${id}/host`));
+    if (h.exists()) await D.update(ref(`${id}/meta`), meta());
+    else await D.set(ref(id), { host: uid, created: D.serverTimestamp(), meta: meta() });
+  };
+  home.put = put;
+  await put().catch(() => {});
+  let first = true;
+  home.unsubs.push(D.onValue(D.ref(fb.db, '.info/connected'), s => {
+    if (!s.val()) return;
+    if (first) { first = false; return; }
+    put().catch(() => {});
+  }));
+  home.unsubs.push(D.onValue(ref(`${id}/players`), s => {
+    const v = s.val() || {};
+    for (const a of answered) if (a.startsWith(id) && !v[a.slice(id.length)]) {
+      const pid = a.slice(id.length);
+      answered.delete(a);
+      D.update(ref(`${id}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
+    }
+    declines = Object.entries(v)
+      .filter(([pid, r]) => pid.endsWith('_r') && r && r.code)
+      .map(([pid, r]) => ({ uid: pid.slice(0, -2), code: String(r.code) }));
+    readMessages(id, v);
+    homeKnocks = Object.entries(v)
+      .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
+      .map(([pid, k]) => ({ pid, room: id, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group), saved: true }));
+    mergeKnocks();
+  }));
+  // Self-repair: an old tab's late "gone" (onDisconnect) can mark me offline while I'm here.
+  let leaving = false;
+  home.unsubs.push(D.onValue(ref(`${id}/meta/on`), s => {
+    if (s.val() !== true && !leaving) setTimeout(() => { if (!leaving) put().catch(() => {}); }, 1500);
+  }));
+  watchPresence();
+  window.addEventListener('pagehide', () => { leaving = true; D.update(ref(`${id}/meta`), { on: false }).catch(() => {}); });
+  window.addEventListener('pageshow', () => { if (leaving) { leaving = false; put().catch(() => {}); } });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') put().catch(() => {}); });
+}
+
+// Call a saved friend (they get the "is calling" pop-up wherever they are).
+export function callFriend(uid, video) {
+  if (video && group && group.peers.size) startCam();
+  const p = askFriend(homeId(uid));
+  wantCam = !!video;
+  return p;
+}
+
+// What I'm playing ('' = menu): friends see it on my bubble and in their list.
+export function setWhere(gameId) {
+  where = gameId || '';
+  if (group && group.writeMe) group.writeMe();
+  if (home && fb) fb.D.update(ref(`${home.id}/meta`), { game: where }).catch(() => {});
 }
 
 // ------------------------------------------------------------ start + name
@@ -455,13 +791,15 @@ export function startFriends() {
   try { saved = JSON.parse(localStorage.getItem(KEEP_KEY) || 'null'); } catch (e) { /* private mode */ }
   if (saved && saved.id && Date.now() - saved.at < REJOIN_MS && myName()) joinGroup(saved.id).catch(() => {});
   else forget();
+  openHome().catch(() => {});
 }
 
 // Call after the name box changes.
 export function nameChanged() {
   const name = myName();
   if (!name) { stopAsking(); dropCode(); codeStatus = 'noname'; emit(); return; }
-  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); return; }
-  if (code && fb) fb.D.update(ref(`${code}/meta`), { name }).catch(() => {});
+  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); openHome().catch(() => {}); return; }
+  if (code && fb) fb.D.update(ref(`${code}/meta`), { name, face: myFace() }).catch(() => {});
   if (group && group.writeMe) group.writeMe();
+  if (home && home.put) home.put().catch(() => {}); else openHome().catch(() => {});
 }

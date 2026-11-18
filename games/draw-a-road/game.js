@@ -67,21 +67,22 @@ export function mount(stage) {
   function showMenu() {
     mode = 'menu';
     ui.innerHTML = `
-      <div class="dar-menu">
-        <h2>🛻 Monster Doodle</h2>
-        <p>Draw a road so the monster truck gets to the flag 🏁</p>
-        <div class="dar-levels">
+      <div class="dar-menu ui-overlay"><div class="ui-panel wide">
+        <h2 class="ui-title">Monster Doodle</h2>
+        <p class="ui-sub">Draw a road so the monster truck gets to the flag.</p>
+        <div class="ui-label">Levels</div>
+        <div class="dar-levels ui-choices tight">
           ${LEVELS.map((lv, i) => {
             const open = unlocked(i);
             const st = stars[i] || 0;
-            return `<button class="dar-lv ${open ? '' : 'locked'}" data-i="${i}" ${open ? '' : 'disabled'}>
+            return `<button class="dar-lv ui-choice ${open ? '' : 'locked'}" data-i="${i}" ${open ? '' : 'disabled'}>
               <span class="num">${open ? i + 1 : '🔒'}</span>
               <span class="nm">${lv.name}</span>
               <span class="st">${[1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">${icon('star')}</b>`).join('')}</span>
             </button>`;
           }).join('')}
         </div>
-      </div>`;
+      </div></div>`;
     ui.querySelectorAll('.dar-lv').forEach(b => b.addEventListener('click', () => {
       sound.pop();
       startLevel(+b.dataset.i);
@@ -108,10 +109,10 @@ export function mount(stage) {
           <div class="stars"></div>
         </div>
         <div class="dar-btns">
-          <button class="dar-btn levels" aria-label="Levels">${icon('menu')}</button>
-          <button class="dar-btn undo" aria-label="Undo">${icon('undo')}</button>
-          <button class="dar-btn clear" aria-label="Rub out">${icon('eraser')}</button>
-          <button class="dar-btn go" aria-label="Go">${icon('play')}</button>
+          <button class="ui-hud-btn dar-btn levels" aria-label="Levels">${icon('menu')}</button>
+          <button class="ui-hud-btn dar-btn undo" aria-label="Undo">${icon('undo')}</button>
+          <button class="ui-hud-btn dar-btn clear" aria-label="Rub out">${icon('eraser')}</button>
+          <button class="ui-btn go dar-go go-btn" aria-label="Go">${icon('play')}</button>
         </div>
       </div>
       <div class="dar-toast"></div>`;
@@ -119,7 +120,7 @@ export function mount(stage) {
     q('.levels').onclick = () => { sound.pop(); showMenu(); };
     q('.undo').onclick = () => { sound.pop(); strokes.pop(); updateHud(); };
     q('.clear').onclick = () => { sound.pop(); strokes = []; updateHud(); };
-    q('.go').onclick = () => { sound.pop(); mode === 'drive' ? enterDraw() : go(); };
+    q('.go-btn').onclick = () => { sound.pop(); mode === 'drive' ? enterDraw() : go(); };
     updateHud();
   }
 
@@ -132,8 +133,9 @@ export function mount(stage) {
     const st = starsFor(inkUsed());
     ui.querySelector('.dar-ink .stars').innerHTML = [1, 2, 3].map(n => `<b class="${n <= st ? 'on' : ''}">${icon('star')}</b>`).join('');
     const drive = mode === 'drive';
-    ui.querySelector('.go').innerHTML = icon(drive ? 'stop' : 'play');
-    ui.querySelector('.go').classList.toggle('stop', drive);
+    const gb = ui.querySelector('.go-btn');
+    gb.innerHTML = `${icon(drive ? 'stop' : 'play')} ${drive ? 'Stop' : 'Go'}`;
+    gb.classList.toggle('go', !drive); gb.classList.toggle('danger', drive);
     ui.querySelector('.undo').disabled = drive || !strokes.length;
     ui.querySelector('.clear').disabled = drive || !strokes.length;
   }
@@ -162,16 +164,19 @@ export function mount(stage) {
     if (!(stars[levelIdx] >= got)) { stars[levelIdx] = got; saveStars(stars); }
     const last = levelIdx >= LEVELS.length - 1;
     const pop = document.createElement('div');
-    pop.className = 'dar-pop';
+    pop.className = 'dar-pop ui-overlay';
     pop.innerHTML = `
-      <div class="card">
-        <h3>${got === 3 ? 'Amazing!' : got === 2 ? 'Great job!' : 'You did it!'}</h3>
+      <div class="card ui-panel">
+        <div class="ui-kicker">Level ${levelIdx + 1} · ${level.name}</div>
+        <h3 class="ui-title">${got === 3 ? 'Amazing!' : got === 2 ? 'Great job!' : 'You did it!'}</h3>
         <div class="big-stars">${[1, 2, 3].map(n => `<b class="${n <= got ? 'on' : ''}" style="animation-delay:${n * 0.25}s">${icon('star')}</b>`).join('')}</div>
-        <p>${got < 3 ? 'Use less crayon for more stars ✏️' : 'All the stars! ⭐'}</p>
-        <div class="row">
-          <button class="dar-btn again" aria-label="Again">${icon('retry')}</button>
-          <button class="dar-btn levels" aria-label="Levels">${icon('menu')}</button>
-          ${last ? '' : `<button class="dar-btn next" aria-label="Next">${icon('next')}</button>`}
+        <p class="ui-sub">${got < 3 ? 'Use less crayon for more stars.' : 'All the stars!'}</p>
+        <div class="ui-row dar-foot">
+          <button class="ui-btn ghost levels">${icon('menu')} Levels</button>
+          <span class="ui-row">
+            <button class="ui-btn again">${icon('retry')} Again</button>
+            ${last ? '' : `<button class="ui-btn primary next">${icon('next')} Next</button>`}
+          </span>
         </div>
       </div>`;
     ui.appendChild(pop);
@@ -189,7 +194,7 @@ export function mount(stage) {
   }
   function onDown(e) {
     if (mode !== 'draw' || inkLeft() < 0.3) {
-      if (mode === 'draw') toast('Out of crayon! Tap 🧽 or ↶');
+      if (mode === 'draw') toast('Out of crayon! Rub out or undo');
       return;
     }
     canvas.setPointerCapture?.(e.pointerId);

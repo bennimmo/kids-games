@@ -7,7 +7,7 @@ const CACHE_HOSTS = [location.origin, 'https://fonts.googleapis.com', 'https://f
 
 self.addEventListener('install', e => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html', './css/style.css', './js/main.js', './js/games.js'])).catch(() => {}));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html', './css/style.css', './css/ui.css', './js/main.js', './js/games.js'])).catch(() => {}));
 });
 
 self.addEventListener('activate', e => {

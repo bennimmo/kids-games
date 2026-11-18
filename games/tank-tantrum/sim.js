@@ -4,7 +4,10 @@
 // and no Math.sin/cos/atan2/pow in here (those can differ between browsers).
 import { WEAPONS, WEAPON } from './weapons.js';
 
-export const W = 2000, H = 1000, CELL = 2, COLS = W / CELL, ROWS = H / CELL;
+export const W = 2000, H = 1000, CELL = 2, COLS = W / CELL, ROWS = H / CELL;   // W, COLS = the smallest map
+export const MAX_W = 3400;
+// Map width for a number of tanks (a multiple of 200).
+export const mapWidth = n => (n <= 3 ? 2000 : n === 4 ? 2600 : n === 5 ? 3000 : MAX_W);
 export const WATER_Y = 940;
 export const DT = 1 / 60;
 export const MAX_SPEED = 800;
@@ -32,11 +35,13 @@ export class World {
   // opts: { seed, map, tanks: [ { name, color, hat, flag } ] }
   constructor(opts) {
     this.seed = (opts.seed >>> 0) || 1;
+    this.W = mapWidth(opts.tanks.length);   // more tanks = wider map
+    this.cols = this.W / CELL;
     this.artSeed = this.seed;   // for the pictures in the ground (looks only)
     this.map = MAPS[opts.map] ? opts.map : 'grass';
     this.windOn = !!opts.wind;   // off unless asked for
     this.g = MAPS[this.map].g;
-    this.mask = new Uint8Array(COLS * ROWS);
+    this.mask = new Uint8Array(this.cols * ROWS);
     this.projectiles = [];
     this.boots = [];
     this.crates = [];
@@ -69,29 +74,29 @@ export class World {
   makeTerrain() {
     const waterRow = WATER_Y / CELL;
     const step = 100, pts = [];
-    for (let i = 0; i <= COLS / step; i++) {
+    for (let i = 0; i <= this.cols / step; i++) {
       let h = ROWS * 0.42 + this.rand() * ROWS * 0.34;
-      if (i > 1 && i < COLS / step - 1 && this.rand() < 0.15) h = waterRow + 20;   // a lake
-      if (i === 0 || i === COLS / step) h = waterRow + 30;                          // cliffs at the ends
+      if (i > 1 && i < this.cols / step - 1 && this.rand() < 0.15) h = waterRow + 20;   // a lake
+      if (i === 0 || i === this.cols / step) h = waterRow + 30;                          // cliffs at the ends
       pts.push(h);
     }
     const bumps = [];
-    for (let i = 0; i <= COLS / 20; i++) bumps.push((this.rand() - 0.5) * 16);
-    const heights = new Float64Array(COLS);
-    for (let c = 0; c < COLS; c++) {
+    for (let i = 0; i <= this.cols / 20; i++) bumps.push((this.rand() - 0.5) * 16);
+    const heights = new Float64Array(this.cols);
+    for (let c = 0; c < this.cols; c++) {
       const i = Math.floor(c / step), f = (c % step) / step;
       const s = f * f * (3 - 2 * f);
       const j = Math.floor(c / 20), g = (c % 20) / 20;
       const b = bumps[j] + (bumps[j + 1] - bumps[j]) * g;
       heights[c] = pts[i] + (pts[i + 1] - pts[i]) * s + b;
     }
-    for (let c = 0; c < COLS; c++) {
+    for (let c = 0; c < this.cols; c++) {
       const top = Math.floor(heights[c]);
-      for (let r = Math.max(0, top); r < ROWS; r++) this.mask[r * COLS + c] = 1;
+      for (let r = Math.max(0, top); r < ROWS; r++) this.mask[r * this.cols + c] = 1;
     }
     const caves = 2 + Math.floor(this.rand() * 3);
     for (let k = 0; k < caves; k++) {
-      const c = 100 + Math.floor(this.rand() * (COLS - 200));
+      const c = 100 + Math.floor(this.rand() * (this.cols - 200));
       const r = Math.floor(heights[c]) + 25 + Math.floor(this.rand() * 40);
       if (r < waterRow - 15) this.carveCells(c, r, 12 + Math.floor(this.rand() * 14));
     }
@@ -99,18 +104,18 @@ export class World {
   }
 
   cellSolid(c, r) {
-    if (c < 0 || c >= COLS || r < 0) return false;
+    if (c < 0 || c >= this.cols || r < 0) return false;
     if (r >= ROWS) return true;
-    return this.mask[r * COLS + c] !== 0;
+    return this.mask[r * this.cols + c] !== 0;
   }
   solidAt(x, y) { return this.cellSolid(Math.floor(x / CELL), Math.floor(y / CELL)); }
 
   carveCells(cc, cr, rad) {
     const r2 = rad * rad;
     for (let r = Math.max(0, cr - rad); r <= Math.min(ROWS - 1, cr + rad); r++) {
-      for (let c = Math.max(0, cc - rad); c <= Math.min(COLS - 1, cc + rad); c++) {
+      for (let c = Math.max(0, cc - rad); c <= Math.min(this.cols - 1, cc + rad); c++) {
         const dx = c - cc, dy = r - cr;
-        if (dx * dx + dy * dy <= r2) this.mask[r * COLS + c] = 0;
+        if (dx * dx + dy * dy <= r2) this.mask[r * this.cols + c] = 0;
       }
     }
     this.dirty.push([cc - rad - 4, cr - rad - 4, cc + rad + 4, cr + rad + 4]);
@@ -120,7 +125,7 @@ export class World {
   // Top of the ground at x, near y (climb up to 8, step down up to 30). null = wall or cliff.
   groundAt(x, y, up = 8, down = 30) {
     const c = Math.floor(x / CELL);
-    if (c < 0 || c >= COLS) return null;
+    if (c < 0 || c >= this.cols) return null;
     const r0 = Math.floor((y - up) / CELL), r1 = Math.floor((y + down) / CELL);
     if (this.cellSolid(c, r0 - 1)) return null;
     for (let r = r0; r <= r1; r++) if (this.cellSolid(c, r)) return r * CELL;
@@ -135,12 +140,12 @@ export class World {
 
   // ---------------------------------------------------------------- tanks
   makeTank(look, i, n) {
-    const base = W * (i + 0.5) / n + (this.rand() - 0.5) * 120;
-    const gap = Math.min(260, W / n * 0.6);
-    const ok = (x, d) => x > 60 && x < W - 60 && this.skyGround(x) < WATER_Y - 40 && this.tanks.every(t => Math.abs(t.x - x) > d);
+    const base = this.W * (i + 0.5) / n + (this.rand() - 0.5) * 120;
+    const gap = Math.min(260, this.W / n * 0.6);
+    const ok = (x, d) => x > 60 && x < this.W - 60 && this.skyGround(x) < WATER_Y - 40 && this.tanks.every(t => Math.abs(t.x - x) > d);
     let x = base;
     search: for (const d of [gap, gap / 2, 60, 0]) {
-      for (let o = 0; o <= W; o += 20) {
+      for (let o = 0; o <= this.W; o += 20) {
         if (ok(base + o, d)) { x = base + o; break search; }
         if (ok(base - o, d)) { x = base - o; break search; }
       }
@@ -149,7 +154,7 @@ export class World {
     for (const w of WEAPONS) ammo[w.id] = w.ammo;
     return {
       i, look, x, y: this.skyGround(x), vx: 0, vy: 0, ground: true, fallTop: 0,
-      hp: 100, alive: true, face: x < W / 2 ? 1 : -1, aimX: x < W / 2 ? 1 : -1, aimY: -1,
+      hp: 100, alive: true, face: x < this.W / 2 ? 1 : -1, aimX: x < this.W / 2 ? 1 : -1, aimY: -1,
       fuel: MAX_FUEL, ammo, cloud: 0, shrink: 0,
     };
   }
@@ -163,7 +168,7 @@ export class World {
     t.face = dir;
     const dx = dir * DRIVE_SPEED * dt * (t.shrink > 0 ? 0.6 : 1);
     const nx = t.x + dx;
-    if (nx < 20 || nx > W - 20) return false;
+    if (nx < 20 || nx > this.W - 20) return false;
     const ny = this.groundAt(nx, t.y);
     if (ny === null || ny >= WATER_Y - 6) return false;
     t.x = nx; t.y = ny;
@@ -207,7 +212,7 @@ export class World {
       this.events.push({ type: 'rain', tank: t.i });
     }
     if (this.rand() < 0.4) {
-      const x = 100 + this.rand() * (W - 200);
+      const x = 100 + this.rand() * (this.W - 200);
       const gy = this.skyGround(x);
       const kind = this.rand() < 0.3 ? 'health' : 'weapon';
       const w = CRATE_WEAPONS[Math.floor(this.rand() * CRATE_WEAPONS.length)];
@@ -239,7 +244,7 @@ export class World {
     this.phase = 'fly';
     this.quiet = 0;
     if (!shot || shot.skip) { this.events.push({ type: 'skip', tank: t.i }); return; }
-    if (Number.isFinite(shot.x) && Number.isFinite(shot.y) && shot.x > 0 && shot.x < W && shot.y > 0 && shot.y < WATER_Y) {
+    if (Number.isFinite(shot.x) && Number.isFinite(shot.y) && shot.x > 0 && shot.x < this.W && shot.y > 0 && shot.y < WATER_Y) {
       t.x = shot.x; t.y = shot.y;
     }
     t.face = shot.f < 0 ? -1 : 1;
@@ -266,7 +271,7 @@ export class World {
     };
     if (id === 'boot') p.kind = 'flare';
     if (id === 'shrink') { p.grav = 0.5; }
-    if (id === 'yoyo') { p.grav = 0; p.windK = 0; p.v0x = vx * 0.7; p.v0y = vy * 0.7; p.vx = p.v0x; p.vy = p.v0y; }
+    if (id === 'yoyo') { p.grav = 0; p.windK = 0; p.v0x = vx; p.v0y = vy; }
     this.projectiles.push(p);
     this.events.push({ type: 'fire', tank: t.i, w: id, x: p.x, y: p.y });
   }
@@ -274,7 +279,7 @@ export class World {
   flush(t) {
     const from = { x: t.x, y: t.y };
     for (let tries = 0; tries < 40; tries++) {
-      const x = 80 + this.rand() * (W - 160);
+      const x = 80 + this.rand() * (this.W - 160);
       const y = this.skyGround(x);
       if (y >= WATER_Y - 30) continue;
       if (this.tanks.some(o => o !== t && o.alive && Math.abs(o.x - x) < 80)) continue;
@@ -315,10 +320,10 @@ export class World {
     const c0 = Math.floor((x - 14) / CELL), c1 = Math.floor((x + 14) / CELL);
     const r0 = Math.floor((y - 140) / CELL), r1 = Math.floor((y + 14) / CELL);
     for (let r = Math.max(0, r0); r <= Math.min(ROWS - 1, r1); r++) {
-      for (let c = Math.max(0, c0); c <= Math.min(COLS - 1, c1); c++) {
+      for (let c = Math.max(0, c0); c <= Math.min(this.cols - 1, c1); c++) {
         const cx = c * CELL, cy = r * CELL;
         if (this.tanks.some(t => t.alive && Math.abs(cx - t.x) < 26 && cy > t.y - 34 && cy < t.y + 2)) continue;
-        if (this.mask[r * COLS + c] === 0) this.mask[r * COLS + c] = 2;
+        if (this.mask[r * this.cols + c] === 0) this.mask[r * this.cols + c] = 2;
       }
     }
     this.dirty.push([c0 - 2, r0 - 2, c1 + 2, r1 + 2]);
@@ -343,7 +348,9 @@ export class World {
       case 'mini': this.explode(x, y, 24, 16, { mul: m }); return true;
       case 'spark': this.explode(x, y, 18, 9, { mul: m, kind: 'pop' }); return true;
       case 'sock': this.explode(x, y, 36, 38, { mul: m }); return true;
-      case 'yoyo': this.explode(x, y, 36, 40, { mul: m }); return true;
+      case 'yoyo':
+        if (p.state === 'fly') { p.x = x; p.y = y; this.yoyoBoom(p); return false; }
+        this.explode(x, y, 36, 30, { mul: m }); return true;
       case 'chicken':
         if (tank || p.bounces >= 4) { this.explode(x, y, 36, 38, { mul: m }); return true; }
         this.bounce(p, x, y, px, py);
@@ -389,6 +396,14 @@ export class World {
       case 'firework': this.burst(p, px, py); return true;
     }
     return true;
+  }
+
+  yoyoBoom(p) {
+    this.explode(p.x, p.y, 42, 42, { mul: p.mul });
+    const o = this.tanks[p.owner];
+    p.state = 'back'; p.backAt = p.age; p.vx = 0; p.vy = 0;
+    p.half = len(o.x - p.x, o.y - MID - p.y) / 2;
+    if (p.half < 40) this.remove(p);   // too close to home for a second boom
   }
 
   burst(p, x, y) {
@@ -471,21 +486,20 @@ export class World {
         if (p.age > 7) { this.remove(p); this.explode(p.x, p.y, 36, 38, { mul: p.mul }); continue; }
       }
       if (p.kind === 'firework' && p.age > 0.25 && p.vy > 0) { this.remove(p); this.burst(p, p.x, p.y); continue; }
+      // Yo-yo: drills out through the ground, BOOM at the end of its string,
+      // then zooms back and goes BOOM again half way home.
       if (p.kind === 'yoyo') {
+        const o = this.tanks[p.owner];
+        if (p.ticks === undefined) p.ticks = 0;
+        if (p.ticks++ % 3 === 0 && len(p.x - o.x, p.y - o.y + MID) > 45) this.carve(p.x, p.y, 9);
         if (p.state === 'fly') {
-          p.vx -= p.v0x * DT / 0.9; p.vy -= p.v0y * DT / 0.9;
-          if (p.age >= 0.9) p.state = 'back';
+          p.vx -= p.v0x * DT / 1.2; p.vy -= p.v0y * DT / 1.2;
+          if (p.age >= 1.2) { this.yoyoBoom(p); if (!this.projectiles.includes(p)) continue; }
         } else {
-          const o = this.tanks[p.owner];
           const dx = o.x - p.x, dy = o.y - MID - p.y, l = len(dx, dy) || 1;
-          const sp = Math.min(650, 200 + (p.age - 0.9) * 500);
+          const sp = Math.min(700, 250 + (p.age - p.backAt) * 600);
           p.vx = dx / l * sp; p.vy = dy / l * sp;
-          if (l < 22 || !o.alive || p.age > 5) {
-            this.remove(p);
-            if (o.alive && l < 22) this.events.push({ type: 'catch', x: p.x, y: p.y });
-            else this.explode(p.x, p.y, 36, 40, { mul: p.mul });
-            continue;
-          }
+          if (l <= p.half || !o.alive || p.age > 6) { this.remove(p); this.explode(p.x, p.y, 36, 30, { mul: p.mul }); continue; }
         }
       }
       if (p.kind === 'mole' && p.state !== 'fly') {
@@ -507,7 +521,7 @@ export class World {
       for (let s = 0; s < n; s++) {
         const px = p.x, py = p.y;
         const nx = px + p.vx * DT / n, ny = py + p.vy * DT / n;
-        if (ny > WATER_Y || nx < -600 || nx > W + 600) {
+        if (ny > WATER_Y || nx < -600 || nx > this.W + 600) {
           this.remove(p);
           if (ny > WATER_Y) this.events.push({ type: 'splash', x: nx, y: WATER_Y });
           break;
@@ -555,7 +569,7 @@ export class World {
     const c0 = Math.floor((b.x - 36) / CELL), c1 = Math.floor((b.x + 36) / CELL);
     const r0 = Math.floor((b.y - 10) / CELL), r1 = Math.floor((b.y + 34) / CELL);
     for (let r = Math.max(0, r0); r <= Math.min(ROWS - 1, r1); r++) {
-      for (let c = Math.max(0, c0); c <= Math.min(COLS - 1, c1); c++) this.mask[r * COLS + c] = 0;
+      for (let c = Math.max(0, c0); c <= Math.min(this.cols - 1, c1); c++) this.mask[r * this.cols + c] = 0;
     }
     this.dirty.push([c0 - 2, r0 - 2, c1 + 2, r1 + 2]);
     for (const t of this.tanks) {

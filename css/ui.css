@@ -1,0 +1,324 @@
+/* ==========================================================================
+   Shared UI: the one look for menus in the app and in EVERY game.
+   Dark glass panels over the game, Nunito, one accent colour per game.
+
+   Building blocks (use these in games instead of making your own):
+     .ui-overlay          full-screen dimmed backdrop, centres its child
+     .ui-panel            the glass card (menus, setup, lobby, pause, results)
+       .ui-kicker         small label above the title (e.g. game name)
+       .ui-title          big title       .ui-sub   dim line under it
+       .ui-label          section label (small caps)
+       .ui-row            a row of buttons/things (wraps, centred)
+     .ui-btn              button   + .primary (accent)  .go (green)  .danger (red)
+                                    .ghost (no fill)    .big  .small  .round (icon only)
+     .ui-choices > .ui-choice      option cards (icon + label), .on = picked
+     .ui-seg > button              segmented control, .on = picked
+     .ui-chip             little pill (counts, info)
+   --accent: the game's colour (set on .game from js/games.js). Text on it is dark.
+   ========================================================================== */
+
+:root {
+  --font: "Nunito", system-ui, sans-serif;
+  --accent: #7c9cff;
+  --ui-bg: #12142b;
+  --ui-glass: rgba(20, 22, 44, .78);
+  --ui-glass-strong: rgba(16, 18, 38, .92);
+  --ui-card: rgba(255, 255, 255, .07);
+  --ui-card-hover: rgba(255, 255, 255, .12);
+  --ui-line: rgba(255, 255, 255, .12);
+  --ui-text: #f5f6ff;
+  --ui-dim: rgba(235, 238, 255, .62);
+  --ui-ink: #15172e;            /* text on light / accent surfaces */
+  --ui-go: #22c55e;
+  --ui-danger: #ef4444;
+  --ui-radius: 24px;
+  --ui-radius-sm: 16px;
+  --ui-shadow: 0 30px 60px -24px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 255, 255, .06) inset;
+  --ui-blur: blur(18px) saturate(1.3);
+}
+
+body { font-family: var(--font); }
+button, input, select { font-family: inherit; }
+
+/* ---------- layout ---------- */
+.ui-overlay {
+  position: absolute; inset: 0; z-index: 20; padding: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 120% at 50% 30%, rgba(10, 12, 30, .35), rgba(6, 8, 22, .7));
+  overflow-y: auto;
+}
+.ui-panel {
+  position: relative; width: min(560px, 100%); max-height: 100%; overflow-y: auto;
+  padding: 26px 24px 24px; border-radius: 28px;
+  background: var(--ui-glass); color: var(--ui-text);
+  -webkit-backdrop-filter: var(--ui-blur); backdrop-filter: var(--ui-blur);
+  box-shadow: var(--ui-shadow);
+  display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center;
+  animation: ui-in .28s cubic-bezier(.2, .9, .3, 1.05) both;
+}
+.ui-panel.wide { width: min(820px, 100%); }
+.ui-panel.left { align-items: stretch; text-align: left; }
+@keyframes ui-in { from { transform: translateY(12px) scale(.98); opacity: 0; } }
+
+.ui-kicker { font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.ui-title { margin: 0; font-size: clamp(28px, 5vw, 42px); font-weight: 900; letter-spacing: -.01em; line-height: 1.05; color: var(--ui-text); }
+.ui-sub { margin: 0; font-size: 17px; font-weight: 600; color: var(--ui-dim); }
+.ui-label { width: 100%; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--ui-dim); text-align: left; }
+.ui-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
+.ui-row.end { justify-content: flex-end; }
+.ui-divider { width: 100%; height: 1px; background: var(--ui-line); }
+
+/* ---------- buttons ---------- */
+.ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5em;
+  height: 54px; padding: 0 22px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-sm);
+  background: var(--ui-card); color: var(--ui-text);
+  font-size: 19px; font-weight: 800; letter-spacing: .01em; white-space: nowrap; cursor: pointer;
+  transition: transform .1s, background .15s, box-shadow .15s;
+}
+.ui-btn .ic { font-size: 1.15em; stroke-width: 2.6; }
+.ui-btn:hover { background: var(--ui-card-hover); }
+.ui-btn:active { transform: scale(.96); }
+.ui-btn:disabled, .ui-btn.off { opacity: .4; pointer-events: none; }
+.ui-btn.primary {
+  border: 0; color: var(--ui-ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent), white 18%), var(--accent));
+  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--accent), black 30%), inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+.ui-btn.go { border: 0; color: #fff; background: linear-gradient(180deg, #34d673, #16a34a); box-shadow: 0 10px 24px -10px rgba(22, 163, 74, .8), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.ui-btn.danger { border: 0; color: #fff; background: linear-gradient(180deg, #f87171, #dc2626); box-shadow: 0 10px 24px -10px rgba(220, 38, 38, .8), inset 0 1px 0 rgba(255, 255, 255, .3); }
+.ui-btn.ghost { background: transparent; border-color: transparent; color: var(--ui-dim); }
+.ui-btn.ghost:hover { color: var(--ui-text); background: var(--ui-card); }
+.ui-btn.big { height: 66px; padding: 0 34px; font-size: 24px; border-radius: 20px; }
+.ui-btn.small { height: 42px; padding: 0 14px; font-size: 16px; border-radius: 12px; }
+.ui-btn.round { width: 54px; padding: 0; border-radius: 50%; }
+.ui-btn.round.small { width: 42px; }
+.ui-btn.round.big { width: 66px; }
+
+/* ---------- choices ---------- */
+.ui-choices { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.ui-choices.tight { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.ui-choice {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 120px; padding: 16px 12px; border: 1px solid var(--ui-line); border-radius: 20px;
+  background: var(--ui-card); color: var(--ui-text); cursor: pointer;
+  font-size: 18px; font-weight: 800; transition: transform .1s, background .15s, border-color .15s;
+}
+.ui-choices.tight .ui-choice { min-height: 86px; padding: 10px 8px; font-size: 15px; border-radius: 16px; }
+.ui-choice:hover { background: var(--ui-card-hover); }
+.ui-choice:active { transform: scale(.97); }
+.ui-choice .i { font-size: 46px; line-height: 1; }
+.ui-choices.tight .ui-choice .i { font-size: 34px; }
+.ui-choice small { font-size: 13px; font-weight: 700; color: var(--ui-dim); }
+.ui-choice.on { border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.ui-choice:disabled { opacity: .4; pointer-events: none; }
+
+.ui-seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: 14px; background: rgba(255, 255, 255, .07); border: 1px solid var(--ui-line); }
+.ui-seg > button {
+  height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: transparent; color: var(--ui-dim);
+  font-size: 16px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.ui-seg > button.on { background: #fff; color: var(--ui-ink); box-shadow: 0 4px 10px -4px rgba(0, 0, 0, .4); }
+
+.ui-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px;
+  background: var(--ui-card); border: 1px solid var(--ui-line); color: var(--ui-text); font-size: 15px; font-weight: 800;
+}
+
+/* ---------- in-game bars (HUD buttons over the game) ---------- */
+.ui-hud-btn {
+  width: 56px; height: 56px; padding: 0; border: 1px solid rgba(255, 255, 255, .18); border-radius: 18px;
+  display: grid; place-items: center; font-size: 26px; color: #fff; cursor: pointer;
+  background: rgba(16, 18, 38, .55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 8px 20px -8px rgba(0, 0, 0, .55);
+}
+.ui-hud-btn:active { transform: scale(.94); }
+.ui-hud-btn.on { background: var(--accent); color: var(--ui-ink); border-color: transparent; }
+
+/* ==========================================================================
+   App shell on the shared look
+   ========================================================================== */
+
+/* home button in every game: same place, same look */
+.home-btn {
+  top: 14px; left: 14px; width: 56px; height: 56px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 18px;
+  background: rgba(16, 18, 38, .6); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  font-size: 26px; box-shadow: 0 8px 20px -8px rgba(0, 0, 0, .6);
+}
+.home-btn .ic { stroke-width: 2.4; }
+
+/* ---------- home screen ---------- */
+body {
+  background:
+    radial-gradient(60% 50% at 15% 0%, rgba(124, 92, 255, .35), transparent 70%),
+    radial-gradient(50% 40% at 95% 10%, rgba(0, 180, 255, .25), transparent 70%),
+    radial-gradient(70% 60% at 50% 110%, rgba(255, 90, 160, .18), transparent 70%),
+    var(--ui-bg);
+  color: var(--ui-text);
+}
+.menu { padding: 0 20px 48px; }
+.menu-top {
+  position: sticky; top: 0; z-index: 4; width: 100%; max-width: 1040px;
+  display: flex; align-items: center; gap: 12px; padding: 16px 0 14px;
+}
+.menu-top h1 {
+  margin: 0 auto 0 0; font-size: clamp(26px, 4vw, 36px); font-weight: 900; letter-spacing: -.02em; color: var(--ui-text); text-shadow: none;
+  display: flex; align-items: center; gap: 12px;
+}
+.menu-top h1 .logo {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; color: #fff;
+  background: linear-gradient(135deg, #8b5cf6, #06b6d4); box-shadow: 0 8px 20px -8px rgba(139, 92, 246, .8);
+}
+.menu-top .top-left, .menu-top .app-btns { position: static; display: flex; gap: 10px; align-items: center; }
+.menu .age { max-width: 1040px; margin-bottom: 34px; }
+.age-title { margin: 6px 0 14px; display: block; font-size: 13px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--ui-dim); text-align: left; }
+.age-title::before, .age-title::after { display: none; }
+.age-title span { padding: 0; background: none; box-shadow: none; text-shadow: none; color: inherit; }
+.grid { justify-content: flex-start; gap: 18px; max-width: 1040px; }
+
+.tile {
+  width: 240px; min-height: 0; padding: 10px 10px 14px; border-radius: 26px; gap: 12px;
+  background: var(--ui-card); border: 1px solid var(--ui-line); color: var(--ui-text);
+  box-shadow: 0 20px 40px -24px rgba(0, 0, 0, .8);
+  justify-content: flex-start;
+  transition: transform .18s ease, background .18s, border-color .18s;
+}
+.tile:hover { transform: translateY(-4px); background: var(--ui-card-hover); border-color: rgba(255, 255, 255, .22); }
+.tile:active { transform: scale(.97); box-shadow: 0 10px 20px -14px rgba(0, 0, 0, .8); }
+.tile .icon {
+  width: 100%; height: 170px; border-radius: 18px; font-size: 90px;
+  background:
+    radial-gradient(90% 80% at 30% 15%, rgba(255, 255, 255, .45), transparent 60%),
+    linear-gradient(160deg, color-mix(in srgb, var(--c), white 10%), color-mix(in srgb, var(--c), black 22%));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), inset 0 -20px 40px -20px rgba(0, 0, 0, .25);
+}
+.tile .art { width: 132px; height: 132px; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .25)); }
+.tile:hover .art { transform: scale(1.06); }
+.tile .name { width: 100%; padding: 0 6px; font-size: 20px; font-weight: 800; text-align: left; }
+.version { color: var(--ui-dim); font-weight: 700; }
+
+/* top buttons (name, friends, full screen) */
+.name-btn, .app-btn, .fbar-btn {
+  background: var(--ui-card); color: var(--ui-text); border: 1px solid var(--ui-line);
+  box-shadow: none; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.name-btn { position: static; height: 52px; font-size: 19px; font-weight: 800; border-radius: 26px; padding: 0 18px 0 6px; max-width: 40vw; }
+.name-btn .name-ico { width: 40px; height: 40px; }
+.name-btn .name-ico.emo { background: rgba(255, 255, 255, .12); }
+.name-btn .name-pen { color: var(--ui-text); }
+.name-btn.empty { animation: none; border-color: var(--accent); }
+.app-btn { width: 52px; height: 52px; font-size: 24px; }
+.app-btn:hover, .name-btn:hover, .fbar-btn:hover { background: var(--ui-card-hover); }
+.fbar-btn { width: 52px; height: 52px; font-size: 24px; }
+.fbar-btn.live { background: linear-gradient(180deg, #34d673, #16a34a); border-color: transparent; }
+.fbar-count, .fbar-plus, .fbar-count.on { background: var(--accent); color: var(--ui-ink); box-shadow: none; }
+
+/* ---------- pop-ups (name, friends, invites, help) ---------- */
+.app-help { background: rgba(6, 8, 22, .6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.app-help-card {
+  background: var(--ui-glass-strong); color: var(--ui-text); border-radius: 28px;
+  box-shadow: var(--ui-shadow); -webkit-backdrop-filter: var(--ui-blur); backdrop-filter: var(--ui-blur);
+}
+.app-help-card .app-btn { background: var(--ui-card); color: var(--ui-text); border: 1px solid var(--ui-line); }
+.name-ok, .app-help-card .name-ok { background: linear-gradient(180deg, #34d673, #16a34a) !important; border-color: transparent !important; color: #fff !important; }
+.fk-no, .app-help-card .fk-no { background: linear-gradient(180deg, #f87171, #dc2626) !important; border-color: transparent !important; color: #fff !important; }
+.name-input { background: rgba(255, 255, 255, .08); border: 2px solid var(--ui-line); color: var(--ui-text); border-radius: 16px; }
+.name-input:focus { border-color: var(--accent); }
+.name-face, .name-face.emo { background: rgba(255, 255, 255, .1); }
+.face-grid button { background: rgba(255, 255, 255, .07); }
+.face-grid button.on { background: color-mix(in srgb, var(--accent) 30%, transparent); box-shadow: 0 0 0 2px var(--accent); }
+
+.fhead h2 { font-weight: 900; }
+.fsec { background: rgba(255, 255, 255, .05); border: 1px solid var(--ui-line); }
+.flabel { color: var(--ui-dim); opacity: 1; }
+.fempty { color: var(--ui-dim); opacity: 1; }
+.frow { background: rgba(255, 255, 255, .06); border: 1px solid var(--ui-line); }
+.frow.incall { background: rgba(34, 197, 94, .14); border-color: rgba(34, 197, 94, .4); }
+.frow-face i { border-color: #1e2140; }
+.frow-tag { color: #4ade80; }
+.frow-said { color: #fdba74; }
+.fadded { background: rgba(34, 197, 94, .16); color: #86efac; }
+.fslot { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .25); }
+.fpad button { background: rgba(255, 255, 255, .92); }
+.fsmall { background: var(--ui-card); color: var(--ui-text); border: 1px solid var(--ui-line); box-shadow: none; }
+.fmic { background: rgba(255, 255, 255, .08); color: var(--ui-text); border: 1px solid var(--ui-line); }
+.fi-says { color: var(--ui-dim); opacity: 1; }
+.fi-game { color: var(--ui-ink); }
+.fk-ring.face, .fi-face { background: rgba(255, 255, 255, .1); }
+.vt-sw { background: rgba(255, 255, 255, .06); color: var(--ui-text); }
+.vt-sw.on { background: rgba(34, 197, 94, .16); }
+.vt-info { background: rgba(255, 255, 255, .05); }
+
+/* ---------- play together on the shared look ---------- */
+button.tg-btn.tg-btn {
+  height: 56px; padding: 0 24px 0 18px; border: 0; border-radius: 18px; font-family: var(--font); font-weight: 800; font-size: 20px; text-shadow: none;
+  background: linear-gradient(180deg, #34d673, #16a34a); box-shadow: 0 10px 24px -10px rgba(22, 163, 74, .8), inset 0 1px 0 rgba(255, 255, 255, .35);
+}
+button.tg-btn.tg-btn.small { height: 46px; font-size: 17px; border-radius: 14px; }
+.tg-p {
+  background: rgba(255, 255, 255, .08); color: var(--ui-text); border: 1px solid var(--ui-line);
+  box-shadow: none; font-family: var(--font); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.tg-face { background: rgba(255, 255, 255, .12); }
+.tg-txt small { color: var(--ui-dim); opacity: 1; }
+.tg-p.ready { background: rgba(34, 197, 94, .18); border-color: rgba(34, 197, 94, .45); }
+.tg-p.ready small { color: #86efac; }
+.tg-p.ready .tg-face { background: rgba(34, 197, 94, .3); }
+.tg-p.said-no { background: rgba(239, 68, 68, .14); border-color: rgba(239, 68, 68, .35); }
+.tg-p.said-no small { color: #fca5a5; }
+.tg-p.me { box-shadow: 0 0 0 2px var(--accent); }
+.tg-wait { background: var(--ui-glass); color: var(--ui-text); border: 1px solid var(--ui-line); font-family: var(--font); -webkit-backdrop-filter: var(--ui-blur); backdrop-filter: var(--ui-blur); }
+button.tg-ready.tg-ready { font-family: var(--font); font-weight: 900; border-radius: 20px; text-shadow: none; }
+
+/* ---------- phones ---------- */
+@media (max-width: 560px) {
+  .menu { padding: 0 14px 40px; }
+  .menu-top { flex-wrap: wrap; }
+  .menu-top h1 { width: 100%; order: -1; }
+  .tile { width: calc(50% - 9px); padding: 8px 8px 12px; border-radius: 22px; }
+  .tile .icon { height: 120px; border-radius: 15px; }
+  .tile .art { width: 96px; height: 96px; }
+  .tile .name { font-size: 16px; }
+  .ui-panel { padding: 22px 16px 18px; border-radius: 24px; }
+}
+@media (max-width: 560px) { .menu { padding-top: 0; } }
+
+/* full-picture covers (js/game-covers.js) */
+.tile .icon.has-cover { background: #000; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+.tile .cover { width: 100%; height: 100%; display: block; transition: transform .35s ease; }
+.tile:hover .cover { transform: scale(1.05); }
+.tile img.cover { object-fit: cover; }
+
+/* name box: tell new players what to do */
+.name-ask { text-align: center; margin-bottom: 10px; }
+.name-ask h2 { margin: 0 0 4px; font-size: 24px; font-weight: 800; color: var(--ui-text, #fff); }
+.name-ask p { margin: 0; font-size: 16px; opacity: .8; color: var(--ui-text, #fff); }
+.name-input::placeholder { color: rgba(255, 255, 255, .45); }
+
+/* ---------- quick messages ---------- */
+.fb-chat { display: none; width: 40px; height: 40px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #8b5cf6; color: #fff; font-size: 20px; place-items: center; cursor: pointer; box-shadow: 0 3px 8px -2px rgba(0,0,0,.35); }
+.fb-side .fb-chat { display: grid; }
+.frow-btn.fchat { background: #8b5cf6; margin-right: 6px; }
+.fb-say {
+  position: absolute; top: 4px; right: calc(100% + 12px); z-index: 3; width: max-content; max-width: min(320px, 60vw);
+  padding: 10px 16px; border-radius: 20px 20px 6px 20px; background: #fff; color: #1b1530;
+  font-size: 18px; font-weight: 700; line-height: 1.3; text-align: left; overflow-wrap: anywhere; white-space: normal;
+  box-shadow: 0 10px 24px -8px rgba(0,0,0,.5); cursor: pointer; pointer-events: auto;
+  animation: fb-say-in .35s cubic-bezier(.2, 1.4, .4, 1);
+  transform-origin: right top;
+}
+.fb-dock.left .fb-say { right: auto; left: calc(100% + 12px); border-radius: 20px 20px 20px 6px; transform-origin: left top; }
+.fb-dock.open .fb-say, .fb-dock:hover .fb-say { top: 60px; }
+.fb-say.mine { background: #d7f5e1; color: #1b7a43; font-size: 15px; padding: 6px 12px; cursor: default; }
+.fb-say.mine .ic { vertical-align: -2px; }
+.fb-say.loose { position: fixed; top: 16px; left: 50%; right: auto; z-index: 80; transform: translateX(-50%); border-radius: 20px; transform-origin: center top; }
+.fb-say.bye { opacity: 0; transition: opacity .35s; }
+@keyframes fb-say-in { from { opacity: 0; scale: .4; } to { opacity: 1; scale: 1; } }
+.fmsg-card { width: min(460px, 100%); }
+.fmsg-to { display: flex; align-items: center; gap: 10px; justify-content: center; font-size: 20px; margin-bottom: 12px; }
+.fmsg-to .frow-face { width: 44px; height: 44px; font-size: 26px; }
+.fmsg-quick { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 12px; }
+.fmsg-quick .ui-chip { height: auto; font-size: 17px; padding: 8px 14px; cursor: pointer; }
+.fmsg-row { display: flex; gap: 10px; align-items: center; }
+.fmsg-row .fmsg-input { flex: 1; min-width: 0; font-size: 20px; }
+.fmsg-row .fmsg-send { flex: none; }

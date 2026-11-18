@@ -25,6 +25,8 @@ export const CODE_LEN = 3;
 // 16 pictures = one hex digit each. Code "3a0" -> 🐸🍌🐶
 export const CODE_PICS = ['🐶', '🐱', '🦁', '🐸', '🐵', '🐷', '🐮', '🐰', '🍎', '🍌', '🍓', '🍕', '🚀', '⭐', '🌈', '⚽'];
 export const codeToPics = code => [...code].map(h => CODE_PICS[parseInt(h, 16)]);
+// The picture as an image (icons/pics, Twemoji CC-BY 4.0) so it looks the same on every device.
+export const picImg = i => `<img class="pic-img" src="icons/pics/${i.toString(16)}.svg" alt="${CODE_PICS[i]}" draggable="false">`;
 const randomCode = () => Array.from({ length: CODE_LEN }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
 const useLocal = new URLSearchParams(location.search).get('net') === 'local';

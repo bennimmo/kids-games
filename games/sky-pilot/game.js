@@ -11,8 +11,9 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { createRoom, joinRoom, joinPublic, serverNow, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
-import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
+import { createRoom, joinRoom, joinPublic, serverNow } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, lobbyHTML, people, playerInfo } from '../../js/engine/together.js';
+import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, VILLAGES, townMask, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
 import { createTerrain } from './terrain.js';
 import { createScenery } from './scenery.js';
@@ -63,7 +64,7 @@ export function mount(stage) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: quality.name !== 'low', powerPreference: 'high-performance', logarithmicDepthBuffer: true });
   } catch (e) {
-    ui.innerHTML = '<div class="sp-overlay"><div class="sp-card"><h2>😢 No 3D</h2><p>This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
+    ui.innerHTML = '<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">No 3D here</h2><p class="ui-sub">This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
     return () => css.remove();
   }
   let DPR = Math.min(devicePixelRatio || 1, quality.dpr);
@@ -86,7 +87,8 @@ export function mount(stage) {
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
 
   // ---------------------------------------------------------------- state
-  const S = { phase: 'loading', mode: 'solo', joinCode: '', busy: false, sad: 0, paused: false, help: false };
+  const S = { phase: 'loading', mode: 'solo', busy: false, sad: 0, paused: false, help: false };
+  const inviteCode = takeJoinCode(GAME); // opened from a friend's invite (together.js)
   let alive = true, raf = 0, world = null, scene = null;
   const players = [];
   const remotes = new Map();
@@ -97,7 +99,7 @@ export function mount(stage) {
   const worldTime = () => (FORCE_T === null && (prefs.shared || net.room) ? ((clockFn() / 1000) % PERIOD) : localT % PERIOD);
 
   // ---------------------------------------------------------------- loading screen
-  ui.innerHTML = '<div class="sp-overlay sp-loading"><div class="sp-card"><h1>Sky <b>Pilot</b></h1><div class="sp-plane-anim">✈️</div><div class="sp-bar"><i></i></div><p class="sp-loadtxt">🏝️</p></div></div>';
+  ui.innerHTML = '<div class="ui-overlay sp-loading"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h1 class="ui-title">Getting the island ready</h1><div class="sp-bar"><i></i></div><p class="ui-sub sp-loadtxt">🏝️</p></div></div>';
   const bar = ui.querySelector('.sp-bar i'), loadTxt = ui.querySelector('.sp-loadtxt');
   const prog = (a, b, txt) => f => { if (bar) bar.style.width = ((a + (b - a) * f) * 100) + '%'; if (txt && loadTxt) loadTxt.textContent = txt; };
 
@@ -107,7 +109,7 @@ export function mount(stage) {
       if (!alive) return;
       scene = new THREE.Scene();
       const sky = createSky(scene, renderer, quality);
-      const terrain = await createTerrain(scene, sky, prog(0.35, 0.75, '🌲 🏜️ ❄️'));
+      const terrain = await createTerrain(scene, sky, prog(0.35, 0.75, '🌲 🏜️ ❄️'), quality);
       if (!alive) return;
       prog(0.75, 0.9, '🛫 🏙️')(0);
       await new Promise(r => setTimeout(r, 0));
@@ -122,9 +124,10 @@ export function mount(stage) {
       renderer.compile(scene, menuCam);
       S.phase = 'menu';
       render();
+      if (inviteCode) tryJoin(inviteCode);
     } catch (e) {
       console.error(e);
-      ui.innerHTML = `<div class="sp-overlay"><div class="sp-card"><h2>😢</h2><p>${String(e.message || e).slice(0, 120)}</p></div></div>`;
+      ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">Something went wrong</h2><p class="ui-sub">${String(e.message || e).slice(0, 120)}</p></div></div>`;
     }
   })();
 
@@ -176,28 +179,73 @@ export function mount(stage) {
     };
   }
 
-  // ---------------------------------------------------------------- minimap picture (once)
+  // ---------------------------------------------------------------- map picture (once): hill shading, height lines, sea depth, towns, roads, runways
   function makeMapImage() {
-    const S2 = 384, c = document.createElement('canvas'); c.width = c.height = S2;
-    const g = c.getContext('2d'), img = g.createImageData(S2, S2), n = GRID + 1;
+    const S2 = 1024, c = document.createElement('canvas'); c.width = c.height = S2;
+    const g = c.getContext('2d'), img = g.createImageData(S2, S2);
+    const W = HALF * 2, px = W / S2;
+    const H = new Float32Array(S2 * S2);
+    for (let j = 0; j < S2; j++) for (let i = 0; i < S2; i++) H[j * S2 + i] = terrainHeight(-HALF + (i + 0.5) * px, -HALF + (j + 0.5) * px);
+    const L = [-0.6, 0.7, -0.4], ll = Math.hypot(...L);
     for (let j = 0; j < S2; j++) for (let i = 0; i < S2; i++) {
-      const gi = Math.floor(i / S2 * GRID), gj = Math.floor(j / S2 * GRID), h = heights[gj * n + gi];
-      const x = -HALF + gi * CELL, z = -HALF + gj * CELL;
+      const k = j * S2 + i, h = H[k];
+      const x = -HALF + (i + 0.5) * px, z = -HALF + (j + 0.5) * px;
+      const hr = H[j * S2 + Math.min(S2 - 1, i + 1)], hd = H[Math.min(S2 - 1, j + 1) * S2 + i];
       let col;
-      if (h < 0.3) col = h > -12 ? [60, 170, 200] : [30, 100, 160];
-      else {
+      if (h < 0.3) {
+        const d = Math.min(1, -h / 40);
+        col = [40 + (1 - d) * 70, 120 + (1 - d) * 85, 175 + (1 - d) * 30];
+        if (hr >= 0.3 || hd >= 0.3) col = [235, 245, 245];                       // surf line
+      } else {
         const { wm, wd, ww } = regionWeights(x, z);
-        col = h > 1250 ? [245, 248, 252] : h < 5 ? [230, 215, 160] : wd > 0.5 ? [220, 170, 100] : wm > 0.5 ? [140, 130, 110] : ww > 0.5 ? [60, 120, 55] : [110, 165, 70];
-        const sh = gi > 0 ? (h - heights[gj * n + gi - 1]) * 0.02 : 0;
-        col = col.map(v => clamp(v * (1 + sh), 0, 255));
+        const snow = h > 1250;
+        col = snow ? [246, 249, 253] : h < 5 ? [236, 220, 168] : wd > 0.5 ? [224, 176, 110] : wm > 0.5 ? (h > 700 ? [150, 140, 128] : [120, 150, 90]) : ww > 0.5 ? [72, 128, 62] : [126, 178, 82];
+        // hill shading
+        const nx = (H[j * S2 + Math.max(0, i - 1)] - hr) / (2 * px), nz = (H[Math.max(0, j - 1) * S2 + i] - hd) / (2 * px);
+        const nl = Math.hypot(nx, 1, nz), sh = (nx * L[0] + L[1] + nz * L[2]) / (nl * ll);
+        const shade = 0.55 + 0.65 * Math.max(0, sh);
+        col = col.map(v => v * shade);
+        // height lines every 250 m
+        if (Math.floor(h / 250) !== Math.floor(hr / 250) || Math.floor(h / 250) !== Math.floor(hd / 250)) col = col.map(v => v * 0.78);
       }
-      const o = (j * S2 + i) * 4; img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
+      const o = k * 4; img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 255;
     }
     g.putImageData(img, 0, 0);
+    const P = (x, z) => [(x + HALF) / px, (z + HALF) / px];
+    // towns: their wobbly outline, with streets; hamlets as little dots
+    for (const t of TOWNS) {
+      const outline = [];
+      for (let ang = 0; ang < Math.PI * 2; ang += 0.08) { let r = 0; while (r < 3000 && townMask(t, t.x + Math.cos(ang) * r, t.z + Math.sin(ang) * r) < 1) r += 15; outline.push(P(t.x + Math.cos(ang) * r, t.z + Math.sin(ang) * r)); }
+      g.save();
+      g.beginPath(); outline.forEach((pt, i) => (i ? g.lineTo(...pt) : g.moveTo(...pt))); g.closePath();
+      g.fillStyle = t.kind === 'city' ? 'rgba(175,170,160,.92)' : 'rgba(205,185,155,.85)'; g.fill();
+      g.clip();
+      g.translate(...P(t.x, t.z)); g.rotate(-t.rot);
+      g.strokeStyle = 'rgba(90,90,95,.55)'; g.lineWidth = 1;
+      const step = (t.kind === 'city' ? 120 : t.kind === 'resort' ? 90 : 70) / px, R2 = 3000 / px;
+      for (let x = -R2; x <= R2; x += step) { g.beginPath(); g.moveTo(x, -R2); g.lineTo(x, R2); g.stroke(); g.beginPath(); g.moveTo(-R2, x); g.lineTo(R2, x); g.stroke(); }
+      g.restore();
+    }
+    for (const v of VILLAGES) { g.fillStyle = '#c9a77c'; g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 1; g.beginPath(); g.arc(...P(v.x, v.z), 3, 0, 7); g.fill(); g.stroke(); }
+    // roads + railway
+    for (const r of ROADS) {
+      if (!r.path) continue;
+      const line = () => { g.beginPath(); let on = false; r.path.forEach(p => { const [a, b] = P(p[0], p[2]); if (p[5] === 'tunnel') { on = false; return; } on ? g.lineTo(a, b) : g.moveTo(a, b); on = true; }); g.stroke(); };
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      if (r.kind === 'rail') { g.setLineDash([]); g.strokeStyle = '#5a4030'; g.lineWidth = 3; line(); g.setLineDash([4, 4]); g.strokeStyle = '#f0e6d0'; g.lineWidth = 1.5; line(); g.setLineDash([]); }
+      else { g.strokeStyle = '#6b5a3a'; g.lineWidth = 4; line(); g.strokeStyle = '#f6d684'; g.lineWidth = 2.2; line(); }
+    }
+    // runways + aprons
     for (const ap of AIRPORTS) {
       const [x1, z1] = runwayPoint(ap, -ap.len / 2), [x2, z2] = runwayPoint(ap, ap.len / 2);
-      g.strokeStyle = '#222'; g.lineWidth = 3; g.beginPath(); g.moveTo((x1 + HALF) / (HALF * 2) * S2, (z1 + HALF) / (HALF * 2) * S2); g.lineTo((x2 + HALF) / (HALF * 2) * S2, (z2 + HALF) / (HALF * 2) * S2); g.stroke();
+      g.lineCap = 'butt';
+      g.strokeStyle = ap.surface === 'grass' ? '#4f7a33' : '#3a3c40'; g.lineWidth = Math.max(4, ap.wid / px * 2.2);
+      g.beginPath(); g.moveTo(...P(x1, z1)); g.lineTo(...P(x2, z2)); g.stroke();
+      g.strokeStyle = '#fff'; g.lineWidth = 1; g.setLineDash([5, 4]);
+      g.beginPath(); g.moveTo(...P(x1, z1)); g.lineTo(...P(x2, z2)); g.stroke(); g.setLineDash([]);
     }
+    // carrier
+    g.save(); g.translate(...P(CARRIER.x, CARRIER.z)); g.rotate(CARRIER.hdg); g.fillStyle = '#4a5560'; g.fillRect(-4, -CARRIER.len / px / 2 - 2, 8, CARRIER.len / px + 4); g.restore();
     return c;
   }
 
@@ -249,7 +297,7 @@ export function mount(stage) {
     const has = code => keys.has(code);
     const any = (name) => has(K[name]) || (solo && has(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(has));
     const hit = (name) => pressed.includes(K[name]) || (solo && pressed.includes(KEYS[1 - p.slot][name])) || (solo && (EXTRA[name] || []).some(c => pressed.includes(c)));
-    const inv = -1;   // always pilot style: ↑ / stick forward = nose down, ↓ / pull back = nose up
+    const inv = -1;   // always pilot style: ↑ / stick forward = nose down, ↓ / pull back = nose up (tilt: top of phone toward you = nose up)
     let tp = ((any('up') ? 1 : 0) - (any('down') ? 1 : 0)) * inv;
     let tr = (any('right') ? 1 : 0) - (any('left') ? 1 : 0);
     let ty = (any('yawR') ? 1 : 0) - (any('yawL') ? 1 : 0);
@@ -282,7 +330,7 @@ export function mount(stage) {
     if (T && T.stick.active) analog = { roll: T.stick.x, pitch: -T.stick.y * inv };
     if (T && T.brake) brake = true;
     if (T && T.actions.length) { actions.push(...T.actions); T.actions.length = 0; }
-    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer, 3, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) * inv };
+    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer, 3, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) };
     // smooth keys, take analog straight
     const ease = (cur, tgt) => cur + clamp(tgt - cur, -dt * (tgt === 0 ? 5 : 3), dt * (tgt === 0 ? 5 : 3));
     const inp = s.input;
@@ -331,7 +379,7 @@ export function mount(stage) {
   function nameTag(text, color) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 64;
     const g = c.getContext('2d');
-    g.font = '700 34px Fredoka, Arial, sans-serif';
+    g.font = '700 34px Nunito, Arial, sans-serif';
     const w = Math.min(248, g.measureText(text).width + 34);
     g.fillStyle = 'rgba(10,20,40,.72)'; g.beginPath(); g.roundRect(128 - w / 2, 6, w, 50, 22); g.fill();
     g.strokeStyle = '#' + new THREE.Color(color).getHexString(); g.lineWidth = 5; g.stroke();
@@ -421,12 +469,24 @@ export function mount(stage) {
     sound.pop();
     const box = p.hud.v.querySelector('.sp-pilots');
     if (box.classList.contains('show')) { box.classList.remove('show'); return; }
+    fillPilots(p, box);
+    box.classList.add('show');
+  }
+  function pilotStatus() {
+    if (net.room) return '👫 In a friends game';
+    if (!prefs.shared) return '🌍 Shared sky is off (turn it on in ⏸️)';
+    if (!net.pub) return '🌍 Connecting… ⏳';
+    return '🌤️ Nobody else is flying right now';
+  }
+  function fillPilots(p, box) {
     const list = pilotList();
+    const key = list.map(x => x.pid + Math.round(x.d / 100)).join() + '|' + pilotStatus();
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
     box.innerHTML = list.length
       ? list.slice(0, 12).map(x => `<button data-pid="${x.pid}" style="--rc:#${new THREE.Color(x.r.color).getHexString()}"><span>${PLANES[x.r.type].icon}</span><b>${(x.r.name || "Pilot").replace(/[<>&"]/g, "")}</b><small>${x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1) + ' km'}</small><i>✈️➡️</i></button>`).join('')
-      : '<p>🌍 ⏳</p>';
+      : `<p>${pilotStatus()}</p>`;
     box.querySelectorAll('button').forEach(b => click(b, () => { const r = remotes.get(b.dataset.pid); box.classList.remove('show'); if (r) teleportTo(p, r); }));
-    box.classList.add('show');
   }
   function teleportNext(p) {
     const list = pilotList();
@@ -705,7 +765,8 @@ export function mount(stage) {
         <div class="sp-warn"></div>
         <div class="sp-hint"></div>
         <div class="sp-tr">
-          <canvas class="sp-map" width="240" height="240"></canvas>
+          <canvas class="sp-map" width="320" height="320"></canvas>
+          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
           <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause" aria-label="Pause">${icon('pause')}</button></div>
         </div>
         <div class="sp-thrbar"><i></i><span>⚡</span></div>
@@ -715,7 +776,7 @@ export function mount(stage) {
       </div>`);
       hudEl.appendChild(v);
       const q = s => v.querySelector(s);
-      p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
+      p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), near: q('.sp-near'), nearTxt: q('.sp-near-txt'), nearArrow: q('.sp-near-arrow'), sky: q('.sp-sky'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
       click(q('.sp-cam'), () => cycleView(p));
       click(q('.sp-c-net'), () => togglePilots(p));
       click(q('.sp-pause'), () => pause(true));
@@ -828,32 +889,67 @@ export function mount(stage) {
     }
   }
 
+  const WEATHER_ICON = { clear: '☀️', sunny: '🌤️', cloudy: '☁️', rain: '🌧️', storm: '⛈️' };
   function drawMap(p) {
     const c = p.hud.map, g = c.getContext('2d'), W = c.width, s = p.s;
-    const range = p.mapBig ? 40000 : 9000;           // metres across
-    const k = W / range, img = world.mapImg, ik = img.width / (HALF * 2);
+    const big = !!p.mapBig;
+    const range = big ? 40000 : 9000;           // metres across
+    const k = W / range, img = world.mapImg;
+    const rot = big ? 0 : -s.heading;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const cx = big ? 0 : s.pos.x, cz = big ? 1500 : s.pos.z;     // big map: the whole island
+    const toS = (x, z) => { const dx = (x - cx) * k, dz = (z - cz) * k; return [W / 2 + dx * cr - dz * sr, W / 2 + dx * sr + dz * cr]; };
+    const inside = ([a, b], m = 6) => Math.hypot(a - W / 2, b - W / 2) < W / 2 - m;
     g.save();
     g.clearRect(0, 0, W, W);
     g.beginPath(); g.arc(W / 2, W / 2, W / 2, 0, 7); g.clip();
-    g.fillStyle = '#1e64a0'; g.fillRect(0, 0, W, W);
-    g.translate(W / 2, W / 2);
-    if (!p.mapBig) g.rotate(-s.heading);
-    g.scale(k, k);
-    g.translate(-s.pos.x, -s.pos.z);
+    g.fillStyle = '#2a70a8'; g.fillRect(0, 0, W, W);
+    g.save();
+    g.translate(W / 2, W / 2); g.rotate(rot); g.scale(k, k); g.translate(-cx, -cz);
     g.drawImage(img, -HALF, -HALF, HALF * 2, HALF * 2);
-    // carrier, airports
-    g.fillStyle = '#555'; g.fillRect(CARRIER.x - 150, CARRIER.z - 150, 300, 300);
-    const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(x, z, r / k, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5 / k; g.stroke(); };
-    for (const r of remotes.values()) dot(r.pos.x, r.pos.z, '#' + new THREE.Color(r.color).getHexString(), 5);
-    for (const q of players) if (q !== p) dot(q.s.pos.x, q.s.pos.z, '#' + new THREE.Color(q.color).getHexString(), 6);
     g.restore();
-    // me in the middle
-    g.save(); g.translate(W / 2, W / 2); if (p.mapBig) g.rotate(s.heading);
+    // labels stay upright
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const label = (pt, text, size, col = '#fff') => { g.font = `700 ${size}px Nunito, Arial`; g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.65)'; g.strokeText(text, pt[0], pt[1]); g.fillStyle = col; g.fillText(text, pt[0], pt[1]); };
+    const icon = (pt, ic, size) => { g.font = `${size}px sans-serif`; g.fillText(ic, pt[0], pt[1]); };
+    const fs = big ? 1 : 1.15;
+    for (const t of TOWNS) { const pt = toS(t.x, t.z); if (inside(pt) && (big || Math.hypot(t.x - s.pos.x, t.z - s.pos.z) < 6000)) label([pt[0], pt[1]], t.name, 13 * fs, '#ffe9a8'); }
+    for (const m of LANDMARKS) { const pt = toS(m.x, m.z); if (inside(pt)) { icon(pt, m.icon, 15 * fs); const crowded = AIRPORTS.concat(TOWNS).some(a => Math.hypot(a.x - m.x, a.z - m.z) < 1800); if (big && !crowded) label([pt[0], pt[1] + 13], m.name, 10); } }
+    { const pt = toS(LAKE.x, LAKE.z); if (inside(pt)) { icon(pt, '🦆', 14 * fs); if (big) label([pt[0], pt[1] + 13], 'Duck Lake', 10); } }
+    { const pt = toS(CARRIER.x, CARRIER.z); if (inside(pt)) { icon(pt, '⚓', 16 * fs); if (big) label([pt[0], pt[1] + 14], 'Carrier', 10); } }
+    for (const ap of AIRPORTS) {
+      const pt = toS(ap.x, ap.z);
+      if (!inside(pt, 4)) continue;
+      g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.arc(pt[0], pt[1], 13 * fs, 0, 7); g.fill();
+      icon(pt, '🛫', 15 * fs);
+      label([pt[0], pt[1] + 20 * fs], ap.name, 12 * fs);
+    }
+    // other pilots
+    const dot = (x, z, col, name) => {
+      const pt = toS(x, z); if (!inside(pt, 3)) return;
+      g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(pt[0], pt[1], 6, 0, 7); g.fill(); g.stroke();
+      if (name) label([pt[0], pt[1] - 13], name, 11);
+    };
+    for (const r of remotes.values()) dot(r.pos.x, r.pos.z, '#' + new THREE.Color(r.color).getHexString(), r.name);
+    for (const q of players) if (q !== p) dot(q.s.pos.x, q.s.pos.z, '#' + new THREE.Color(q.color).getHexString(), '');
+    g.restore();
+    // me (in the middle of the small map)
+    g.save(); g.translate(...(big ? toS(s.pos.x, s.pos.z) : [W / 2, W / 2])); if (big) g.rotate(s.heading);
     g.fillStyle = '#ffd400'; g.strokeStyle = '#000'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 10); g.lineTo(0, 5); g.lineTo(-9, 10); g.closePath(); g.fill(); g.stroke();
     g.restore();
-    if (!p.mapBig) { g.fillStyle = '#fff'; g.font = '700 22px Arial'; g.textAlign = 'center'; const a = -s.heading; g.fillText('N', W / 2 + Math.sin(a) * (W / 2 - 16), W / 2 - Math.cos(a) * (W / 2 - 16) + 8); }
-    g.strokeStyle = 'rgba(255,255,255,.8)'; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, W / 2, W / 2 - 2, 0, 7); g.stroke();
+    if (!big) { g.fillStyle = '#fff'; g.font = '700 22px Arial'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const a = -s.heading; g.fillText('N', W / 2 + Math.sin(a) * (W / 2 - 16), W / 2 - Math.cos(a) * (W / 2 - 16) + 8); }
+    g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 4; g.beginPath(); g.arc(W / 2, W / 2, W / 2 - 2, 0, 7); g.stroke();
+    // nearest airport, time and weather under the map
+    let near = null, nd = 1e9;
+    for (const ap of AIRPORTS) { const d = Math.hypot(ap.x - s.pos.x, ap.z - s.pos.z); if (d < nd) { nd = d; near = ap; } }
+    const st = world.sky.state;
+    const brg = Math.atan2(near.x - s.pos.x, -(near.z - s.pos.z)) - s.heading;
+    if (p.hud.near) {
+      p.hud.nearTxt.textContent = `${near.icon} ${near.name} · ${nd < 1000 ? Math.round(nd) + ' m' : (nd / 1000).toFixed(1) + ' km'}`;
+      p.hud.nearArrow.style.transform = `rotate(${brg}rad)`;
+      p.hud.sky.textContent = (st.night > 0.6 ? '🌙' : st.dusk > 0.4 ? '🌅' : '') + (st.weather.rainbow > 0.3 ? '🌈' : (WEATHER_ICON[st.weather.kind] || ''));
+    }
   }
 
   function layout() {
@@ -887,7 +983,9 @@ export function mount(stage) {
     if (net.pub || net.room || net.connecting) return;
     net.connecting = true;
     try {
-      const api = await joinPublic(GAME);
+      const jp = joinPublic(GAME);
+      jp.then(a => { if (net.pub !== a) setTimeout(() => { if (net.pub !== a) a.leave(); }, 0); }).catch(() => {});
+      const api = await Promise.race([jp, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 15000))]);
       net.connecting = false;
       if (!alive || !prefs.shared || net.room || S.phase !== 'fly') { api.leave(); return; }
       net.pub = api;
@@ -966,12 +1064,16 @@ export function mount(stage) {
     }
   }
 
-  // friends room
+  // friends room: "Play with friends" (together.js) makes a room and invites linked friends
   async function hostRoom() {
     S.busy = true; render();
     try {
-      const room = await createRoom(GAME, { state: 'fly' });
-      S.busy = false; goRoom(room);
+      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'fly' }));
+      S.busy = false;
+      if (!room) { render(); return; } // friends panel opened instead
+      if (!alive) { room.leave(); return; }
+      room.setMeta({ hostUid: room.uid }).catch(() => {});
+      goRoom(room);
     } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
   }
   async function tryJoin(code) {
@@ -979,17 +1081,25 @@ export function mount(stage) {
     try {
       const room = await joinRoom(GAME, code);
       S.busy = false;
-      if (!room) { S.joinCode = ''; S.sad = clock + 1.5; sound.bump(); render(); return; }
+      if (!alive) { if (room) room.leave(); return; }
+      if (!room) { S.gone = clock + 3; sound.bump(); render(); return; }
+      joined(GAME, code);
+      S.mode = 'solo';
       goRoom(room);
-    } catch (e) { console.warn(e); S.busy = false; S.joinCode = ''; S.sad = clock + 2; render(); }
+    } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
   }
+  const stripHtml = () => lobbyHTML(people(net.players, net.hostUid).map(p => ({ ...p, host: true })), { hostDoing: 'flying', myUid: net.room && net.room.uid });
+  const updateStrip = () => ui.querySelectorAll('.sp-strip').forEach(e => { e.innerHTML = stripHtml(); });
   function goRoom(room) {
     leavePublic();
-    net.room = room; net.code = room.code;
-    room.setPlayer(room.uid + '_p0', { joined: room.now(), name: myName() });
+    net.room = room; net.code = room.code; net.hostUid = room.isHost ? room.uid : '';
+    room.setPlayer(room.uid + '_p0', { joined: room.now(), ...playerInfo(true) });
     net.unsubs.push(room.onLive(l => { net.live = l; }));
-    net.unsubs.push(room.onPlayers(pl => { net.players = pl; }));
-    net.unsubs.push(room.onMeta(m => { if (!m && net.room === room) leaveRoom(true); }));
+    net.unsubs.push(room.onPlayers(pl => { net.players = pl; updateStrip(); }));
+    net.unsubs.push(room.onMeta(m => {
+      if (!m && net.room === room) { leaveRoom(true); return; }
+      if (m && m.hostUid && m.hostUid !== net.hostUid) { net.hostUid = m.hostUid; updateStrip(); }
+    }));
     if (room.onStatus) net.unsubs.push(room.onStatus(st => { net.status = st; }));
     S.phase = 'hangar';
     render();
@@ -997,6 +1107,7 @@ export function mount(stage) {
   function leaveRoom(gone = false) {
     if (!net.room) return;
     const r = net.room; net.room = null;
+    leftRoom();
     net.unsubs.forEach(u => u && u()); net.unsubs = [];
     r.leave(); net.live = {}; clearRemotes();
     if (gone) { S.sad = clock + 2; }
@@ -1005,11 +1116,16 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- main loop
-  let last = performance.now(), clock = 0, acc = 0, slowT = 0, slowN = 0;
+  let last = performance.now(), clock = 0, slowT = 0, slowN = 0;
+  const physOpts = { easy: true, noDie: true, wind: null };
+  let dtSmooth = 1 / 60;
   function frame(now) {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+    const rawDt = Math.min(0.1, (now - last) / 1000); last = now;
+    // even out tiny timing wobbles between frames (big changes still go straight through)
+    dtSmooth = Math.abs(rawDt - dtSmooth) > 0.02 ? rawDt : dtSmooth + (rawDt - dtSmooth) * 0.25;
+    const dt = dtSmooth; clock += dt;
     if (!world) return;
     localT += dt;
     const T = worldTime();
@@ -1043,11 +1159,10 @@ export function mount(stage) {
       if (pressed.includes('KeyT')) for (const p of players) teleportNext(p);
       if (pressed.includes('KeyM')) for (const p of players) { p.mapBig = !p.mapBig; p.hud.v.classList.toggle('sp-bigmap', p.mapBig); }
       // physics (fixed steps)
-      acc += dt;
-      const opts = { easy: prefs.easy, noDie: prefs.noDie, wind: sky.state.wind };
-      let n = 0;
-      while (acc >= STEP && n < 14) { for (const p of players) { p.s.T = T; stepPlane(p.s, STEP, opts); } acc -= STEP; n++; }
-      if (n >= 14) acc = 0;
+      // split this frame into equal small steps (smooth: every frame moves the plane by exactly its frame time)
+      const opts = physOpts; opts.easy = prefs.easy; opts.noDie = prefs.noDie; opts.wind = sky.state.wind;
+      const n = Math.min(14, Math.max(1, Math.ceil(dt / STEP))), h = dt / n;
+      for (let k = 0; k < n; k++) for (const p of players) { p.s.T = T; stepPlane(p.s, h, opts); }
       for (const p of players) {
         handleEvents(p);
         helpers(p, dt);
@@ -1068,7 +1183,13 @@ export function mount(stage) {
       if (p.engine) p.engine.set(s.crashed ? 0 : s.rpm, s.speed, s.ab, p.view === 'cockpit');
       updateHud(p, dt);
     }
-    if (flying) { netTick(dt); updateRemotes(dt); }
+    if (flying) {
+      netTick(dt); updateRemotes(dt);
+      // shared sky dropped or never connected: keep trying
+      if (prefs.shared && !net.pub && !net.room && !net.connecting && clock > (net.retryAt || 0)) { net.retryAt = clock + 5; goPublic(); }
+      // keep an open pilot list up to date
+      for (const p of players) { const box = p.hud && p.hud.v.querySelector('.sp-pilots.show'); if (box) fillPilots(p, box); }
+    }
 
     // menu camera: slow circle over the main airport
     if (!flying) {
@@ -1088,6 +1209,7 @@ export function mount(stage) {
     scenery.update(dt, T, sky.state, cams.map(c => c.position));
     life.update(T, dt, cams.map(c => c.position));
     fx.update(dt, sky);
+    renderer.toneMappingExposure = lerp(1.0, 1.4, sky.state.night) + sky.state.weather.haze * 0.1;
     if (sky.state.thunder) thunder(sky.state.thunder);
     if (flying) rainSound(sky.state.weather.rain * (cams[0].position.y < 2200 ? 1 : 0.2));
     else rainSound(0);
@@ -1136,54 +1258,64 @@ export function mount(stage) {
     if (S.phase !== 'hangar') hideHangarPlane();
     if (S.phase === 'menu') menuUI();
     if (S.phase === 'hangar') hangarUI();
-    if (S.phase === 'friends') friendsUI();
-    if (S.phase === 'join') joinUI();
     if (S.phase === 'fly' && S.paused) pauseUI();
     if (S.phase === 'fly' && net.room) {
-      const b = el(`<div class="sp-roombadge"><b>🔑</b>${codeToPics(net.code).map(p => `<span>${p}</span>`).join('')}</div>`);
+      const b = el(`<div class="sp-roombadge sp-strip">${stripHtml()}</div>`);
       ui.appendChild(b);
     }
   }
 
-  const toggle = (key, on, off, label) => `<button class="sp-tog ${prefs[key] ? 'on' : ''}" data-k="${key}"><span>${prefs[key] ? on : off}</span>${label}</button>`;
-  function wireToggles(box, after) {
-    box.querySelectorAll('.sp-tog').forEach(b => click(b, () => { sound.pop(); prefs[b.dataset.k] = !prefs[b.dataset.k]; savePrefs(); after ? after(b.dataset.k) : render(); }));
+  // Settings: one row per switch, a segmented Off/On control on the right.
+  const SETTINGS = {
+    easy: ['Flying', '🧑‍✈️ Real', '🐣 Easy'],
+    noDie: ['Crashes', '💥 On', '🛡️ Off'],
+    shared: ['Sky', '🏝️ Just me', '🌍 Shared'],
+    guide: ['Landing hoops', 'Off', '🟢 On'],
+    sound: ['Sound', '🔇 Off', '🔊 On'],
+  };
+  const settingsHTML = keys => `<div class="sp-settings">${keys.map(k => {
+    const [label, off, on] = SETTINGS[k];
+    return `<div class="sp-set"><span>${label}</span><div class="ui-seg" data-k="${k}"><button data-v="0" class="${prefs[k] ? '' : 'on'}">${off}</button><button data-v="1" class="${prefs[k] ? 'on' : ''}">${on}</button></div></div>`;
+  }).join('')}</div>`;
+  function wireSettings(box, after) {
+    box.querySelectorAll('.sp-settings .ui-seg button').forEach(b => click(b, () => {
+      const k = b.parentNode.dataset.k, v = b.dataset.v === '1';
+      if (prefs[k] === v) return;
+      sound.pop(); prefs[k] = v; savePrefs(); after ? after(k) : render();
+    }));
   }
 
   function menuUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card sp-menu">
-      <h1>Sky <b>Pilot</b></h1>
-      <div class="sp-row sp-play">
-        <button class="sp-go" data-m="solo"><span>🙂</span>Fly</button>
-        <button class="sp-go" data-m="friends"><span>🔑</span>Friends</button>
-        ${MISSIONS.length ? '<button class="sp-go" data-m="missions"><span>🎯</span>Missions</button>' : ''}
+    const box = el(`<div class="ui-overlay sp-menuov"><div class="ui-panel sp-menu">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h1 class="ui-title">Ready for take-off</h1>
+      <p class="ui-sub">Fly anywhere on the island</p>
+      <div class="ui-row sp-play">
+        <button class="ui-btn primary big sp-go" data-m="solo">${icon('play')}<span>Fly</span></button>
+        ${MISSIONS.length ? '<button class="ui-btn big sp-go" data-m="missions">🎯<span>Missions</span></button>' : ''}
+        ${togetherButton()}
       </div>
-      <div class="sp-row sp-toggles">
-        <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
-        ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
-        ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
-        ${toggle('sound', '🔊', '🔇', 'Sound')}
-      </div>
-      ${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <button class="sp-help-btn">${icon('keyboard')} ?</button>
+      ${S.busy ? '<p class="ui-sub">Joining… ⏳</p>' : ''}${S.sad > clock ? '<p class="ui-sub">Couldn\'t join that game 😢</p>' : ''}${S.gone > clock ? '<p class="ui-sub">That game has finished 👋</p>' : ''}
+      <div class="ui-label">Settings</div>
+      ${settingsHTML(['easy', 'noDie', 'shared', 'sound'])}
+      <div class="ui-row sp-foot"><button class="ui-btn ghost small sp-help-btn">${icon('keyboard')}<span>Controls</span></button></div>
     </div></div>`);
-    click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
-    wireToggles(box.querySelector('.sp-toggles'));
+    wireSettings(box);
     box.querySelectorAll('.sp-go').forEach(b => click(b, () => {
       sound.pop();
-      const m = b.dataset.m;
-      if (m === 'friends') { S.phase = 'friends'; render(); return; }
       S.mode = 'solo';
       if (TOUCH && prefs.tilt) askTilt();
       S.phase = 'hangar'; S.who = 0; render();
     }));
+    click(box.querySelector('[data-together]'), () => { if (S.busy) return; sound.pop(); S.mode = 'solo'; hostRoom(); });
     click(box.querySelector('.sp-help-btn'), () => { S.help = true; helpUI(); });
     ui.appendChild(box);
   }
 
   function helpUI() {
-    const box = el(`<div class="sp-overlay sp-helpov"><div class="sp-card sp-help">
-      <h2>⌨️ Controls</h2>
+    const box = el(`<div class="ui-overlay sp-helpov"><div class="ui-panel wide sp-help">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h2 class="ui-title">Controls</h2>
       <table>
         <tr><td>⬆️⬇️ Nose up / down</td><td>W S &nbsp;or&nbsp; ↑ ↓</td></tr>
         <tr><td>⬅️➡️ Roll</td><td>A D &nbsp;or&nbsp; ← →</td></tr>
@@ -1195,11 +1327,13 @@ export function mount(stage) {
         <tr><td>🎥 Camera</td><td>C</td></tr>
         <tr><td>💨 Smoke</td><td>X</td></tr>
       </table>
-      <p>🌍 Tap the 🌍 button (or T) to jump in right behind another pilot and fly together.</p>
-      <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
-      <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
-      <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>
-      <button class="sp-btn sp-ok" aria-label="OK">${icon('check')}</button>
+      <div class="sp-tips">
+        <p>🌍 Tap the 🌍 button (or T) to jump in right behind another pilot and fly together.</p>
+        <p>⏸ Esc · 🗺️ M · 🔁 Backspace · 🎮 Gamepads work · 🖱️ Drag to look, wheel to zoom</p>
+        <p>🚁 Helicopter: power = lift, stick = tilt and fly that way.</p>
+        <p>🛬 Landing: slow down, wheels down, flaps down, follow the green hoops. PAPI lights: 2 red + 2 white = just right.</p>
+      </div>
+      <div class="ui-row"><button class="ui-btn go sp-ok" aria-label="OK">${icon('check')}<span>Got it</span></button></div>
     </div></div>`);
     click(box.querySelector('.sp-ok'), () => { S.help = false; box.remove(); });
     ui.appendChild(box);
@@ -1211,15 +1345,20 @@ export function mount(stage) {
     showHangarPlane(pl.type, pl.color);
     const starts = startsFor(pl.type);
     if (!starts.find(s => s.id === prefs.start)) prefs.start = starts[0].id;
-    const box = el(`<div class="sp-overlay sp-hangar"><div class="sp-card sp-hcard">
-      <div class="sp-planes">${PLANE_ORDER.map(t => `<button class="sp-pcard ${pl.type === t ? 'on' : ''}" data-t="${t}"><span>${PLANES[t].icon}</span><b>${PLANES[t].name}</b><small>${'⭐'.repeat(PLANES[t].stars)}</small></button>`).join('')}</div>
-      <div class="sp-row sp-colors">${LIVERIES.map((c, i) => `<button class="sp-col ${pl.color === i ? 'on' : ''}" data-c="${i}" style="background:#${new THREE.Color(c).getHexString()}"></button>`).join('')}</div>
-      <div class="sp-row sp-starts">${starts.map(s => `<button class="sp-start ${prefs.start === s.id ? 'on' : ''}" data-s="${s.id}" title="${s.name}"><span>${s.icon}</span><small>${s.name}</small></button>`).join('')}</div>
-      <div class="sp-row">
-        <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
-        <button class="sp-btn sp-fly" aria-label="Fly">${icon('play')}</button>
+    const box = el(`<div class="ui-overlay sp-hangar"><div class="ui-panel wide left sp-hcard">
+      <div class="sp-hhead"><div><div class="ui-kicker">Sky Pilot · Hangar</div><h2 class="ui-title">Choose your plane</h2></div>
+        ${net.room ? `<div class="sp-strip sp-hstrip">${stripHtml()}</div>` : ''}</div>
+      <div class="ui-choices tight sp-planes">${PLANE_ORDER.map(t => `<button class="ui-choice sp-pcard ${pl.type === t ? 'on' : ''}" data-t="${t}"><span class="i">${PLANES[t].icon}</span>${PLANES[t].name}<small>${'★'.repeat(PLANES[t].stars)}${'☆'.repeat(Math.max(0, 3 - PLANES[t].stars))}</small></button>`).join('')}</div>
+      <div class="sp-hrow">
+        <div class="sp-hcol"><div class="ui-label">Colour</div>
+          <div class="sp-colors">${LIVERIES.map((c, i) => `<button class="sp-col ${pl.color === i ? 'on' : ''}" data-c="${i}" aria-label="Colour ${i + 1}" style="background:#${new THREE.Color(c).getHexString()}"></button>`).join('')}</div></div>
+        <div class="sp-hcol"><div class="ui-label">Start at</div>
+          <div class="sp-starts">${starts.map(s => `<button class="ui-choice sp-start ${prefs.start === s.id ? 'on' : ''}" data-s="${s.id}" title="${s.name}"><span class="i">${s.icon}</span><small>${s.name}</small></button>`).join('')}</div></div>
       </div>
-      ${net.room ? `<div class="sp-code"><b>🔑</b>${codeToPics(net.code).map(p => `<span>${p}</span>`).join('')}</div><p class="sp-friends">${Object.values(net.players || {}).map(x => '🙂 ' + (cleanName(x && x.name) || '')).join(' &nbsp; ')}</p>` : ''}
+      <div class="ui-row sp-foot">
+        <button class="ui-btn ghost sp-back" aria-label="Back">${icon('back')}<span>Back</span></button>
+        <button class="ui-btn primary big sp-fly" aria-label="Fly">${icon('play')}<span>Fly</span></button>
+      </div>
     </div></div>`);
     box.querySelectorAll('.sp-pcard').forEach(b => click(b, () => { sound.pop(); pl.type = b.dataset.t; savePrefs(); render(); }));
     box.querySelectorAll('.sp-col').forEach(b => click(b, () => { sound.pop(); pl.color = +b.dataset.c; savePrefs(); render(); }));
@@ -1229,65 +1368,31 @@ export function mount(stage) {
     ui.appendChild(box);
   }
 
-  function friendsUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card">
-      <h2>🔑 Fly with friends</h2>
-      <div class="sp-row sp-play">
-        <button class="sp-go sp-host"><span>🏠</span>Make a room</button>
-        <button class="sp-go sp-join"><span>🔑</span>Join a room</button>
-      </div>
-      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button>
-    </div></div>`);
-    click(box.querySelector('.sp-host'), () => { if (!S.busy) { S.mode = 'solo'; hostRoom(); } });
-    click(box.querySelector('.sp-join'), () => { if (S.busy) return; sound.pop(); S.joinCode = ''; S.phase = 'join'; render(); });
-    click(box.querySelector('.sp-back'), () => { sound.pop(); S.phase = 'menu'; render(); });
-    ui.appendChild(box);
-  }
-  function joinUI() {
-    const slots = Array.from({ length: CODE_LEN }, (_, i) => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
-    const box = el(`<div class="sp-overlay"><div class="sp-card">
-      <div class="sp-code sp-slots">${slots}</div>
-      ${S.busy ? '<p class="sp-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sp-sad">😢</p>' : ''}
-      <div class="sp-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="sp-row"><button class="sp-btn sp-del" aria-label="Delete">${icon('backspace')}</button><button class="sp-btn sp-back" aria-label="Back">${icon('back')}</button></div>
-    </div></div>`);
-    box.querySelectorAll('.sp-keypad button').forEach(b => click(b, () => {
-      if (S.busy || S.joinCode.length >= CODE_LEN) return;
-      sound.pop(); S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) { S.mode = 'solo'; tryJoin(S.joinCode); } else render();
-    }));
-    click(box.querySelector('.sp-del'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
-    click(box.querySelector('.sp-back'), () => { S.phase = 'friends'; render(); });
-    ui.appendChild(box);
-  }
-
   function pause(on) {
     if (S.phase !== 'fly') return;
     S.paused = on; sound.pop();
     render();
   }
   function pauseUI() {
-    const box = el(`<div class="sp-overlay"><div class="sp-card sp-pausecard">
-      <h2>${icon('pause')}</h2>
-      <div class="sp-row sp-toggles">
-        <button class="sp-tog ${prefs.easy ? 'on' : ''}" data-easy><span>${prefs.easy ? '🐣' : '🧑‍✈️'}</span>${prefs.easy ? 'Easy' : 'Real'}</button>
-        ${toggle('noDie', '🛡️', '💥', prefs.noDie ? 'No crash' : 'Crashes')}
-        ${toggle('shared', '🌍', '🏝️', prefs.shared ? 'Shared sky' : 'Just me')}
-        ${toggle('guide', '🟢', '⚪', 'Hoops')}
-        ${toggle('sound', '🔊', '🔇', 'Sound')}
+    const box = el(`<div class="ui-overlay"><div class="ui-panel sp-pausecard">
+      <div class="ui-kicker">Sky Pilot</div>
+      <h2 class="ui-title">Paused</h2>
+      <div class="ui-row sp-pbtns">
+        <button class="ui-btn primary big sp-resume" aria-label="Keep flying">${icon('play')}<span>Resume</span></button>
+        <button class="ui-btn sp-respawn" aria-label="Start again">${icon('retry')}<span>Start again</span></button>
+        <button class="ui-btn sp-plane">🛩️<span>Change plane</span></button>
       </div>
-      <div class="sp-row">
-        <button class="sp-btn sp-resume" aria-label="Keep flying">${icon('play')}</button>
-        <button class="sp-btn sp-respawn" aria-label="Start again">${icon('retry')}</button>
-        <button class="sp-btn sp-plane">🛩️</button>
-        <button class="sp-btn sp-helpb" aria-label="Keys">${icon('keyboard')}</button>
-        ${net.room ? `<button class="sp-btn sp-leave" aria-label="Leave">${icon('leave')}</button>` : ''}
-        <button class="sp-btn sp-quit" aria-label="Home">${icon('home')}</button>
+      <div class="ui-label">Settings</div>
+      ${settingsHTML(['easy', 'noDie', 'shared', 'guide', 'sound'])}
+      <div class="ui-row sp-foot">
+        <div class="ui-row">
+          <button class="ui-btn ghost sp-quit" aria-label="Quit">${icon('home')}<span>Quit</span></button>
+          ${net.room ? `<button class="ui-btn ghost sp-leave" aria-label="Leave">${icon('leave')}<span>Leave friends</span></button>` : ''}
+        </div>
+        <button class="ui-btn ghost small sp-helpb" aria-label="Keys">${icon('keyboard')}<span>Controls</span></button>
       </div>
     </div></div>`);
-    click(box.querySelector('[data-easy]'), () => { sound.pop(); prefs.easy = !prefs.easy; savePrefs(); render(); });
-    wireToggles(box.querySelector('.sp-toggles'), k => {
+    wireSettings(box, k => {
       if (k === 'shared') { if (prefs.shared) goPublic(); else leavePublic(); }
       if (k === 'sound') players.forEach(p => { if (p.engine) p.engine.stop(); p.engine = makeEngine(p.type, players.length); });
       render();
@@ -1316,7 +1421,7 @@ export function mount(stage) {
   const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); };
   document.addEventListener('visibilitychange', onVisible);
 
-  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
+  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
 
   return () => {
     alive = false;

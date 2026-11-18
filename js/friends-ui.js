@@ -1,22 +1,35 @@
 // Friends on screen: the bar + panel on the menu, the "wants to connect" popup,
 // and the floating friend bubbles that stay on top of every game.
-import { CODE_PICS, codeToPics } from './engine/net.js';
+import { CODE_PICS, picImg } from './engine/net.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import { icon } from './engine/icons.js';
+import { GAMES } from './games.js';
+import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic,
+  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, sendMessage, onMessage, MSG_MAX, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
 const DOCK_KEY = 'kg-bubbles';
 const COLORS = ['#ff7043', '#42a5f5', '#66bb6a', '#ab47bc', '#ffca28', '#26c6da', '#ec407a', '#8d6e63'];
 const colorFor = uid => COLORS[[...uid].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7) % COLORS.length];
-const picsHTML = c => codeToPics(c).map(p => `<span>${p}</span>`).join('');
+const picsHTML = c => [...c].map(h => `<span class="pic">${picImg(parseInt(h, 16))}</span>`).join('');
+const gameOf = id => GAMES.find(g => g.id === id);
+// "Playing Kit's Karts" / "On the menu" / "Not on"
+const whereText = (online, game) => !online ? 'Not on' : (gameOf(game) ? `Playing ${gameOf(game).name}` : 'On the menu');
 
-let layer, dock, list, micBtn, knockEl, panel = null;
+let layer, dock, list, micBtn, hangBtn, badge, knockEl, inviteEl, panel = null, camBtn, meEl;
+const quiet = new Set(); // friends I've muted (just on this device)
+let openTimer = null;
+function openDock(on) {
+  clearTimeout(openTimer);
+  dock.classList.toggle('open', on);
+  if (on) openTimer = setTimeout(() => openDock(false), 5000);
+  else { hangBtn.classList.remove('sure'); hangBtn.innerHTML = icon('hangup'); }
+}
 let onEditName = () => {};
 
 // Keep taps on our things away from the game underneath.
@@ -36,7 +49,10 @@ let dockPos = loadDock();
 function placeDock() {
   dock.classList.toggle('left', dockPos.side === 'left');
   const h = dock.offsetHeight || 0;
-  const top = Math.max(96, Math.min(innerHeight - h - 12, dockPos.y * innerHeight - h / 2));
+  // dockPos.t = where the top sits, so friends don't shift when bubbles come and go.
+  if (dockPos.t == null && h) dockPos.t = (dockPos.y * innerHeight - h / 2) / innerHeight; // fix it after first showing
+  const want = dockPos.t != null ? dockPos.t * innerHeight : dockPos.y * innerHeight - h / 2;
+  const top = Math.max(96, Math.min(innerHeight - h - 12, want));
   dock.style.top = top + 'px';
 }
 
@@ -56,8 +72,14 @@ function wireDrag() {
   });
   const end = e => {
     if (!start || e.pointerId !== start.id) return;
+    if (!start.moved && !e.target.closest('button')) {
+      // tap = show buttons; tapping a friend's video also makes it bigger (tap again: smaller)
+      const vid = e.target.closest('.fb.video');
+      if (vid) { vid.classList.toggle('big'); openDock(true); } else openDock(!dock.classList.contains('open'));
+      placeDock();
+    }
     if (start.moved) {
-      dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight };
+      dockPos = { side: e.clientX < innerWidth / 2 ? 'left' : 'right', y: (dock.offsetTop + dock.offsetHeight / 2) / innerHeight, t: dock.offsetTop / innerHeight };
       try { localStorage.setItem(DOCK_KEY, JSON.stringify(dockPos)); } catch (er) { /* */ }
     }
     dock.classList.remove('dragging');
@@ -71,34 +93,68 @@ function wireDrag() {
 }
 
 function renderBubbles(s) {
-  const want = new Map(s.friends.map(f => [f.uid, f]));
+  const want = new Map(s.buddies.map(f => [f.uid, f]));
   for (const el of [...list.children]) if (!want.has(el.dataset.uid)) el.remove();
-  for (const f of s.friends) {
+  for (const f of s.buddies) {
     let el = list.querySelector(`[data-uid="${f.uid}"]`);
     if (!el) {
       el = document.createElement('div');
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><button class="fb-chat" aria-label="Send a message">${icon('chat')}</button><div class="fb-where"></div></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.querySelector('.fb-quiet').addEventListener('click', () => {
+        sound.pop();
+        quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
+        openDock(true);
+        renderBubbles(friendState());
+      });
+      el.querySelector('.fb-chat').addEventListener('click', () => { sound.pop(); openCompose(el.dataset.uid); });
+      el.querySelectorAll('.fb-ring').forEach(b => b.addEventListener('click', () => { sound.pop(); callFriend(f.uid, b.classList.contains('fb-vring')); openDock(true); }));
       list.appendChild(el);
       sound.pop();
     }
-    el.classList.toggle('on', f.status === 'on');
+    el.classList.toggle('on', f.status === 'on' || !f.inCall);
+    el.classList.toggle('incall', f.inCall);
+    el.classList.toggle('calling', !!f.calling);
+    el.querySelectorAll('.fb-ring').forEach(b => { b.hidden = f.inCall || s.friends.length >= MAX_FRIENDS; });
     el.querySelector('.fb-face b').textContent = f.face || [...f.name][0] || '?';
     el.classList.toggle('has-face', !!f.face);
     el.querySelector('.fb-name').textContent = f.name;
+    const g = gameOf(f.game), gb = el.querySelector('.fb-game');
+    if (gb.dataset.g !== (f.game || '')) { gb.dataset.g = f.game || ''; gb.innerHTML = g ? (gameArt(g.id) || g.icon) : ''; gb.style.setProperty('--c', g ? g.color : '#fff'); }
+    gb.hidden = !g;
+    el.querySelector('.fb-where').textContent = whereText(true, f.game);
+    el.title = `${f.name}: ${whereText(true, f.game)}`;
     const v = el.querySelector('video'), a = el.querySelector('audio');
-    // Video only gets the stream once there's a camera (iPad: two players on one voice can sound wrong).
-    const vs = f.stream && f.stream.getVideoTracks().length ? f.stream : null;
-    if (v.srcObject !== vs) v.srcObject = vs;
-    playVoice(a, f.stream);
-    el.classList.toggle('video', !!(f.stream && f.stream.getVideoTracks().length));
+    // Video only gets the stream while their camera is on (iPad: two players on one voice can sound wrong).
+    const vt = f.stream && f.stream.getVideoTracks()[0];
+    const showVid = !!(f.inCall && f.cam && vt && vt.readyState === 'live');
+    const vs = showVid ? f.stream : null;
+    if (v.srcObject !== vs) { v.srcObject = vs; if (vs) v.play().catch(() => {}); }
+    const q = quiet.has(f.uid);
+    playVoice(a, f.stream, q);
+    el.classList.toggle('quiet', q);
+    el.querySelector('.fb-quiet').textContent = q ? '🔈' : '🔊';
+    el.classList.toggle('video', showVid);
+    if (!showVid) el.classList.remove('big');
   }
-  tidyVoices(new Set(s.friends.map(f => f.stream).filter(Boolean)));
-  micBtn.innerHTML = s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
+  for (const u of quiet) if (!want.has(u) || !want.get(u).inCall) quiet.delete(u);
+  tidyVoices(new Set(s.buddies.filter(f => f.inCall && !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
+  dock.classList.toggle('incall', s.inGroup);
+  // my camera: button + my own little (mirrored) bubble while it's on
+  camBtn.hidden = !s.inGroup;
+  camBtn.innerHTML = s.camStatus === 'asking' ? '⏳' : s.camStatus === 'denied' ? '🚫' : icon('camera');
+  camBtn.classList.toggle('off', s.camStatus !== 'on');
+  const mv = meEl.querySelector('video');
+  if (mv.srcObject !== (s.myCam || null)) { mv.srcObject = s.myCam || null; if (s.myCam) mv.play().catch(() => {}); }
+  meEl.hidden = !s.myCam;
+  micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
-  dock.hidden = !s.friends.length;
+  badge.hidden = !(s.muted || s.micStatus === 'denied');
+  badge.innerHTML = s.micStatus === 'denied' ? '🚫' : icon('micOff');
+  if (!s.buddies.length) openDock(false);
+  dock.hidden = !s.buddies.length;
   placeDock();
 }
 
@@ -112,15 +168,46 @@ function renderKnock(s) {
   knockEl.hidden = !k;
   if (!k) return;
   knockEl.innerHTML = `<div class="app-help-card fk-card">
-      <div class="fk-ring">${icon('phone')}</div>
+      <div class="fk-ring${k.face ? ' face' : ''}">${k.face || icon('phone')}</div>
       <div class="fk-name">${nameHTML(k.name)}</div>
+      <div class="fi-says">${k.saved ? 'is calling you' : 'wants to be friends'}</div>
       <div class="name-row">
         <button class="app-btn fk-no" aria-label="No">${icon('close')}</button>
-        <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>
+        <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>${k.saved ? `<button class="app-btn fk-yes fk-video name-ok" aria-label="Yes with video">${icon('camera')}</button>` : ''}
       </div>
     </div>`;
-  knockEl.querySelector('.fk-yes').addEventListener('click', () => { sound.pop(); accept(k.pid); });
+  knockEl.querySelectorAll('.fk-yes').forEach(b => b.addEventListener('click', () => { sound.pop(); accept(k.pid, b.classList.contains('fk-video')); }));
   knockEl.querySelector('.fk-no').addEventListener('click', () => { sound.pop(); decline(k.pid); });
+  sound.pop();
+}
+
+// ------------------------------------------------------------ "come and play" invite popup (any screen)
+
+let shownInvite = '';
+function renderInvite(s) {
+  const v = s.knocks.length ? null : s.invites[0]; // a knock comes first
+  const key = v ? v.uid + ':' + v.code : '';
+  if (key === shownInvite) return;
+  shownInvite = key;
+  inviteEl.hidden = !v;
+  if (!v) return;
+  const g = GAMES.find(x => x.id === v.game);
+  if (!g) { dismissInvite(v); return; }
+  inviteEl.innerHTML = `<div class="app-help-card fi-card">
+      <div class="fi-who"><span class="fi-face">${v.face || '🙂'}</span><b>${nameHTML(v.name)}</b></div>
+      <div class="fi-says">wants to play</div>
+      <div class="fi-game" style="--c:${g.color}"><span class="fi-art">${gameArt(g.id) || g.icon}</span><b>${g.name}</b></div>
+      <div class="name-row">
+        <button class="app-btn fk-no fi-no" aria-label="No">${icon('close')}</button>
+        <button class="app-btn name-ok fi-yes" aria-label="Play">${icon('check')}</button>
+      </div>
+    </div>`;
+  inviteEl.querySelector('.fi-yes').addEventListener('click', () => {
+    sound.pop(); dismissInvite(v);
+    closePanel();
+    location.hash = `#/${v.game}?join=${v.code}`;
+  });
+  inviteEl.querySelector('.fi-no').addEventListener('click', () => { sound.pop(); declineInvite(v); });
   sound.pop();
 }
 
@@ -131,22 +218,23 @@ export function friendBarHTML() { return '<div class="friend-bar"></div>'; }
 function renderBar(s) {
   const bar = document.querySelector('.friend-bar');
   if (!bar) return;
-  let inner;
-  if (s.codeStatus === 'noname') inner = `<span class="fbar-ico">${icon('phone')}</span><b class="fbar-name">${icon('user')}${icon('edit')}</b>`;
-  else if (s.codeStatus === 'offline') inner = '<span class="fbar-ico">📵</span>';
-  else if (s.codeStatus === 'ok') inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode">${picsHTML(s.code)}</span>`;
-  else inner = `<span class="fbar-ico">${icon('phone')}</span><span class="fcode fcode-wait">⏳</span>`;
-  if (s.friends.length) inner += `<span class="fbar-count">${icon('people')} ${s.friends.length}</span>`;
-  bar.innerHTML = `<button class="fbar-btn" aria-label="Friends">${inner}</button>`;
+  // Just a phone button (the code is in the panel). Little number = friends connected.
+  let inner = s.codeStatus === 'offline' ? '📵' : icon('people');
+  const on = s.buddies.length;
+  if (on) inner += `<span class="fbar-count on">${on}</span>`;
+  else inner += `<span class="fbar-plus">${icon('plus')}</span>`;
+  bar.innerHTML = `<button class="fbar-btn${s.friends.length ? ' live' : ''}" aria-label="Friends">${inner}</button>`;
   bar.firstChild.addEventListener('click', () => {
     sound.pop();
-    if (s.codeStatus === 'noname') onEditName();
+    if (s.codeStatus === 'noname') onEditName(true);
     else openPanel();
   });
 }
 
 const OUT_MSG = {
   asking: n => `⏳ ${n ? nameHTML(n) : ''}…`,
+  away: () => '😴 Not on',
+  added: n => `🎉 Friends with ${n ? nameHTML(n) : 'them'}!`,
   no: () => '🙅 No',
   full: () => '👫 Full',
   none: () => '🤷 Not found',
@@ -155,12 +243,14 @@ const OUT_MSG = {
 };
 
 let entry = [];
-function openPanel() {
+let adding = false, editing = false;
+function openPanel(add = false) {
   if (panel) return;
-  entry = [];
+  entry = []; editing = false;
+  adding = add || !friendState().contacts.length; // no friends yet: straight to adding one
   panel = document.createElement('div');
   panel.className = 'app-help friend-panel';
-  panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
+  panel.addEventListener('click', e => { if (e.target === panel) closePanel(); else panelClick(e); });
   shield(panel);
   document.body.appendChild(panel);
   renderPanel(friendState());
@@ -172,58 +262,165 @@ function closePanel() {
   if (s.outgoing && s.outgoing.status !== 'asking') cancelAsk();
 }
 
+function friendRow(c, s) {
+  const full = s.friends.length >= MAX_FRIENDS;
+  let act = '';
+  const chat = c.online && !editing ? `<button class="frow-btn fchat" data-msg="${c.uid}" aria-label="Send a message">${icon('chat')}</button>` : '';
+  if (editing) act = `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
+  else if (c.inCall) act = `<span class="frow-tag">${icon('phone')} In call</span>`;
+  else if (c.calling) act = `<button class="frow-btn fcancel calling" aria-label="Stop">${icon('close')}</button>`;
+  else if (c.online && !full) act = `<button class="frow-btn fring fvring" data-call="${c.uid}" data-video="1" aria-label="Video call">${icon('camera')}</button><button class="frow-btn fring" data-call="${c.uid}" aria-label="Call">${icon('phone')}</button>`;
+  const said = c.said && c.said !== 'asking' && OUT_MSG[c.said] ? `<small class="frow-said">${OUT_MSG[c.said]()}</small>` : '';
+  const status = c.calling ? `Calling… ⏳` : whereText(c.online, c.game);
+  const g = gameOf(c.game);
+  return `<div class="frow${c.online ? ' on' : ''}${c.inCall ? ' incall' : ''}">
+      <span class="frow-face" style="--c:${colorFor(c.uid)}">${c.face || nameHTML(c.name).slice(0, 1)}<i></i></span>
+      <span class="frow-txt"><b>${nameHTML(c.name)}</b><small>${c.online && g ? `<span class="frow-game">${gameArt(g.id) || g.icon}</span>` : ''}${status}</small>${said}</span>
+      ${chat}${act}
+    </div>`;
+}
+
+// ------------------------------------------------------------ quick messages (never kept)
+const QUICK = ['👋 Hi!', '😂', '👍', '❤️', '🎮 Come and play!', '📞 Call me!'];
+let composeEl = null;
+function openCompose(uid) {
+  const c = friendState().contacts.find(x => x.uid === uid);
+  if (!c) return;
+  if (composeEl) composeEl.remove();
+  const o = composeEl = document.createElement('div');
+  o.className = 'app-help fmsg-box';
+  o.innerHTML = `<form class="app-help-card fmsg-card">
+      <div class="fmsg-to"><span class="frow-face" style="--c:${colorFor(uid)}">${c.face || nameHTML(c.name).slice(0, 1)}</span><b>Message ${nameHTML(c.name)}</b></div>
+      <div class="fmsg-quick">${QUICK.map(q => `<button type="button" class="ui-chip">${q}</button>`).join('')}</div>
+      <div class="fmsg-row"><input class="name-input fmsg-input" maxlength="${MSG_MAX}" placeholder="Type a message" autocomplete="off" spellcheck="true" enterkeyhint="send" aria-label="Message">
+        <button type="submit" class="app-btn name-ok fmsg-send" aria-label="Send">${icon('send')}</button></div>
+    </form>`;
+  const input = o.querySelector('input');
+  const close = () => { o.remove(); if (composeEl === o) composeEl = null; };
+  const send = text => {
+    if (!sendMessage(uid, text)) { input.focus(); return; }
+    sound.pop(); close();
+    sayAt(uid, `${icon('check')} Sent`, true);
+  };
+  o.querySelectorAll('.fmsg-quick button').forEach(b => b.addEventListener('click', () => send(b.textContent)));
+  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+  o.addEventListener('click', e => { if (e.target === o) close(); });
+  shield(o);
+  document.body.appendChild(o);
+  input.focus();
+}
+// A speech bubble out of a friend's bubble (or a note at the top if their bubble isn't showing).
+function sayAt(uid, html, mine) {
+  const fb = list && list.querySelector(`.fb[data-uid="${uid}"]`);
+  const host = fb || document.body;
+  const old = host.querySelector(':scope > .fb-say');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'fb-say' + (fb ? '' : ' loose') + (mine ? ' mine' : '');
+  el.innerHTML = html;
+  if (!mine) el.addEventListener('click', e => { e.stopPropagation(); sound.pop(); el.remove(); openCompose(uid); });
+  host.appendChild(el);
+  const ms = mine ? 1800 : Math.min(15000, 6000 + el.textContent.length * 120);
+  setTimeout(() => { el.classList.add('bye'); setTimeout(() => el.remove(), 400); }, ms);
+}
+function showMessage(m) {
+  const t = m.text.replace(/[<>&"]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[ch]));
+  const inBubble = list && list.querySelector(`.fb[data-uid="${m.uid}"]`);
+  sayAt(m.uid, inBubble ? t : `<b>${m.face || ''} ${nameHTML(m.name)}</b> ${t}`);
+  sound.pop();
+}
+
 function renderPanel(s) {
   if (!panel) return;
   const out = s.outgoing;
-  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot">${entry[i] != null ? CODE_PICS[entry[i]] : ''}</span>`).join('');
+  const newOut = out && out.code && out.code[0] !== 'h' ? out : null; // asking by code (not calling a saved friend)
+  const slots = Array.from({ length: FRIEND_CODE_LEN }, (_, i) => `<span class="fslot pic">${entry[i] != null ? picImg(entry[i]) : ''}</span>`).join('');
   const full = s.friends.length >= MAX_FRIENDS;
-  panel.innerHTML = `<div class="app-help-card friend-card">
-      <div class="fsec">
-        <div class="flabel">${icon('user')} My code</div>
+  const list = s.contacts;
+  const justAdded = newOut && newOut.status === 'added';
+  if (justAdded) adding = false;
+  const html = `<div class="app-help-card friend-card">
+      <div class="fhead"><h2>${icon('people')} My friends</h2>
+        ${list.length ? `<button class="fsmall fedit${editing ? ' on' : ''}" aria-label="Edit friends">${icon(editing ? 'check' : 'edit')}</button>` : ''}</div>
+      ${justAdded ? `<div class="fmsg fadded">${OUT_MSG.added(newOut.name)}</div>` : ''}
+      ${list.length ? `<div class="flistv">${list.map(c => friendRow(c, s)).join('')}</div>` : `<div class="fempty">No friends yet. Add one with their pictures!</div>`}
+      ${adding ? `<div class="fsec fadd">
+        <div class="flabel">${icon('user')} My pictures <small>(show your friend)</small></div>
         <div class="fcode big">${s.codeStatus === 'ok' ? picsHTML(s.code) : (s.codeStatus === 'offline' ? '📵' : '⏳')}</div>
-        <button class="fsmall fnew" aria-label="New code">${icon('refresh')}</button>
-      </div>
-      ${full ? '' : `<div class="fsec">
-        <div class="flabel">${icon('people')} Friend's code</div>
+        ${full ? '' : `<div class="flabel">${icon('plus')} Friend's pictures</div>
         <div class="fslots">${slots}</div>
-        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}">${p}</button>`).join('')}</div>
+        <div class="fpad">${CODE_PICS.map((p, i) => `<button data-i="${i}" class="pic" aria-label="${p}">${picImg(i)}</button>`).join('')}</div>
         <div class="name-row">
           <button class="app-btn fback" aria-label="Delete">${icon('backspace')}</button>
-          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('phone')}</button>
+          <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('check')}</button>
         </div>
-        ${out ? `<div class="fmsg">${OUT_MSG[out.status](out.name)}${out.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}
-      </div>`}
+        ${newOut ? `<div class="fmsg">${OUT_MSG[newOut.status](newOut.name)}${newOut.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}`}
+      </div>` : `<button class="tg-btn small fadd-btn">${icon('plus')}<span>Add a friend</span></button>`}
       ${s.friends.length ? `<div class="fsec">
+        <div class="flabel">${icon('phone')} In the call</div>
         <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${f.face ? f.face + ' ' : ''}${nameHTML(f.name)}</span>`).join('')}</div>
         <select class="fmic" aria-label="Microphone" hidden></select>
         <div class="name-row"><button class="app-btn ftools" aria-label="Voice tools">${icon('settings')}</button><button class="app-btn fleave" aria-label="End call">${icon('hangup')}</button></div>
       </div>` : ''}
       <button class="app-btn fclose" aria-label="Close">${icon('check')}</button>
     </div>`;
+  // Only redraw what changed (rebuilding everything made the pictures flash on iPad).
+  const t = document.createElement('div');
+  t.innerHTML = html;
+  if (panel.firstChild) patch(panel.firstChild, t.firstChild); else panel.appendChild(t.firstChild);
   const q = sel => panel.querySelector(sel);
-  q('.fnew').addEventListener('click', () => { sound.pop(); newCode(); });
-  q('.fclose').addEventListener('click', () => { sound.pop(); closePanel(); });
-  panel.querySelectorAll('.fpad button').forEach(b => b.addEventListener('click', () => {
-    if (entry.length >= FRIEND_CODE_LEN) return;
-    sound.pop(); entry.push(+b.dataset.i); renderPanel(friendState());
-  }));
-  q('.fback')?.addEventListener('click', () => { sound.pop(); entry.pop(); renderPanel(friendState()); });
-  q('.fcall')?.addEventListener('click', () => {
-    if (entry.length !== FRIEND_CODE_LEN) return;
-    sound.pop();
-    askFriend(entry.map(i => i.toString(16)).join(''));
-    entry = [];
-  });
-  q('.fcancel')?.addEventListener('click', () => { sound.pop(); cancelAsk(); });
-  q('.fleave')?.addEventListener('click', () => { sound.pop(); leaveGroup(); });
-  q('.ftools')?.addEventListener('click', () => { sound.pop(); openVoiceTools(); });
   const sel = q('.fmic');
-  if (sel && s.micStatus === 'on') listMics().then(mics => {
+  if (sel && s.micStatus === 'on' && !sel.dataset.filled) { sel.dataset.filled = '1'; listMics().then(mics => {
     if (!panel || !sel.isConnected || mics.length < 2) return;
     sel.innerHTML = mics.map(m => `<option value="${m.id.replace(/"/g, '')}"${m.chosen ? ' selected' : ''}>🎤 ${m.label.replace(/[<>&"]/g, '')}</option>`).join('');
     sel.hidden = false;
     sel.addEventListener('change', () => { sound.pop(); chooseMic(sel.value); });
-  });
+  }); }
+}
+
+// Make `cur` look like `want`, keeping nodes that haven't changed (so images don't reload).
+function patch(cur, want) {
+  if (cur.isEqualNode(want)) return;
+  if (cur.nodeName === 'SELECT' && want.nodeName === 'SELECT') return; // keep the mic list it filled in
+  if (cur.nodeType !== want.nodeType || cur.nodeName !== want.nodeName || cur.nodeType !== 1) {
+    cur.replaceWith(want); return;
+  }
+  for (const at of [...cur.attributes]) if (!want.hasAttribute(at.name)) cur.removeAttribute(at.name);
+  for (const at of [...want.attributes]) if (cur.getAttribute(at.name) !== at.value) cur.setAttribute(at.name, at.value);
+  const a = [...cur.childNodes], b = [...want.childNodes];
+  for (let k = 0; k < b.length; k++) {
+    if (k < a.length) patch(a[k], b[k]);
+    else cur.appendChild(b[k]);
+  }
+  for (let k = b.length; k < a.length; k++) a[k].remove();
+}
+
+// One click handler for the whole panel (the panel is patched, not rebuilt).
+function panelClick(e) {
+  const btn = e.target.closest('button');
+  if (!btn || !panel.contains(btn)) return;
+  const re = () => renderPanel(friendState());
+  if (btn.matches('.fclose')) { sound.pop(); closePanel(); }
+  else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; cancelAsk(); newCode(); re(); }
+  else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; re(); }
+  else if (btn.dataset.call) { sound.pop(); callFriend(btn.dataset.call, !!btn.dataset.video); }
+  else if (btn.dataset.rm) {
+    sound.pop();
+    if (!btn.classList.contains('sure')) { btn.classList.add('sure'); btn.innerHTML = icon('check'); return; }
+    removeFriend(btn.dataset.rm);
+  } else if (btn.closest('.fpad')) {
+    if (entry.length >= FRIEND_CODE_LEN) return;
+    sound.pop(); entry.push(+btn.dataset.i); re();
+  } else if (btn.matches('.fback')) { sound.pop(); entry.pop(); re(); }
+  else if (btn.matches('.fcall')) {
+    if (entry.length !== FRIEND_CODE_LEN) return;
+    sound.pop();
+    askFriend(entry.map(i => i.toString(16)).join(''));
+    entry = [];
+  } else if (btn.matches('.fcancel')) { sound.pop(); cancelAsk(); }
+  else if (btn.matches('.fleave')) { sound.pop(); leaveGroup(); }
+  else if (btn.matches('.ftools')) { sound.pop(); openVoiceTools(); }
+  else if (btn.dataset.msg) { sound.pop(); const u = btn.dataset.msg; closePanel(); openCompose(u); }
 }
 
 // ------------------------------------------------------------ start
@@ -232,14 +429,31 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><button class="fb-mic" aria-label="Microphone">${icon('mic')}</button><div class="fb-list"></div></div><div class="app-help fk" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera" hidden>${icon('camera')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div><div class="fb fb-me on video" hidden><div class="fb-face"><video playsinline autoplay muted></video></div><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
   micBtn = layer.querySelector('.fb-mic');
+  hangBtn = layer.querySelector('.fb-hang');
+  badge = layer.querySelector('.fb-badge');
+  // Hang up: tap twice (first tap asks "sure?") so a stray tap doesn't end the call.
+  hangBtn.addEventListener('click', () => {
+    sound.pop();
+    if (hangBtn.classList.contains('sure')) { openDock(false); leaveGroup(); return; }
+    hangBtn.classList.add('sure'); hangBtn.innerHTML = icon('check');
+    openDock(true);
+  });
+  camBtn = layer.querySelector('.fb-cam');
+  meEl = layer.querySelector('.fb-me');
+  camBtn.addEventListener('click', () => {
+    sound.pop();
+    openDock(true);
+    if (friendState().camStatus === 'on') stopCam(); else startCam();
+  });
   micBtn.addEventListener('click', () => {
     const s = friendState();
     sound.pop();
+    openDock(true);
     if (s.micStatus === 'on') setMuted(!s.muted);
     else { setMuted(false); startMic(); }
   });
@@ -248,13 +462,20 @@ export function mountFriends({ editName }) {
     layer.querySelectorAll('.fb audio').forEach(a => { if (a.srcObject && a.paused) a.play().catch(() => {}); });
     unlockVoices();
   }, true);
-  knockEl = layer.querySelector('.fk');
-  shield(dock); shield(knockEl);
+  knockEl = layer.querySelector('.fk:not(.fi)');
+  inviteEl = layer.querySelector('.fi');
+  shield(dock); shield(knockEl); shield(inviteEl);
+  // Games ask for this ("Play with friends" before linking up).
+  window.addEventListener('kg-open-friends', () => {
+    if (friendState().codeStatus === 'noname') onEditName(true);
+    else openPanel();
+  });
   wireDrag();
   let wasAsking = false;
   onFriends(s => {
     renderBubbles(s);
     renderKnock(s);
+    renderInvite(s);
     renderBar(s);
     // they said yes: close the panel so the bubble shows
     if (panel && wasAsking && !s.outgoing && s.inGroup) closePanel();
@@ -262,6 +483,7 @@ export function mountFriends({ editName }) {
     wasAsking = !!(s.outgoing && s.outgoing.status === 'asking');
   });
   onVoiceOpts(() => renderBubbles(friendState()));
+  onMessage(showMessage);
   startFriends();
 }
 

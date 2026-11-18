@@ -1,6 +1,6 @@
 // Drawing together. Uses the shared rooms in js/engine/net.js:
-//   games/paint/rooms/<code>/meta          = { v, base }  (host's picture when the room was made)
-//   games/paint/rooms/<code>/players/<pid> = { emoji }
+//   games/paint/rooms/<code>/meta          = { v, base, hostUid }  (host's picture when the room was made)
+//   games/paint/rooms/<code>/players/<pid> = { emoji, name, face, ready }
 //   games/paint/rooms/<code>/live/<pid>    = { here: 1, cur: <stroke being drawn>, <opId>: <op> ... }
 // Everyone draws on the same page. Each device writes only its own strokes.
 // When a friend leaves, their strokes would vanish with them, so the host
@@ -9,23 +9,23 @@
 // area again in one go, with sync: 1. Only an area with sync counts as "here",
 // so half-written areas never make anyone's strokes disappear. If a friend
 // comes back, the host drops its copies so their undo works again.
-import { myName, cleanName } from '../../js/engine/profile.js';
-import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
+import { cleanName, myFace, cleanFace } from '../../js/engine/profile.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { playerInfo, people } from '../../js/engine/together.js';
 import { sanitizeOp } from './ops.js';
 
-export { CODE_PICS };
 export const GAME_ID = 'paint';
 const AVATARS = ['🦄', '🐸', '🦁', '🐼', '🦊', '🐙', '🐝', '🐧'];
 const CUR_EVERY = 120; // ms
 
 const cleanBase = b => (typeof b === 'string' && /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(b) && b.length < 3e6 ? b : null);
 
-export const makeRoom = base => createRoom(GAME_ID, { v: 1, base: base || '' });
+export const makeRoom = (base, hostUid) => createRoom(GAME_ID, { v: 1, base: base || '', hostUid: hostUid || '' });
 export const findRoom = code => joinRoom(GAME_ID, code);
 
 export function connect(room, { onChange, onBase, onClosed }) {
   const pid = room.uid + '_0'; // database rules: player ids start with "<uid>_"
-  const emoji = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+  const emoji = myFace() || AVATARS[Math.floor(Math.random() * AVATARS.length)];
   const myIds = new Set();     // ids of strokes I ever made (never shown as a friend's)
   const myOps = new Map();     // id -> op, the ones still on the page (sent again after a dropout)
   const others = new Map();    // id -> { op, owner }
@@ -33,11 +33,12 @@ export function connect(room, { onChange, onBase, onClosed }) {
   let cursors = {};            // pid -> op being drawn right now
   let players = {};
   let metaSeen = false, closed = false;
+  let hostUid = room.isHost ? room.uid : '';
   let curPending, curTimer = null;
   const unsubs = [];
   const emit = () => { if (!closed) onChange(); };
 
-  room.setPlayer(pid, { emoji, name: myName() }).catch(() => {});
+  room.setPlayer(pid, { emoji, ...playerInfo(true) }).catch(() => {});
 
   // My whole area in one write: on joining and every time we're back online.
   const writeAll = () => {
@@ -57,6 +58,7 @@ export function connect(room, { onChange, onBase, onClosed }) {
 
   unsubs.push(room.onPlayers(p => { players = p || {}; emit(); }));
   unsubs.push(room.onMeta(m => {
+    if (m && m.hostUid && m.hostUid !== hostUid) { hostUid = m.hostUid; emit(); }
     if (m && !metaSeen) {
       metaSeen = true;
       if (!room.isHost) onBase(cleanBase(m.base));
@@ -119,7 +121,9 @@ export function connect(room, { onChange, onBase, onClosed }) {
 
   return {
     code: room.code,
-    pics: codeToPics(room.code),
+    uid: room.uid,
+    // [{ uid, name, face, ... }] for the shared lobby strip
+    people: () => people(players, hostUid),
     isHost: room.isHost,
     emoji,
     now: room.now,
@@ -151,7 +155,7 @@ export function connect(room, { onChange, onBase, onClosed }) {
 
   function nameOf(id) { return cleanName(players[id] && players[id].name); }
   function emojiOf(id) {
-    const e = players[id] && players[id].emoji;
-    return AVATARS.includes(e) ? e : '🙂';
+    const p = players[id] || {};
+    return cleanFace(p.face) || (AVATARS.includes(p.emoji) ? p.emoji : '🙂');
   }
 }

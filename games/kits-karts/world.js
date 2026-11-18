@@ -520,7 +520,7 @@ export function createWorld(course, items, theme, opts = {}) {
     const ban = canvasTex(512, 96, (g, w, h) => {
       const gr = g.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, '#ff3d00'); gr.addColorStop(0.5, '#ffd600'); gr.addColorStop(1, '#ff3d00');
       g.fillStyle = gr; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#1a1a2e'; g.font = 'bold 64px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText("🏁 KIT'S KARTS 🏁", w / 2, h / 2 + 4);
+      g.fillStyle = '#1a1a2e'; g.font = 'bold 64px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText("🏁 KIT'S KARTS 🏁", w / 2, h / 2 + 4);
     }, false);
     const banM = new THREE.MeshStandardMaterial({ map: ban, emissive: '#ffffff', emissiveMap: ban, emissiveIntensity: 0.25 });
     const bm = new THREE.Mesh(new THREE.BoxGeometry(4, 18, TRACK_W + 28), [banM, banM, postM, postM, postM, postM]);
@@ -744,7 +744,7 @@ export function createWorld(course, items, theme, opts = {}) {
     k.root.traverse(o => { if (o.isMesh && o !== k.root.userData.shadow) o.castShadow = shadows; });
     scene.add(k.root);
     if (tag) {
-      const tex = canvasTex(128, 64, (g, w, h) => { g.fillStyle = tag.color; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 20); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 40px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(tag.text, w / 2, h / 2 + 2); }, false);
+      const tex = canvasTex(128, 64, (g, w, h) => { g.fillStyle = tag.color; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, 20); g.fill(); g.fillStyle = '#fff'; g.font = 'bold 40px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(tag.text, w / 2, h / 2 + 2); }, false);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
       sp.scale.set(18, 9, 1); sp.position.y = 40; sp.renderOrder = 10;
       if (tag.layer) sp.layers.set(tag.layer);

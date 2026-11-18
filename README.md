@@ -27,8 +27,12 @@ Then open http://localhost:8000
 1. Make `games/<my-game>/game.js` that exports `mount(stage, game)`.
    - `stage` is the full-screen element to draw in.
    - Return a function that tidies up (stop loops, remove listeners).
-2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / middle / big).
+2. Add it to the list in `js/games.js` (name, emoji icon, colour, `age`: little / big).
    - Optional: a drawn menu icon in `js/game-art.js`.
+
+## Look (`css/ui.css`)
+- One look for menus in every game: dark glass panels (`.ui-panel` in `.ui-overlay`), Nunito font, `--accent` = the game's colour.
+- Use `.ui-kicker/.ui-title/.ui-sub`, `.ui-label`, `.ui-choices/.ui-choice`, `.ui-seg`, `.ui-btn` (`.primary .go .danger .ghost .round`), `.ui-hud-btn` for buttons over the game. Footer: ghost Back left, main action right. Pause = "Paused": Resume / Restart / Quit.
 
 ## Shared engine bits (`js/engine/`)
 - `canvas.js` – full-screen sharp canvas
@@ -38,23 +42,44 @@ Then open http://localhost:8000
 - `coming-soon.js` – placeholder screen
 
 ## 📞 Friends (on the menu)
+- **Friends ≠ calls.** The home-screen button (👫+) opens My friends. Add a friend once with pictures ("wants to be friends" ✔): you're friends, no call. Saved on this device (`kg-friends`).
+- Every friend who's on shows as a bubble (over every game), with a badge of what they're playing. Tap/hover a bubble → 📞 to start a call; in a call the bubble gets a green ring and the mic/hang-up buttons show.
+- The list shows who's on (green dot) and what they're playing; 📞 calls them too. ✏️ = remove friends. Everyone you've been in a call with is saved.
+- "Play with friends" in a game invites every friend who's on (call or not); the invite is on my home (`meta.invite`), "not this time" comes back as `players/<uid>_r`.
+- Each device keeps a "home" while the app is open (`games/friends/rooms/h<uid>`: name, face, on, game) so saved friends can see it and call it. Calling someone who's already in a call brings them into it.
+- Friend bubbles show a little game badge; hover/tap shows "Playing Kit's Karts".
+- Code pictures are little SVG files (`icons/pics/`, from Twemoji, CC-BY 4.0) so they look the same on Windows, iPad and Android.
 - Every visit to the menu gives a new 6-picture code. Give it to a friend; they type it in (📞 on the menu), you tap ✅.
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.
 - Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
+- 📷 Video: camera off until you tap 📷 in the bubble buttons. Small (240px, 15fps, ~150kbps). Your own mirrored "Me" bubble shows while it's on. Tap a friend's video to make it bigger.
 - 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
 - Some networks block direct links: a TURN server would fix that (not added yet).
 
+- **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
+## 👫 Play together (the same in every game)
+1. Link up once on the menu (📞 + 6 pictures, above).
+2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
+3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games. ✖ shows "not this time" on the host's strip.
+4. Lobby strip shows everyone: host "building the track…", friends "getting ready…" / "✔ Ready!", friends not in yet "on the way…".
+5. Friends do up their kart/tank/car, then tap the big **I'm ready!**. The host's start button stays locked ("Waiting for Sam…") until everyone is ready.
+- Code: `js/engine/together.js` (button, invites, lobby strip, ready helpers). Invite = `players/<uid>_i` in the friend group (`friends.js`). Pop-up in `js/friends-ui.js`. Player entries in game rooms carry `{ name, face, ready }`.
+
 ## Games
 ### ✈️ Sky Pilot (`games/sky-pilot/`)
 3D flight simulator with an easy mode. Built with three.js.
-- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast, carrier catapult + arrestor wire). 8 colours.
+- Plane detail: pilots you can see through real window openings, painted liveries (registrations, stripes, panel lines, doors, "SUNNY AIR" + sun logo, jet star insignia and 77, "RESCUE" heli), antennas, pitot tubes, exhausts, radial engine cylinders, float rudders, flap fairings, wingtip missiles, ejection seat, rotor hub, searchlight, tail rotor guard.
+- 5 aircraft: 🛩️ Sky Cub (easy), 🌊 Splash (seaplane, lands on water), 🚁 Whirly (helicopter), ✈️ Jumbo Jet, 🚀 Zoom Jet (fast and agile: loops and rolls, in easy mode only above ~1000 ft; carrier catapult + arrestor wire). 8 colours.
+- Towns are blob shaped with street grids (tall in the middle, houses at the edges): Sunny Town, Snow Village, Oasis, Farm Village, Palm Bay, Fishport, Lakeside, plus ~30 hamlets and a castle on a hill. Roads and the railway (Forest Farm - Sunny Town - Oasis - Desert Strip) are carved into the ground with gentle slopes: cuttings, embankments, bridges over deep dips, tunnels through big hills.
 - One island: snowy mountains (north), desert with pyramids (east), forest + farms + Duck Lake (west), Sunny Town + beaches + ferris wheel + lighthouse (south), carrier and small islands at sea.
 - 4 airports with real markings, edge/approach lights, running strobes and PAPI lights (2 red + 2 white = right glide path). Hospital roof helipad, harbour for the seaplane.
 - Start on a runway or ☁️ in the sky (lined up to land at Sunny Bay).
-- Life: boats with wakes, cars + train, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
+- Life: boats with wakes, moored boats, beach umbrellas, cows and sheep in the fields, rocks and bushes, cars + 2 trains, other planes doing circuits, hot air balloons, bird flocks, whales, dolphins, deer, ducks, fireworks at night.
 - Day/night cycle (15 min) and weather spells (clear, cloudy, rain, storms with lightning + thunder, snow over the mountains, rainbows after rain). Fly through clouds. Lights come on at night.
+- Graphics: soft valley shadows + ridge highlights on the ground, bumpy ground detail, turquoise shallows + beach foam, clouds lit on the sunny side with silver linings, sun glare, swaying trees, brighter nights.
+- Map: hill shading, height lines, sea depth, towns with streets, roads, railway, runways, carrier, names and landmark icons (🗼 🎡 ⛵ 🏥 🔺 📡 🌬️ 🦆), other pilots with names. Under it: nearest airport (arrow + distance) and time/weather icons. Tap it (or M) for the whole island.
 - Views (just two): 🎥 behind the plane and 👨‍✈️ cockpit (working instruments; glass cockpit in the jumbo, HUD in the jet). Drag to look, wheel/pinch to zoom, double-tap to reset.
 - 🐣 Easy: quick turns (extra turn help when banked), wings level when you let go, holds height, climbs after take-off, turns stay level, no stalls, auto wheels/flaps/brakes, green landing hoops, settles gently onto the runway. 🧑‍✈️ Real: you do it all (altimeter shows sea level height).
 - 🛡️ No crash mode: hitting the ground just bounces you back up. Otherwise a crash = puff of smoke, back to the start.
@@ -158,8 +183,9 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - Your turn (45 s): ◀ ▶ drive (fuel runs out), 🎒 pick a weapon, drag back from your tank like a slingshot, let go to fire.
 - Keys: ← → drive, ↑ ↓ aim, hold Space for power, Q / E change weapon.
-- 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb.
+- 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb (drills out, BOOM, zooms back, BOOM).
 - 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
+- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400 (`mapWidth` in `sim.js`).
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
 - Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).

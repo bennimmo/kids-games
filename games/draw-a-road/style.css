@@ -1,98 +1,70 @@
 /* Draw a Road */
-.dar { position: absolute; inset: 0; pointer-events: none; font-family: "Fredoka", system-ui, sans-serif; }
+.dar { position: absolute; inset: 0; pointer-events: none; font-family: "Nunito", system-ui, sans-serif; }
 .dar button { pointer-events: auto; font-family: inherit; }
 
-/* level picker */
-.dar-menu {
-  pointer-events: auto;
-  position: absolute; inset: 0; overflow-y: auto;
-  padding: 24px 16px 40px;
-  display: flex; flex-direction: column; align-items: center;
-}
-.dar-menu h2 { font-size: clamp(32px, 7vw, 56px); margin: 8px 0 4px 64px; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,.2); }
-.dar-menu p { font-size: 20px; margin: 0 0 20px; color: #01579b; text-align: center; }
-.dar-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; width: 100%; max-width: 900px; }
-.dar-lv {
-  border: 0; border-radius: 24px; padding: 14px 8px 10px;
-  background: var(--btn-face); color: #2b2140; cursor: pointer;
-  box-shadow: var(--btn-shadow); transition: transform .1s;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-}
-.dar-lv:active { transform: scale(.95); box-shadow: var(--btn-press); }
-.dar-lv .num { font-size: 40px; font-weight: 700; line-height: 1; color: #1e88e5; }
-.dar-lv .nm { font-size: 16px; }
-.dar-lv.locked { opacity: .55; cursor: default; }
-.dar b { font-weight: 700; color: rgba(0,0,0,.18); }
-.dar b.on { color: #ffc107; }
+/* level picker (shared look: css/ui.css) */
+.dar-menu { pointer-events: auto; align-items: flex-start; padding-top: 84px; }
+.dar-menu .ui-panel { margin: auto 0; }
+.dar-lv { gap: 4px; }
+.dar-lv .num { font-size: 30px; font-weight: 900; line-height: 1; color: var(--ui-text); }
+.dar-lv .nm { font-size: 14px; font-weight: 700; color: var(--ui-dim); }
+.dar-lv.locked { opacity: .4; cursor: default; }
+.dar-lv.locked .num { font-size: 24px; filter: grayscale(1); }
+.dar b { font-weight: 700; color: rgba(255,255,255,.22); }
+.dar b.on { color: #facc15; }
 .dar b .ic { margin: 0 .04em; }
-.dar b.on .ic { filter: drop-shadow(0 2px 0 #ff8f00); }
-.dar-lv .st { font-size: 24px; letter-spacing: 2px; }
+.dar-lv .st { font-size: 18px; letter-spacing: 1px; }
 
 /* top bar */
 .dar-hud {
-  position: absolute; top: 0; left: 0; right: 0; height: 92px;
-  padding: 10px 12px 10px 96px;
+  position: absolute; top: 0; left: 0; right: 0; height: 84px;
+  padding: 14px 14px 10px 84px;
   display: flex; align-items: center; gap: 12px;
 }
 .dar-title {
-  font-size: 22px; font-weight: 700; color: #01579b;
-  background: rgba(255,255,255,.8); border-radius: 999px; padding: 6px 14px 6px 6px;
+  height: 48px; display: flex; align-items: center; gap: 8px;
+  font-size: 18px; font-weight: 800; color: #fff;
+  background: rgba(16,18,38,.6); border: 1px solid rgba(255,255,255,.16); border-radius: 16px; padding: 0 14px 0 6px;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
 }
-.dar-title .n { display: inline-block; background: #1e88e5; color: #fff; border-radius: 50%; width: 34px; height: 34px; line-height: 34px; text-align: center; margin-right: 4px; }
-.dar-title small { font-size: 15px; color: #d84315; }
-.dar-ink { flex: 1; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.dar-ink .bar { width: 100%; max-width: 320px; height: 22px; background: rgba(255,255,255,.8); border-radius: 999px; overflow: hidden; border: 3px solid #fff; box-shadow: 0 3px 0 rgba(0,0,0,.12); }
-.dar-ink .fill { height: 100%; width: 100%; background: linear-gradient(90deg, #ab47bc, #42a5f5); border-radius: 999px; transition: width .1s; }
-.dar-ink .stars { font-size: 26px; letter-spacing: 3px; line-height: 1; }
-.dar-btns { display: flex; gap: 8px; }
-.dar-btn {
-  width: 64px; height: 64px; border: 0; border-radius: 20px; padding: 0;
-  background: var(--btn-face); color: #2b2140; font-size: 30px; cursor: pointer;
-  box-shadow: var(--btn-shadow); display: inline-grid; place-items: center; transition: transform .1s;
-}
-.dar-btn:active { transform: scale(.92); box-shadow: var(--btn-press); }
+.dar-title .n { display: inline-grid; place-items: center; background: var(--accent); color: var(--ui-ink); border-radius: 10px; width: 36px; height: 36px; font-weight: 900; flex: none; }
+.dar-title small { font-size: 14px; color: #fdba74; }
+.dar-ink { flex: 1; min-width: 90px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dar-ink .bar { width: 100%; max-width: 320px; height: 16px; background: rgba(16,18,38,.5); border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,.25); }
+.dar-ink .fill { height: 100%; width: 100%; background: linear-gradient(90deg, #a855f7, #3b82f6); border-radius: 999px; transition: width .1s; }
+.dar-ink .stars { font-size: 22px; letter-spacing: 3px; line-height: 1; }
+.dar-ink .stars b { color: rgba(16,18,38,.35); }
+.dar-ink .stars b.on { color: #facc15; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.dar-btns { display: flex; gap: 8px; align-items: center; }
 .dar-btn:disabled { opacity: .4; }
-.dar-btn.go, .dar-btn.next, .dar-btn.again { background: var(--btn-ok); color: #fff; }
-.dar-btn.go, .dar-btn.next { width: 84px; }
-.dar-btn.go .ic, .dar-btn.next .ic, .dar-btn.again .ic { stroke-width: 3; }
-.dar-btn.go.stop { background: var(--btn-no); }
+.dar-go { height: 56px; min-width: 104px; font-size: 20px; }
 
 @media (max-width: 720px) {
-  .dar-hud { height: auto; flex-wrap: wrap; padding-left: 92px; gap: 6px; }
-  .dar-title { font-size: 17px; order: 1; }
+  .dar-hud { height: auto; flex-wrap: wrap; padding-left: 80px; gap: 6px; }
+  .dar-title { font-size: 15px; order: 1; height: 44px; }
   .dar-btns { order: 2; margin-left: auto; }
   .dar-ink { order: 3; flex-basis: 100%; }
-  .dar-btn { width: 50px; height: 50px; font-size: 26px; border-radius: 16px; }
-  .dar-btn.go { width: 64px; }
+  .dar-btns .ui-hud-btn { width: 46px; height: 46px; font-size: 22px; border-radius: 14px; }
+  .dar-go { height: 46px; min-width: 80px; font-size: 17px; }
 }
 
 /* messages */
 .dar-toast {
   position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) scale(0);
-  background: #fff; color: #e53935; font-size: 36px; font-weight: 700;
-  padding: 12px 28px; border-radius: 999px; box-shadow: 0 6px 0 rgba(0,0,0,.15);
+  background: rgba(16,18,38,.85); color: #fff; font-size: 24px; font-weight: 800;
+  padding: 12px 24px; border-radius: 16px; box-shadow: 0 16px 34px -14px rgba(0,0,0,.6);
   white-space: nowrap; opacity: 0;
 }
 .dar-toast.show { animation: dar-toast 1.4s ease forwards; }
 @keyframes dar-toast {
-  0% { transform: translate(-50%, -50%) scale(.3); opacity: 0; }
+  0% { transform: translate(-50%, -50%) scale(.9); opacity: 0; }
   15%, 80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
 }
-.dar-pop {
-  pointer-events: auto;
-  position: absolute; inset: 0; background: rgba(0,0,0,.25);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
-}
-.dar-pop .card {
-  background: #fff; border-radius: 32px; padding: 20px 28px 24px; text-align: center;
-  box-shadow: 0 10px 0 rgba(0,0,0,.18); animation: dar-pop .35s ease;
-}
-.dar-pop h3 { font-size: 40px; margin: 0; color: #43a047; }
-.dar-pop p { font-size: 18px; margin: 6px 0 16px; }
-.dar-pop .big-stars { font-size: 72px; letter-spacing: 6px; }
-.dar-pop .big-stars b.on { display: inline-block; animation: dar-star .5s ease both; }
-.dar-pop .row { display: flex; gap: 12px; justify-content: center; }
-@keyframes dar-pop { from { transform: scale(.5); opacity: 0; } }
-@keyframes dar-star { from { transform: scale(0) rotate(-90deg); } }
+.dar-pop { pointer-events: auto; }
+.dar-pop .card { width: min(460px, 100%); }
+.dar-pop .big-stars { font-size: 58px; letter-spacing: 6px; line-height: 1; }
+.dar-pop .big-stars b.on { display: inline-block; animation: dar-star .45s ease both; }
+.dar-foot { width: 100%; justify-content: space-between; }
+@keyframes dar-star { from { transform: scale(0); } }

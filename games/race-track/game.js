@@ -10,7 +10,9 @@ import { startLoop } from '../../js/engine/loop.js';
 import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
-import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, playerInfo, people, lobbyHTML, waitHTML, notReady, startLabel } from '../../js/engine/together.js';
+import { onFriends } from '../../js/engine/friends.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from './track.js';
 import { loadSaved, saveTrack, toggleFav, deleteSaved } from './saved.js';
 import { createRace, stepRace, LAPS, lapsDone, standings, withAutoBoxes, boxesFromItems, PICKUPS } from './sim.js';
@@ -40,11 +42,13 @@ const PHONE = () => TOUCH && Math.min(innerWidth, innerHeight) < 520;
 const CTRL_ICON = { finger: '👆', tilt: '📱', buttons: '🎮' };
 const CTRL_KEY = 'rt-ctrl';
 const PLAYERS_KEY = 'raffy-race-players-v1';
-const GAME = 'raffy-race';
+const GAME = 'raffy-race';           // online room area
+const ID = 'race-track';              // menu id (invites, together.js)
 const SEND_EVERY = 1 / 15;
 const DRAFT_EVERY = 0.1;              // host's half-drawn line is sent 10x a second
 const REJOIN_KEY = 'raffy-race-room-v1';
-const REJOIN_MS = 15 * 60 * 1000;     // come back within 15 min = rejoin without the pictures
+const REJOIN_MS = 15 * 60 * 1000;     // come back within 15 min = rejoin straight away
+const HOST_DOING = 'drawing the track';
 
 function rememberRoom(code) {
   try { localStorage.setItem(REJOIN_KEY, JSON.stringify({ code, t: Date.now() })); } catch (e) { /* ignore */ }
@@ -86,7 +90,7 @@ export function mount(stage) {
   const R = createRenderer(view);
 
   const S = {
-    phase: 'build',       // build | race | results | choose | saved | online | join | lobby
+    phase: 'build',       // build | race | results | choose | saved | lobby
     back: 'build',        // where ↩️ goes from the saved screen
     track: null,
     items: [],
@@ -103,7 +107,7 @@ export function mount(stage) {
     net: null,            // online room state, see goOnline()
     busy: false,          // waiting for the internet
     sad: 0,               // time to show 😢 until
-    joinCode: '',
+    msg: '',              // friendly message with the 😢 (e.g. "That game has finished")
   };
   let engines = [];
   let acc = 0;
@@ -144,13 +148,11 @@ export function mount(stage) {
     if (S.phase === 'results') resultsUI();
     if (S.phase === 'choose') chooseUI();
     if (S.phase === 'saved') savedUI();
-    if (S.phase === 'online') onlineUI();
-    if (S.phase === 'join') joinUI();
     if (S.phase === 'lobby') lobbyUI();
-    if (S.net && S.phase === 'build') badgeUI(false);
+    if (S.net && S.phase === 'build') badgeUI();
     if (S.net && S.net.status === 'waiting' && S.phase !== 'build' && S.phase !== 'lobby') ui.appendChild(el(`<div class="rt-netwait">📶⏳</div>`));
-    if (S.busy) ui.appendChild(el(`<div class="rt-overlay"><div class="rt-wait">⏳</div></div>`));
-    if (S.time < S.sad) ui.appendChild(el(`<div class="rt-overlay rt-sad"><div class="rt-wait">😢</div></div>`));
+    if (S.busy) ui.appendChild(el(`<div class="ui-overlay rt-overlay"><div class="ui-panel rt-mini-panel"><div class="rt-wait">⏳</div><p class="ui-sub">One moment…</p></div></div>`));
+    if (S.time < S.sad) ui.appendChild(el(`<div class="ui-overlay rt-overlay rt-sad"><div class="ui-panel rt-mini-panel"><div class="rt-wait">😢</div><p class="ui-sub">${S.msg || "That didn't work"}</p></div></div>`));
     if (!S.rotateOk) { // only shows on a phone held upright (CSS); tap to carry on anyway
       const r = el(`<div class="rt-rotate"><span>📱</span></div>`);
       r.addEventListener('click', () => { S.rotateOk = true; r.remove(); });
@@ -160,13 +162,13 @@ export function mount(stage) {
 
   function buildUI() {
     const top = el(`<div class="rt-top">
-      ${S.net ? '' : `<button class="rt-btn rt-online" title="Play with friends">${icon('globe')}</button>`}
-      <button class="rt-btn rt-saved" title="Saved tracks">${icon('gallery')}</button>
-      <button class="rt-btn rt-clear" title="Clear">${icon('trash')}</button></div>`);
+      ${S.net ? '' : togetherButton('Play with friends', 'small')}
+      <button class="rt-btn ui-hud-btn rt-saved" title="Saved tracks">${icon('gallery')}</button>
+      <button class="rt-btn ui-hud-btn rt-clear" title="Clear">${icon('trash')}</button></div>`);
     click(top.querySelector('.rt-clear'), () => { S.track = null; S.items = []; sceneChanged(); render(); });
     click(top.querySelector('.rt-saved'), () => openSaved('build'));
-    const on = top.querySelector('.rt-online');
-    if (on) click(on, () => { S.phase = 'online'; render(); });
+    const on = top.querySelector('[data-together]');
+    if (on) click(on, hostRoom);
     ui.appendChild(top);
 
     const bar = el(`<div class="rt-bar"></div>`);
@@ -228,8 +230,9 @@ export function mount(stage) {
     });
     bar.appendChild(pal);
 
-    const go = el(`<button class="rt-go ${S.track ? '' : 'off'}">🏁</button>`);
-    click(go, () => { if (S.track) (S.net ? hostStartRace() : startRace()); });
+    const locked = S.net && notReady(netPeople()).length > 0; // a friend is still getting ready
+    const go = el(`<button class="rt-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">${icon('flag')}<span>Race</span></button>`);
+    click(go, () => { if (S.track && !locked) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
     ui.appendChild(bar);
 
@@ -246,12 +249,14 @@ export function mount(stage) {
   // Pick colour, car type and sticker. Icons only.
   function customise(player) {
     const used = S.players.filter(p => p !== player).map(p => p.color);
-    const pop = el(`<div class="rt-custom" style="--c:${player.color}">
-      <div class="rt-opts rt-opt-colors"></div>
-      <div class="rt-opts rt-opt-styles"></div>
-      <div class="rt-opts rt-opt-decals"></div>
-      <button class="rt-ok">${icon('check')}</button>
-    </div>`);
+    const wrap = el(`<div class="ui-overlay rt-overlay rt-custom-wrap"><div class="ui-panel wide left rt-custom" style="--c:${player.color}">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">My car</h2>
+      <div class="ui-label">Colour</div><div class="rt-opts rt-opt-colors"></div>
+      <div class="ui-label">Car</div><div class="rt-opts rt-opt-styles"></div>
+      <div class="ui-label">Sticker</div><div class="rt-opts rt-opt-decals"></div>
+      <div class="ui-row end rt-foot"><button class="ui-btn go rt-ok">${icon('check')}<span>Done</span></button></div>
+    </div></div>`);
+    const pop = wrap.querySelector('.rt-custom');
     const set = (k, v) => { player[k] = v; savePlayers(S.players); syncMyPlayers(); render(); };
     COLORS.forEach(c => {
       const sw = el(`<button class="rt-swatch ${used.includes(c) ? 'taken' : ''} ${c === player.color ? 'on' : ''}" style="background:${c}"></button>`);
@@ -271,7 +276,8 @@ export function mount(stage) {
       pop.querySelector('.rt-opt-decals').appendChild(b);
     });
     click(pop.querySelector('.rt-ok'), () => { S.customFor = null; render(); });
-    ui.appendChild(pop);
+    wrap.addEventListener('click', e => { if (e.target === wrap) { S.customFor = null; render(); } });
+    ui.appendChild(wrap);
   }
 
   function showBin(on) {
@@ -288,10 +294,10 @@ export function mount(stage) {
   function raceUI() {
     const guest = S.net && !S.net.isHost;
     const top = el(guest
-      ? `<div class="rt-top"><button class="rt-btn rt-leave" title="Leave">${icon('leave')}</button></div>`
+      ? `<div class="rt-top"><button class="rt-btn ui-hud-btn rt-leave" title="Leave">${icon('leave')}</button></div>`
       : `<div class="rt-top">
-      <button class="rt-btn rt-again" title="Race again">${icon('retry')}</button>
-      <button class="rt-btn rt-draw" title="Draw">${icon('edit')}</button>
+      <button class="rt-btn ui-hud-btn rt-again" title="Race again">${icon('retry')}</button>
+      <button class="rt-btn ui-hud-btn rt-draw" title="Pause">${icon('pause')}</button>
     </div>`);
     if (guest) click(top.querySelector('.rt-leave'), () => leaveOnline());
     else {
@@ -472,13 +478,13 @@ export function mount(stage) {
 
   function resultsUI() {
     const list = standings(S.race);
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-trophy">🏆</div>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel rt-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Results</h2>
       <div class="rt-podium"></div>
-      <div class="rt-actions">${S.net && !S.net.isHost
-        ? '<div class="rt-wait rt-wait-small">⏳</div>'
-        : `<button class="rt-big rt-again2">${icon('retry')}</button><button class="rt-big rt-draw2">${icon('edit')}</button>`}
-      </div></div></div>`);
+      ${S.net && !S.net.isHost
+        ? '<p class="ui-sub">⏳ Waiting for the next race…</p>'
+        : `<div class="ui-row rt-foot"><button class="ui-btn ghost rt-draw2">${icon('edit')}<span>Track</span></button><button class="ui-btn primary big rt-again2">${icon('retry')}<span>Race again</span></button></div>`}
+      </div></div>`);
     list.forEach((c, i) => {
       const row = el(`<div class="rt-place"><span>${c.finished ? MEDALS[i] || '🏅' : '🐢'}</span><canvas width="120" height="72"></canvas>${c.name ? `<b class="rt-name">${c.name}</b>` : ''}</div>`);
       drawCarIcon(row.querySelector('canvas'), c);
@@ -492,18 +498,20 @@ export function mount(stage) {
   }
 
   function chooseUI() {
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-actions">
-        <button class="rt-choice rt-edit"><canvas width="240" height="150"></canvas><span>✏️</span></button>
-        <button class="rt-choice rt-fresh"><div class="rt-blank"></div><span>✨</span></button>
-        <button class="rt-choice rt-open"><div class="rt-blank rt-gallery">🖼️</div><span>⭐</span></button>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel wide rt-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Paused</h2>
+      <div class="ui-choices rt-choices">
+        <button class="ui-choice rt-choice rt-edit"><canvas width="240" height="150"></canvas><span>${icon('edit')} Change this track</span></button>
+        <button class="ui-choice rt-choice rt-fresh"><div class="rt-blank"></div><span>${icon('plus')} New track</span></button>
+        <button class="ui-choice rt-choice rt-open"><div class="rt-blank rt-gallery">${icon('gallery')}</div><span>${icon('star')} Saved tracks</span></button>
       </div>
-      <button class="rt-btn rt-back">${icon('back')}</button>
+      <div class="ui-row rt-foot"><button class="ui-btn ghost rt-restart">${icon('retry')}<span>Restart race</span></button><button class="ui-btn primary big rt-back">${icon('play')}<span>Resume</span></button></div>
     </div></div>`);
     R.thumb(box.querySelector('canvas'));
     click(box.querySelector('.rt-edit'), () => toBuild(false));
     click(box.querySelector('.rt-fresh'), () => toBuild(true));
     click(box.querySelector('.rt-open'), () => openSaved('choose'));
+    click(box.querySelector('.rt-restart'), () => { S.paused = false; raceAgain(); });
     click(box.querySelector('.rt-back'), () => {
       S.paused = false;
       S.phase = S.race && S.race.phase === 'done' ? 'results' : 'race';
@@ -521,12 +529,13 @@ export function mount(stage) {
 
   function savedUI() {
     const list = loadSaved();
-    const box = el(`<div class="rt-overlay"><div class="rt-card rt-saved-card">
-      <button class="rt-btn rt-back">${icon('back')}</button>
+    const box = el(`<div class="ui-overlay rt-overlay"><div class="ui-panel wide rt-saved-card">
+      <div class="ui-kicker">Raffy Race</div><h2 class="ui-title">Saved tracks</h2><p class="ui-sub">Tap a track to race it again. ⭐ keeps it.</p>
       <div class="rt-gallery-grid"></div>
+      <div class="ui-row rt-foot"><button class="ui-btn ghost rt-back">${icon('back')}<span>Back</span></button></div>
     </div></div>`);
     const grid = box.querySelector('.rt-gallery-grid');
-    if (!list.length) grid.appendChild(el(`<div class="rt-empty">🏁 ➜ 🖼️</div>`));
+    if (!list.length) grid.appendChild(el(`<div class="rt-empty ui-sub">No tracks yet. Draw one and race it!</div>`));
     list.forEach(s => {
       const card = el(`<div class="rt-saved-item ${s.fav ? 'fav' : ''}">
         <canvas width="240" height="150"></canvas>
@@ -614,15 +623,15 @@ export function mount(stage) {
     S.players.forEach((p, i) => {
       const id = pidOf(p);
       now.add(id);
-      S.net.room.setPlayer(id, { color: p.color, style: p.style || 'truck', decal: p.decal || 'none', name: i === 0 ? myName() : '', joined: S.net.joined + i });
+      S.net.room.setPlayer(id, { ...playerInfo(S.net.isHost || S.net.ready), color: p.color, style: p.style || 'truck', decal: p.decal || 'none', name: i === 0 ? myName() : '', joined: S.net.joined + i });
     });
     S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
     S.net.synced = now;
   }
 
   function goOnline(room) {
-    S.net = { room, isHost: room.isHost, code: room.code, meta: null, players: {}, live: {}, raceId: 0, trackKey: '', synced: new Set(), joined: room.now(), sendAcc: 0, unsubs: [], status: 'ok', draftAt: 0 };
-    if (!room.isHost) rememberRoom(room.code);
+    S.net = { room, isHost: room.isHost, code: room.code, ready: false, meta: null, players: {}, live: {}, raceId: 0, trackKey: '', synced: new Set(), joined: room.now(), sendAcc: 0, unsubs: [], status: 'ok', draftAt: 0 };
+    if (!room.isHost) { rememberRoom(room.code); joined(ID, room.code); }
     keepAwake(true);
     S.net.unsubs.push(room.onMeta(onMeta));
     if (room.onStatus) S.net.unsubs.push(room.onStatus(st => {
@@ -639,12 +648,14 @@ export function mount(stage) {
     syncMyPlayers();
   }
 
+  // "Play with friends": make a room and invite friends (or link up with friends first)
   async function hostRoom() {
-    if (!S.track) return;
     S.busy = true; render();
     try {
-      const room = await createRoom(GAME, { state: 'build', raceId: 0, track: trackData() });
+      const room = await playTogether(ID, () => createRoom(GAME, { state: 'build', raceId: 0, track: trackData() }));
       S.busy = false;
+      if (!room) { render(); return; } // friends panel opened instead
+      room.setMeta({ hostUid: room.uid });
       goOnline(room);
       S.phase = 'build';
     } catch (e) {
@@ -662,16 +673,16 @@ export function mount(stage) {
       const room = await joinRoom(GAME, code);
       S.busy = false;
       if (!room) {
-        if (silent) { forgetRoom(); render(); return; }
-        S.joinCode = ''; S.sad = S.time + 1.5; sound.bump(); render(); return;
+        forgetRoom();
+        if (!silent) { S.msg = 'That game has finished'; S.sad = S.time + 2.5; sound.bump(); }
+        render(); return;
       }
       goOnline(room);
       S.phase = 'lobby';
     } catch (e) {
       console.warn('online failed', e);
       S.busy = false;
-      S.joinCode = '';
-      if (!silent) S.sad = S.time + 2;
+      if (!silent) { S.msg = ''; S.sad = S.time + 2; }
     }
     render();
   }
@@ -681,6 +692,7 @@ export function mount(stage) {
     const net = S.net;
     S.net = null;
     forgetRoom();
+    leftRoom();
     keepAwake(false);
     net.unsubs.forEach(u => u && u());
     net.room.leave();
@@ -690,14 +702,16 @@ export function mount(stage) {
     R.setScene(S.track, S.items);
     R.resetRace();
     S.phase = 'build';
-    if (gone) S.sad = S.time + 2;
+    if (gone) { S.msg = 'That game has finished'; S.sad = S.time + 2.5; }
     render();
   }
 
   function onMeta(m) {
     if (!S.net) return;
     if (!m) { leaveOnline(true); return; } // the host left
+    const newHost = !S.net.meta || S.net.meta.hostUid !== m.hostUid;
     S.net.meta = m;
+    if (newHost && (S.phase === 'lobby' || S.phase === 'build')) render(); // now we know who's hosting
     if (!S.net.isHost && m.track) {
       const key = JSON.stringify(m.track);
       if (key !== S.net.trackKey) {
@@ -714,6 +728,7 @@ export function mount(stage) {
       R.setScene(S.track, S.items);
       R.resetRace();
       S.phase = 'lobby';
+      if (S.net.ready) { S.net.ready = false; syncMyPlayers(); } // get ready again for the next race
       render();
     }
   }
@@ -807,17 +822,6 @@ export function mount(stage) {
     }
   }
 
-  function picsHTML(code) {
-    return `<div class="rt-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
-  }
-  function carsHTML() {
-    return `<div class="rt-room-cars">${roster().map(p => `<figure><canvas width="100" height="70"></canvas>${p.name ? `<b class="rt-name">${p.name}</b>` : ''}</figure>`).join('')}</div>`;
-  }
-  function fillCars(node) {
-    const list = roster();
-    node.querySelectorAll('.rt-room-cars canvas').forEach((c, i) => drawCarIcon(c, list[i]));
-  }
-
   // keep the iPad screen on while playing online
   let wakeLock = null;
   async function keepAwake(on) {
@@ -858,53 +862,40 @@ export function mount(stage) {
     };
   }
 
-  // code + who is here (+ ✏️ while a friend watches the host draw)
-  function badgeUI(watching) {
+  // who's here and what they're doing (same strip in every game, together.js)
+  function netPeople() {
+    if (!S.net) return [];
+    const hostUid = S.net.isHost ? S.net.room.uid : S.net.meta && S.net.meta.hostUid;
+    return people(S.net.players, hostUid);
+  }
+  function badgeUI() {
+    const list = netPeople();
     const wait = S.net.status === 'waiting' ? '<span class="rt-badge-wait">📶⏳</span>' : '';
-    const pen = watching ? '<span class="rt-badge-pen">✏️</span>' : '';
-    const b = el(`<div class="rt-badge">${picsHTML(S.net.code)}${carsHTML()}${pen}${wait}<button class="rt-btn rt-leave">${icon('leave')}</button></div>`);
-    fillCars(b);
+    const label = S.net.isHost && notReady(list).length ? `<div class="rt-golabel">${startLabel(list)}</div>` : '';
+    const b = el(`<div class="rt-badge">${lobbyHTML(list, { hostDoing: HOST_DOING, myUid: S.net.room.uid })}${wait}<button class="ui-btn danger round small rt-leave" title="Leave">${icon('leave')}</button>${label}</div>`);
     click(b.querySelector('.rt-leave'), () => leaveOnline());
     ui.appendChild(b);
   }
 
-  function onlineUI() {
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-actions">
-        <button class="rt-choice rt-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
-        <button class="rt-choice rt-join"><div class="rt-blank rt-gallery rt-pics3">🐶🍎🚀</div><span>🔑</span></button>
-      </div>
-      <button class="rt-btn rt-back">${icon('back')}</button>
-    </div></div>`);
-    if (S.track) R.thumb(box.querySelector('canvas'));
-    click(box.querySelector('.rt-host'), () => { if (S.track) hostRoom(); });
-    click(box.querySelector('.rt-join'), () => { S.joinCode = ''; S.phase = 'join'; render(); });
-    click(box.querySelector('.rt-back'), () => { S.phase = 'build'; render(); });
-    ui.appendChild(box);
-  }
-
-  function joinUI() {
-    const slots = Array.from({ length: CODE_LEN }, (_, i) => i).map(i => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
-    const box = el(`<div class="rt-overlay"><div class="rt-card">
-      <div class="rt-code rt-slots">${slots}</div>
-      <div class="rt-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <button class="rt-btn rt-del-pic">${icon('backspace')}</button>
-      <button class="rt-btn rt-back">${icon('back')}</button>
-    </div></div>`);
-    box.querySelectorAll('.rt-keypad button').forEach(b => click(b, () => {
-      if (S.joinCode.length >= CODE_LEN) return;
-      S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) tryJoin(S.joinCode);
-      else render();
-    }));
-    click(box.querySelector('.rt-del-pic'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
-    click(box.querySelector('.rt-back'), () => { S.phase = 'online'; render(); });
-    ui.appendChild(box);
-  }
-
-  // guest: watch the host draw, until the host starts the race
+  // friend: watch the host draw, do up your car, then press I'm ready
   function lobbyUI() {
-    badgeUI(true);
+    badgeUI();
+    const list = netPeople();
+    const host = list.find(p => p.host);
+    const box = el(`<div class="rt-lobby">
+      <div class="rt-mycars"><b>My car</b><div class="rt-mycar-row"></div></div>
+      ${waitHTML(host, HOST_DOING, S.net.ready)}
+    </div>`);
+    S.players.forEach(p => {
+      const c = el(`<button class="rt-mycar" title="Change my car"><canvas width="120" height="72"></canvas><span class="rt-mycar-pen">${icon('edit')}</span></button>`);
+      drawCarIcon(c.querySelector('canvas'), p);
+      click(c, () => { S.customFor = S.customFor === p.id ? null : p.id; render(); });
+      box.querySelector('.rt-mycar-row').appendChild(c);
+    });
+    click(box.querySelector('[data-ready]'), () => { S.net.ready = !S.net.ready; syncMyPlayers(); render(); });
+    ui.appendChild(box);
+    const who = S.players.find(p => p.id === S.customFor);
+    if (who) customise(who);
   }
 
   function startRace() {
@@ -1161,11 +1152,16 @@ export function mount(stage) {
 
   R.setScene(null, []);
   render();
+  const invited = takeJoinCode(ID); // came from a friend's "come and play" pop-up
   const again = rememberedRoom();
-  if (again) tryJoin(again, true); // came back (reload, 🏠 by mistake): rejoin without the pictures
+  if (invited) tryJoin(invited);
+  else if (again) tryJoin(again, true); // came back (reload, 🏠 by mistake): rejoin straight away
+  // friends coming / going: keep the strip up to date
+  const unFriends = onFriends(() => { if (S.net && (S.phase === 'build' || S.phase === 'lobby') && !S.stroke && !S.drag) render(); });
 
   return () => {
-    if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; }
+    if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; leftRoom(); }
+    unFriends();
     keepAwake(false);
     document.removeEventListener('visibilitychange', onVisible);
     stopLoop();

@@ -3,14 +3,14 @@
 // Everything is drag and drop. Brushes (lipstick, eyeshadow, blusher, face paint)
 // paint as you rub, and stay in your hand until you put them down. Scissors cut hair.
 // Every girl you make is saved in this browser (last 20) so you can carry on later.
-import { CODE_LEN } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftRoom, lobbyHTML } from '../../js/engine/together.js';
 import { sound } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
 import { GIRLS, TABS, ITEMS, HAIR_COLORS, HAIR_LENGTHS, EYE_COLORS } from './items.js';
 import { renderGirl, swatch, tiePoints, hairBottom, strokeAttrs, ptsToD, FACE_VIEW, BODY_VIEW } from './draw.js';
 import { createStore, newLook, newKey, presetStrokes } from './look.js';
 import { loadGallery, saveToGallery, removeFromGallery } from './gallery.js';
-import { makeRoom, findRoom, connect, CODE_PICS } from './online.js';
+import { makeRoom, findRoom, connect, GAME_ID } from './online.js';
 
 const HAIR_SPOTS = [[132, 128], [268, 128], [160, 104], [240, 104], [118, 172], [282, 172], [200, 96]];
 const isTool = it => it && (it.action === 'paint' || it.action === 'cut');
@@ -71,6 +71,7 @@ export function mount(stage) {
       onChange: () => onNet && onNet(),
       onClosed: () => {
         net = null;
+        leftRoom();
         if (screen === 'salon') salonScreen(); else pickScreen();
         banner('The room has closed 👋');
       },
@@ -81,86 +82,44 @@ export function mount(stage) {
   async function leaveRoom() {
     const n = net;
     net = null;
-    if (n) await n.leave();
+    if (n) { leftRoom(); await n.leave(); }
   }
-  const codeHtml = () => net ? net.pics.map(p => `<span>${p}</span>`).join('') : '';
-  const friendDots = () => net ? net.friends().map(f => `<span title="${f.who || f.name}">${f.emoji}</span>`).join('') : '';
+  // Shared strip of who's here (together.js). Everyone dresses up, so every chip says the same.
+  const stripHtml = () => net ? lobbyHTML(net.people().map(p => ({ ...p, host: true })), { hostDoing: 'doing makeovers', myUid: net.uid }) : '';
 
-  // ---------- Play with friends: make or join a room ----------
-  function friendsScreen() {
-    clearScreen();
-    screen = 'friends';
-    root.innerHTML = `
-      <div class="bb-mp">
-        <button class="bb-back" aria-label="Back">${icon('back')}</button>
-        <h1 class="bb-title">Play with friends</h1>
-        <div class="bb-mp-choices">
-          <button class="bb-big" data-mp="make"><span class="i">🏠</span><span>Make a room</span></button>
-          <button class="bb-big" data-mp="join"><span class="i">🔑</span><span>Join a room</span></button>
-        </div>
-        <p class="bb-mp-msg"></p>
-      </div>`;
-    const msg = root.querySelector('.bb-mp-msg');
-    root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); pickScreen(); });
-    root.querySelector('[data-mp="join"]').addEventListener('click', () => { sound.pop(); joinScreen(); });
-    root.querySelector('[data-mp="make"]').addEventListener('click', async () => {
-      sound.pop();
-      msg.textContent = 'Making a room… ⏳';
-      try {
-        joined(await makeRoom());
-        sound.win();
-        pickScreen();
-      } catch (e) {
-        msg.textContent = "Couldn't connect 😢 Try again";
-      }
-    });
+  // ---------- Play with friends (together.js): invite linked friends ----------
+  let starting = false;
+  async function startTogether() {
+    if (starting || net) return;
+    starting = true;
+    try {
+      const room = await playTogether(GAME_ID, async () => {
+        const r = await makeRoom();
+        await r.setMeta({ hostUid: r.uid }).catch(() => {});
+        return r;
+      });
+      if (!room) return;            // friends panel opened instead
+      joined(room);
+      sound.win();
+      if (screen === 'pick') pickScreen();
+    } catch (e) {
+      banner("Couldn't connect 😢 Try again");
+    } finally {
+      starting = false;
+    }
   }
-
-  function joinScreen() {
-    clearScreen();
-    screen = 'join';
-    let code = '';
-    root.innerHTML = `
-      <div class="bb-mp">
-        <button class="bb-back" aria-label="Back">${icon('back')}</button>
-        <h1 class="bb-title">Tap your friend's pictures</h1>
-        <div class="bb-slots">${'<span></span>'.repeat(CODE_LEN)}</div>
-        <div class="bb-keypad">
-          ${CODE_PICS.map((p, i) => `<button data-k="${i.toString(16)}">${p}</button>`).join('')}
-        </div>
-        <button class="bb-rub" aria-label="Rub out">${icon('backspace')}</button>
-        <p class="bb-mp-msg"></p>
-      </div>`;
-    const slots = [...root.querySelectorAll('.bb-slots span')];
-    const msg = root.querySelector('.bb-mp-msg');
-    const show = () => slots.forEach((el, i) => { el.textContent = code[i] ? CODE_PICS[parseInt(code[i], 16)] : ''; });
-    root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); friendsScreen(); });
-    root.querySelector('.bb-rub').addEventListener('click', () => { code = code.slice(0, -1); show(); sound.pop(); });
-    root.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', async () => {
-      if (code.length >= CODE_LEN) return;
-      code += b.dataset.k;
-      show();
-      sound.tone(500 + code.length * 120, .08, 'sine', .15);
-      if (code.length < CODE_LEN) return;
-      msg.textContent = 'Looking… ⏳';
-      try {
-        const room = await findRoom(code);
-        if (!room) {
-          msg.textContent = 'No room with those pictures. Try again!';
-          sound.bump();
-          const box = root.querySelector('.bb-slots');
-          box.classList.remove('bb-shake'); void box.offsetWidth; box.classList.add('bb-shake');
-          code = ''; show();
-          return;
-        }
-        joined(room);
-        sound.win();
-        pickScreen();
-      } catch (e) {
-        msg.textContent = "Couldn't connect 😢 Try again";
-        code = ''; show();
-      }
-    }));
+  // Opened from a friend's invite: join straight away.
+  async function joinFromInvite(code) {
+    try {
+      const room = await findRoom(code);
+      if (!room) { banner('That game has finished 👋'); return; }
+      joined(room);
+      joinedRoom(GAME_ID, code);
+      sound.win();
+      if (screen === 'pick') pickScreen();
+    } catch (e) {
+      banner("Couldn't connect 😢 Try again");
+    }
   }
 
   // ---------- 1. Pick a girl ----------
@@ -170,16 +129,15 @@ export function mount(stage) {
     const saved = loadGallery();
     root.innerHTML = `
       <div class="bb-pick">
-        <h1 class="bb-title">Beautiful Bells</h1>
+        <div class="bb-head">
+          <div class="ui-kicker">Beautiful Bells</div>
+          <h1 class="ui-title">Pick your girl</h1>
+        </div>
         ${net ? `
           <div class="bb-roombar">
-            <span class="bb-code bb-code-key"><b>🔑</b>${codeHtml()}</span>
-            <span class="bb-sep"></span>
-            <span class="bb-roombar-f">${friendDots()}</span>
-            <button class="bb-leave">${icon('leave')}Leave</button>
-          </div>` : `
-          <button class="bb-friends-btn">${icon('globe')}Play with friends</button>`}
-        <p class="bb-sub">Pick your girl!</p>
+            <span class="bb-roombar-f">${stripHtml()}</span>
+            <button class="ui-btn small danger bb-leave">${icon('leave')}Leave</button>
+          </div>` : `<div class="bb-tg">${togetherButton()}</div>`}
         <div class="bb-girls">
           ${GIRLS.map(g => `
             <button class="bb-card" data-girl="${g.id}">
@@ -188,7 +146,7 @@ export function mount(stage) {
             </button>`).join('')}
         </div>
         ${saved.length ? `
-          <h2 class="bb-sub">💖 My girls</h2>
+          <h2 class="ui-label bb-label">My girls</h2>
           <div class="bb-girls bb-saved">
             ${saved.map(s => `
               <div class="bb-card-wrap">
@@ -200,11 +158,11 @@ export function mount(stage) {
               </div>`).join('')}
           </div>` : ''}
       </div>`;
-    const fb = root.querySelector('.bb-friends-btn');
-    if (fb) fb.addEventListener('click', () => { sound.pop(); friendsScreen(); });
+    const tg = root.querySelector('[data-together]');
+    if (tg) tg.addEventListener('click', () => { sound.pop(); startTogether(); });
     const lb = root.querySelector('.bb-leave');
     if (lb) lb.addEventListener('click', async () => { sound.bump(); await leaveRoom(); pickScreen(); });
-    onNet = () => { const f = root.querySelector('.bb-roombar-f'); if (f) f.innerHTML = friendDots(); };
+    onNet = () => { const f = root.querySelector('.bb-roombar-f'); if (f) f.innerHTML = stripHtml(); };
     root.querySelectorAll('[data-girl]').forEach(b => b.addEventListener('click', () => {
       sound.pop();
       startSession(newLook(GIRLS.find(g => g.id === b.dataset.girl)));
@@ -239,19 +197,19 @@ export function mount(stage) {
       const look = store.get();
       root.innerHTML = `
         <div class="bb-setup">
-          <button class="bb-back" aria-label="Back">${icon('back')}</button>
+          <button class="ui-btn round bb-back" aria-label="Back">${icon('back')}</button>
           <div class="bb-setup-pic">
-            <h1 class="bb-title">${look.name}</h1>
+            <div class="bb-head"><div class="ui-kicker">Beautiful Bells</div><h1 class="ui-title">${look.name}</h1></div>
             <div class="bb-setup-girl">${renderGirl(look)}</div>
           </div>
           <div class="bb-setup-panel">
-            <h3>Hair colour</h3>
+            <h3 class="ui-label">Hair colour</h3>
             <div class="bb-row">
               ${Object.entries(HAIR_COLORS).map(([k, c]) => `
                 <button class="bb-dot ${look.hairColor === k ? 'on' : ''}" data-set="hairColor" data-v="${k}"
                   style="background:linear-gradient(135deg, ${c.light}, ${c.base} 55%, ${c.shade})" aria-label="${c.name}"></button>`).join('')}
             </div>
-            <h3>Hair length</h3>
+            <h3 class="ui-label">Hair length</h3>
             <div class="bb-row">
               ${Object.entries(HAIR_LENGTHS).map(([k, l]) => `
                 <button class="bb-len ${look.hairLength === k ? 'on' : ''}" data-set="hairLength" data-v="${k}">
@@ -259,14 +217,14 @@ export function mount(stage) {
                   <span>${l.name}</span>
                 </button>`).join('')}
             </div>
-            <h3>Eye colour</h3>
+            <h3 class="ui-label">Eye colour</h3>
             <div class="bb-row">
               ${Object.entries(EYE_COLORS).map(([k, c]) => `
                 <button class="bb-dot bb-eyedot ${look.eyeColor === k ? 'on' : ''}" data-set="eyeColor" data-v="${k}" aria-label="${k}">
                   <svg viewBox="0 0 40 40"><ellipse cx="20" cy="20" rx="18" ry="13" fill="#fff"/><circle cx="20" cy="20" r="10" fill="${c}"/><circle cx="20" cy="20" r="4.5" fill="#1f1a1a"/><circle cx="23" cy="17" r="2.6" fill="#fff"/></svg>
                 </button>`).join('')}
             </div>
-            <button class="bb-go">Let's go! ✨</button>
+            <button class="ui-btn primary big bb-go">Let's go ${icon('next')}</button>
           </div>
         </div>`;
       root.querySelector('.bb-back').addEventListener('click', () => { sound.pop(); pickScreen(); });
@@ -291,13 +249,13 @@ export function mount(stage) {
     root.innerHTML = `
       <div class="bb-salon ${net ? 'mp' : ''}">
         <div class="bb-stage">
-          <h1 class="bb-title bb-title-small">Beautiful Bells</h1>
+          <div class="ui-kicker bb-title-small">Beautiful Bells</div>
           <div class="bb-tools">
-            <button data-tool="undo" aria-label="Undo">${icon('undo')}</button>
-            <button data-tool="wipe" aria-label="Wipe off">${icon('eraser')}</button>
-            <button data-tool="random" aria-label="Surprise me">${icon('dice')}</button>
-            <button data-tool="setup" aria-label="Hair and eyes">👧</button>
-            <button data-tool="girls" aria-label="My girls">👭</button>
+            <button class="ui-hud-btn" data-tool="undo" aria-label="Undo">${icon('undo')}</button>
+            <button class="ui-hud-btn" data-tool="wipe" aria-label="Wipe off">${icon('eraser')}</button>
+            <button class="ui-hud-btn" data-tool="random" aria-label="Surprise me">${icon('dice')}</button>
+            <button class="ui-hud-btn" data-tool="setup" aria-label="Hair and eyes">👧</button>
+            <button class="ui-hud-btn" data-tool="girls" aria-label="My girls">👭</button>
           </div>
           <div class="bb-dolls">
             <div class="bb-doll">${net ? `<div class="bb-me-name">${net.emoji} ${store.get().name} (you)</div>` : ''}</div>
@@ -305,14 +263,14 @@ export function mount(stage) {
           </div>
           <div class="bb-held" hidden>
             <div class="bb-held-pic"></div>
-            <button class="bb-held-x" aria-label="Put down">${icon('close')}</button>
+            <button class="ui-btn round small danger bb-held-x" aria-label="Put down">${icon('close')}</button>
           </div>
           <button class="bb-photo" aria-label="Save picture">${icon('camera')}<span>Save</span></button>
           ${net ? '<button class="bb-showoff" aria-label="Show off">🎉<span>Show off</span></button>' : ''}
           <div class="bb-toast" hidden></div>
         </div>
         <div class="bb-panel">
-          <div class="bb-views">
+          <div class="bb-views ui-seg">
             <button data-view="face">😊 Face</button>
             <button data-view="body">👗 Clothes</button>
           </div>
@@ -420,7 +378,7 @@ export function mount(stage) {
       if (!friendEl || !net) return;
       const friends = net.friends().filter(f => f.look);
       if (!friends.length) {
-        friendEl.innerHTML = `<div class="bb-friend-wait"><p>Waiting for friends…</p><p>Show them these pictures:</p><div class="bb-code big">${codeHtml()}</div></div>`;
+        friendEl.innerHTML = `<div class="bb-friend-wait"><p>Waiting for friends…</p>${stripHtml()}</div>`;
         return;
       }
       if (!friends.some(f => f.id === focusId)) focusId = friends[0].id;
@@ -434,8 +392,7 @@ export function mount(stage) {
         ${friends.length > 1 ? `<div class="bb-friend-thumbs">${friends.map(x => `
           <button class="${x.id === focusId ? 'on' : ''}" data-friend="${x.id}" aria-label="${x.name}">
             ${renderGirl(x.look, { viewBox: '60 60 280 280', still: true, lite: true })}<span>${x.emoji}</span>
-          </button>`).join('')}</div>` : ''}
-        <div class="bb-code small">${codeHtml()}</div>`;
+          </button>`).join('')}</div>` : ''}`;
       if (changed) { friendEl.classList.remove('ping'); void friendEl.offsetWidth; friendEl.classList.add('ping'); }
     };
     if (friendEl) {
@@ -540,12 +497,13 @@ export function mount(stage) {
         e.preventDefault();
         drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: false, placedKey: placedEl.dataset.placed, el: placedEl };
       } else if (onDoll && active) {
+        // Holding something: brushes and scissors work as you rub; everything else goes on where you tap.
         e.preventDefault();
         drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, moving: true, item: active, fromDoll: true };
-        drag.ghost = makeGhost(active, true);
+        drag.ghost = makeGhost(active, isTool(active));
         moveGhost(drag.ghost, e.clientX, e.clientY);
         if (hover) hover.style.display = 'none';
-        toolMove(drag, e.clientX, e.clientY);
+        if (isTool(active)) toolMove(drag, e.clientX, e.clientY);
       }
     };
     const onMove = e => {
@@ -610,7 +568,7 @@ export function mount(stage) {
         if (!d.used && !d.fromDoll) toast(d.item.action === 'cut' ? 'Swipe the scissors across her hair ✂️' : 'Rub it on her face! 🖌️');
         return;
       }
-      if (inside) applyItem(d.item, clampPt(svgPoint(e.clientX, e.clientY)), e.clientX, e.clientY);
+      if (inside) applyItem(d.item, clampPt(svgPoint(e.clientX, e.clientY)), e.clientX, e.clientY, d.fromDoll);
     };
     const onCancel = e => {
       if (!drag || e.pointerId !== drag.id) return;
@@ -634,16 +592,17 @@ export function mount(stage) {
         return;
       }
       if (active && active.id === item.id) { setActive(null); sound.pop(); return; }
-      el.classList.remove('bb-shake'); void el.offsetWidth; el.classList.add('bb-shake');
-      sound.tone(420, .08, 'sine', .12);
-      toast(item.action === 'cut' ? 'Drag the scissors onto her hair! ✂️'
-        : item.action === 'paint' ? 'Drag it onto her face and rub! 🖌️'
-          : 'Drag it onto her! 👆');
+      // Tap to pick it up: your finger (or mouse) becomes it.
+      setActive(item);
+      sound.tone(700, .08, 'sine', .14, 1000);
+      toast(item.action === 'cut' ? 'Swipe across her hair ✂️'
+        : item.action === 'paint' ? 'Rub it on her! 🖌️'
+          : 'Tap her to put it on 👆');
     }
 
-    function applyItem(item, p, sx, sy) {
+    function applyItem(item, p, sx, sy, keepHolding = false) {
       const look = store.get();
-      setActive(null);
+      if (!keepHolding) setActive(null);
       if (item.action === 'slot') {
         if (look[item.key] === item.value) { sparkle(sx, sy); return; }
         // Putting on a top or bottoms takes the dress off.
@@ -785,11 +744,11 @@ export function mount(stage) {
       }
       g.globalAlpha = 1;
       g.drawImage(img, 0, 120, W, GH);
-      g.font = '700 64px Fredoka, system-ui, sans-serif';
+      g.font = '700 64px Nunito, system-ui, sans-serif';
       g.lineWidth = 10; g.strokeStyle = '#fff'; g.fillStyle = '#d63384';
       g.strokeText(`${look.name} ✨`, W / 2, 90);
       g.fillText(`${look.name} ✨`, W / 2, 90);
-      g.font = '500 30px Fredoka, system-ui, sans-serif';
+      g.font = '500 30px Nunito, system-ui, sans-serif';
       g.fillStyle = '#7b4bb7';
       g.fillText('Beautiful Bells', W / 2, H - 20);
       cv.toBlob(blob => {
@@ -807,6 +766,8 @@ export function mount(stage) {
   }
 
   pickScreen();
+  const inviteCode = takeJoinCode(GAME_ID);
+  if (inviteCode) joinFromInvite(inviteCode);
 
   return () => {
     clearScreen();

@@ -1,5 +1,5 @@
 /* Star Dash */
-.sd { position: absolute; inset: 0; background: #05040f; color: #f3f0ff; font-family: "Fredoka", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; }
+.sd { position: absolute; inset: 0; background: #05040f; color: #f3f0ff; font-family: "Nunito", system-ui, sans-serif; overflow: hidden; user-select: none; -webkit-user-select: none; }
 .sd-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .sd-hud { position: absolute; inset: 0; pointer-events: none; }
 .sd-ui { position: absolute; inset: 0; pointer-events: none; }
@@ -11,83 +11,57 @@
 .sd-tl { position: absolute; left: 12px; top: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .sd-corner .sd-tl { left: 96px; }
 .sd-corner .sd-prog { left: calc(50% + 60px); }
-.sd-tag { padding: 3px 10px; border-radius: 10px; background: rgba(16,13,44,.78); border: 2px solid var(--pc); font-size: 16px; }
-.sd-lap { font-size: 22px; font-weight: 700; text-shadow: 0 2px 6px #000; }
-.sd-place { position: absolute; right: 14px; top: 8px; font-size: 52px; font-weight: 700; color: var(--pc); text-shadow: 0 3px 10px #000; line-height: 1; }
+.sd-tag { padding: 4px 12px; border-radius: 10px; background: rgba(16,18,38,.65); border: 1px solid rgba(255,255,255,.16); border-left: 4px solid var(--pc); font-size: 15px; font-weight: 800; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.sd-lap { font-size: 20px; font-weight: 900; text-shadow: 0 2px 6px #000; }
+.sd-place { position: absolute; right: 84px; top: 8px; font-size: 52px; font-weight: 900; color: var(--pc); text-shadow: 0 3px 10px #000; line-height: 1; }
 .sd-place small { font-size: 24px; }
 .sd-prog { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); width: min(34%, 280px); height: 10px; border-radius: 6px; background: rgba(255,255,255,.16); }
 .sd-prog i { position: absolute; top: -4px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 2px solid #fff; }
 .sd-speed { position: absolute; left: 12px; bottom: 12px; width: 130px; height: 10px; border-radius: 6px; background: rgba(255,255,255,.16); overflow: hidden; }
 .sd-speed i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--pc), #39ffc4); }
-.sd-big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: clamp(48px, 12vmin, 120px); font-weight: 700; text-shadow: 0 4px 18px #000; line-height: 1.05; }
+.sd-big { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: clamp(48px, 12vmin, 120px); font-weight: 900; text-shadow: 0 4px 18px #000; line-height: 1.05; }
 .sd-msg { position: absolute; left: 50%; bottom: 20%; transform: translateX(-50%); font-size: 26px; font-weight: 700; color: #39ffc4; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity .2s; white-space: nowrap; }
 .sd-msg.show { opacity: 1; }
 .sd-pad { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: space-between; padding: 0 14px; }
 .sd-pad div { display: flex; gap: 12px; }
-.sd-pad button { pointer-events: auto; touch-action: none; width: 76px; height: 76px; padding: 0; border-radius: 50%; border: 3px solid var(--pc) !important; background: rgba(10,8,30,.5); color: #fff !important; font-size: 36px; display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(0,0,0,.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.sd-pad button { pointer-events: auto; touch-action: none; width: 76px; height: 76px; padding: 0; border-radius: 22px; border: 1px solid rgba(255,255,255,.18) !important; border-bottom: 3px solid var(--pc) !important; background: rgba(16,18,38,.55); color: #fff !important; font-size: 36px; display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(0,0,0,.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .sd-pad button .ic { stroke-width: 3.2; }
 .sd-pad button.on { background: var(--pc); transform: scale(.93); }
 .sd-pad ~ .sd-speed, .sd-view:has(.sd-pad) .sd-speed { bottom: 100px; }
-.sd-tilt { position: absolute; right: 14px; top: 70px; width: 56px; height: 56px; padding: 0; display: grid; place-items: center; border-radius: 50%; pointer-events: auto; touch-action: none; background: rgba(10,8,30,.6); border: 3px solid var(--pc) !important; font-size: 28px; }
+.sd-tilt { position: absolute; right: 14px; top: 80px; width: 56px; height: 56px; padding: 0; display: grid; place-items: center; border-radius: 18px; pointer-events: auto; touch-action: none; background: rgba(16,18,38,.55); border: 1px solid rgba(255,255,255,.18) !important; font-size: 26px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
 .sd-tilting .sd-pad > div:first-child { visibility: hidden; } /* tilt steers, so no ◀ ▶ */
 .sd-divider { position: absolute; background: #000; box-shadow: 0 0 12px #7b6cff; }
 
-/* ---- overlays */
-.sd-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(5,4,15,.15), rgba(5,4,15,.6)); overflow-y: auto; }
-.sd-card { position: relative; background: rgba(16,13,44,.82); border: 2px solid #4a3fb0; border-radius: 26px; padding: 20px 22px; max-width: 560px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,.6); text-align: center; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.sd-card h1 { margin: 0 0 14px; font-size: 52px; letter-spacing: .02em; text-shadow: 0 0 24px #7b6cff; }
-.sd-card h1 b { color: #ffd54f; }
-.sd-card h2 { margin: 0 0 14px; font-size: 30px; }
-.sd-row { display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; margin: 12px 0; }
-.sd-style { flex: 1 1 180px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 18px; background: #1c1650 !important; border: 3px solid #3a3190 !important; font-size: 20px; font-weight: 700; }
-.sd-style span { font-size: 32px; }
-.sd-style.on { background: #ffd54f !important; border-color: #ffd54f !important; color: #1a1240 !important; }
+/* ---- overlays (shared look: css/ui.css) */
+.sd-overlay { z-index: 5; }
+.sd-card { margin: auto 0; }
+.sd-line { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sd-line .ui-label { width: auto; }
+.sd-style .i { font-size: 30px; }
 .sd-style.off { opacity: .5; cursor: default; }
-.sd-levels > span { font-size: 30px; }
-.sd-level { width: 64px; height: 64px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: 32px; transition: transform .1s; background: #1c1650; border: 3px solid #3a3190 !important; }
-.sd-level.on { background: #39ffc4; border-color: #39ffc4 !important; }
-.sd-go { flex: 1 1 140px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 10px; border-radius: 20px; font-size: 17px; font-weight: 700; color: #2a1650 !important; background: linear-gradient(180deg, #ffe27a, #ffb43d); box-shadow: inset 0 -4px 0 rgba(150,80,10,.25), inset 0 2px 0 rgba(255,255,255,.5), 0 10px 20px -8px rgba(255,180,61,.7); transition: transform .1s; }
-.sd-go span { font-size: 30px; }
-.sd-go:active, .sd-btn:active, .sd-keypad button:active, .sd-level:active, .sd-style:active { transform: scale(.93); }
-.sd-btn:active, .sd-keypad button:active { box-shadow: var(--btn-press); }
-.sd-keys { margin: 8px 0 0; color: #b3acdf; font-size: 14px; }
-.sd-btn { width: 72px; height: 72px; padding: 0; border-radius: 50%; font-size: 34px; background: var(--btn-face); color: #2a1650 !important; box-shadow: var(--btn-shadow), 0 0 0 3px rgba(255,255,255,.15); display: inline-grid; place-items: center; transition: transform .1s; }
-.sd-btn .ic { stroke-width: 2.9; }
-.sd-start, .sd-again { background: var(--btn-ok); color: #fff !important; }
-.sd-quit, .sd-leave { color: #e53935 !important; }
-.sd-btn.off { opacity: .35; pointer-events: none; }
-.sd-start { background: #43a047; color: #fff !important; font-size: 40px; width: 96px; height: 96px; }
-.sd-again { background: #ffd54f; }
-.sd-quit { position: absolute; bottom: 12px; left: 50%; margin-left: -24px; width: 48px; height: 48px; font-size: 22px; opacity: .8; }
-.sd-wait { font-size: 40px; animation: sd-pulse 1s ease-in-out infinite; margin: 0; }
-.sd-sad { font-size: 44px; margin: 6px 0; }
-.sd-netwait { position: absolute; top: 80px; right: 16px; font-size: 28px; animation: sd-pulse .8s infinite; }
-@keyframes sd-pulse { 50% { transform: scale(1.15); } }
+.sd-go .i { font-size: 38px; }
+.sd-keys { margin: 0; color: var(--ui-dim); font-size: 13px; font-weight: 700; }
+.sd-foot { width: 100%; justify-content: space-between; }
+.sd-col { width: min(340px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.sd-col .ui-btn { width: 100%; }
+.sd-quit { position: absolute; top: 14px; right: 14px; }
+.sd-netwait { position: absolute; top: 80px; right: 16px; }
+.sd-golabel { color: #fdba74; }
 
-.sd-results ol { list-style: none; padding: 0; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
-.sd-results li { display: flex; align-items: center; gap: 12px; font-size: 24px; background: rgba(255,255,255,.06); border: 2px solid var(--pc); border-radius: 16px; padding: 6px 14px; }
-.sd-results li span { font-size: 32px; }
-.sd-results li i { width: 18px; height: 18px; border-radius: 50%; background: var(--pc); }
-
-.sd-code { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
-.sd-code span { width: 76px; height: 76px; border-radius: 20px; background: #fff8e1; border: 4px solid #ffcc80; font-size: 48px; display: flex; align-items: center; justify-content: center; }
-.sd-keypad { display: grid; grid-template-columns: repeat(4, 72px); gap: 10px; justify-content: center; }
-.sd-keypad button { width: 72px; height: 72px; padding: 0; border-radius: 18px; font-size: 42px; background: linear-gradient(180deg, #f3f9ff, #dcecfb); box-shadow: var(--btn-shadow); }
-.sd-ships { display: flex; gap: 12px; justify-content: center; font-size: 44px; }
-.sd-ships span { position: relative; width: 72px; height: 72px; border-radius: 50%; border: 4px solid var(--pc, #555); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); }
-.sd-ships span b { position: absolute; bottom: -10px; right: -10px; font-size: 26px; }
-.sd-ships .sd-name { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-size: 15px; font-weight: 600; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
-.sd-lobby .sd-ships { margin-bottom: 22px; }
-.sd-ships .sd-empty { border-style: dashed; animation: sd-pulse 1s infinite; }
+.sd-results ol { list-style: none; padding: 0; margin: 0 auto; width: min(340px, 100%); display: flex; flex-direction: column; gap: 8px; }
+.sd-results li {
+  display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 800; text-align: left;
+  background: var(--ui-card); border: 1px solid var(--ui-line); border-left: 4px solid var(--pc); border-radius: 14px; padding: 8px 14px;
+}
+.sd-results li span { font-size: 26px; }
+.sd-results li i { width: 14px; height: 14px; border-radius: 50%; background: var(--pc); }
 
 @media (max-width: 520px), (max-height: 520px) {
-  .sd-card h1 { font-size: 38px; margin-bottom: 8px; }
-  .sd-card { padding: 14px; }
-  .sd-row { margin: 8px 0; gap: 8px; }
-  .sd-keypad { grid-template-columns: repeat(4, 58px); }
-  .sd-keypad button, .sd-code span { width: 58px; height: 58px; font-size: 34px; }
   .sd-pad button { width: 64px; height: 64px; }
   .sd-place { font-size: 40px; }
+  .sd-card .ui-seg > button { padding: 0 10px; font-size: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } .sd-wait, .sd-netwait, .sd-ships .sd-empty { animation: none; } }
-.sd-code > b { display: flex; align-items: center; font-size: 40px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .sd-msg { transition: none; } }
+
+/* play together: the strip/wait card come from css/ui.css */
+.sd-lobby .tg-wait { width: 100%; }

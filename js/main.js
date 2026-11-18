@@ -1,14 +1,16 @@
 import { GAMES, AGES } from './games.js';
 import { gameArt } from './game-art.js';
+import { gameCover } from './game-covers.js';
 import { icon } from './engine/icons.js';
 import { VERSION } from './version.js';
 import { sound } from './engine/sound.js';
 import { myName, setMyName, nameHTML, NAME_MAX, myFace, setMyFace, FACES } from './engine/profile.js';
 import { mountFriends, friendBarHTML, refreshFriendBar, newCode } from './friends-ui.js';
-import { nameChanged } from './engine/friends.js';
+import { nameChanged, setWhere } from './engine/friends.js';
+import { leftRoom } from './engine/together.js';
 
 const app = document.getElementById('app');
-let cleanup = null;
+let cleanup = null, current = null;
 
 // ---------- install as an app / full screen ----------
 const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone;
@@ -88,12 +90,17 @@ function nameButton() {
   return `<button class="name-btn${n ? '' : ' empty'}" aria-label="My name"><span class="name-ico${f ? ' emo' : ''}">${f || icon('user')}</span>${n ? `<b>${nameHTML(n)}</b>` : `<b class="name-pen">${icon('edit')}</b>`}</button>`;
 }
 
-function editName() {
+// forFriends: opened from the friends button before a name was set.
+function editName(forFriends = false) {
+  if (forFriends instanceof Event) forFriends = false;
   const o = document.createElement('div');
   o.className = 'app-help name-edit';
+  const fresh = !myName();
   o.innerHTML = `<form class="app-help-card name-card">
+      ${fresh ? `<div class="name-ask"><h2>${forFriends ? 'First, add your name' : 'What\'s your name?'}</h2>
+        <p>${forFriends ? 'Type your name and pick a picture. Then you can add friends.' : 'Type your name and pick a picture.'}</p></div>` : ''}
       <div class="name-face"></div>
-      <input class="name-input" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
+      <input class="name-input" placeholder="Type your name" maxlength="${NAME_MAX}" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" aria-label="My name">
       <div class="face-grid">${FACES.map(f => `<button type="button" data-f="${f}">${f}</button>`).join('')}</div>
       <div class="name-row"><button type="button" class="app-btn name-clear" aria-label="Clear">${icon('backspace')}</button><button type="submit" class="app-btn name-ok" aria-label="Done">${icon('check')}</button></div>
     </form>`;
@@ -110,13 +117,15 @@ function editName() {
   showFace();
   o.querySelectorAll('.face-grid button').forEach(b => b.addEventListener('click', () => {
     sound.pop(); face = b.dataset.f; showFace();
+    if (setMyFace(face) !== faceBefore) nameChanged(); // saved straight away
   }));
   // Saved however the box is closed (tick, Enter or tapping outside).
   const close = () => {
-    const changed = (setMyName(input.value) !== before) | (setMyFace(face) !== faceBefore);
+    const changed = (setMyName(input.value) !== before) | (setMyFace(face) !== faceBefore) | (face !== faceBefore);
     o.remove();
     if (changed) nameChanged();
     showMenu();
+    if (forFriends && myName()) window.dispatchEvent(new Event('kg-open-friends'));
   };
   o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); sound.pop(); close(); });
   o.querySelector('.name-clear').addEventListener('click', () => { input.value = ''; input.focus(); });
@@ -128,10 +137,11 @@ function editName() {
 function showMenu() {
   app.innerHTML = `
     <div class="menu">
-      ${nameButton()}
-      ${appButtons()}
-      <h1>${[...'Kids Games'].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('')}</h1>
-      ${friendBarHTML()}
+      <header class="menu-top">
+        <h1><span class="logo">${icon('play')}</span>Kids Games</h1>
+        <div class="top-left">${nameButton()}${friendBarHTML()}</div>
+        ${appButtons()}
+      </header>
       ${AGES.map(a => {
         const list = GAMES.filter(g => (g.age || AGES[0].id) === a.id);
         return list.length ? `<section class="age" style="--a:${a.color}">
@@ -139,7 +149,7 @@ function showMenu() {
         <div class="grid">
           ${list.map(g => `
             <button class="tile" style="--c:${g.color}" data-id="${g.id}">
-              <div class="icon">${gameArt(g.id) || g.icon}</div>
+              ${gameCover(g.id) ? `<div class="icon has-cover">${gameCover(g.id)}</div>` : `<div class="icon">${gameArt(g.id) || g.icon}</div>`}
               <div class="name">${g.name}</div>
             </button>`).join('')}
         </div>
@@ -160,7 +170,7 @@ function showMenu() {
 
 async function showGame(game) {
   app.innerHTML = `
-    <div class="game">
+    <div class="game" style="--accent:${game.color}">
       <div class="game-stage"></div>
       <button class="home-btn" aria-label="Home">${icon('home')}</button>
     </div>`;
@@ -175,8 +185,13 @@ async function showGame(game) {
 }
 
 function route() {
+  const id = location.hash.replace(/^#\/?/, '').split('?')[0];
+  // same game, just tidying the address bar (together.js takeJoinCode)
+  if (cleanup && id === current && !location.hash.includes('?join=')) return;
   if (cleanup) { cleanup(); cleanup = null; }
-  const id = location.hash.replace(/^#\/?/, '');
+  leftRoom(); // never keep inviting friends to a game you've left
+  current = id;
+  setWhere(GAMES.some(g => g.id === id) ? id : ''); // friends see what I'm playing
   const game = GAMES.find(g => g.id === id);
   if (game) showGame(game);
   else { showMenu(); newCode(); } // a new friend code every visit

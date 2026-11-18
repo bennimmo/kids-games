@@ -9,18 +9,22 @@ import { myName, cleanName } from '../../js/engine/profile.js';
 import { THREE, isSharedGeo } from './art.js';
 import { createTube } from './tube.js';
 import { createOpen } from './open.js';
-import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, playerInfo, people, lobbyHTML, waitHTML, allReady, startLabel } from '../../js/engine/together.js';
+import { onFriends } from '../../js/engine/friends.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
 
-const GAME = 'star-dash';
+const GAME = 'star-dash';      // online room area
+const ID = 'space-race';       // menu id (invites, together.js)
+const HOST_DOING = 'picking the race';
 const PREFS_KEY = 'star-dash-v1';
 const COLORS = [0xff8a3d, 0x3dd6ff, 0x6cff6c, 0xff5fd2];
 const CSS_COLORS = ['#ff8a3d', '#3dd6ff', '#6cff6c', '#ff5fd2'];
 const LEVELS = [
-  { icon: '🐢', skill: 0.84, top: 0.9 },
-  { icon: '🐇', skill: 0.95, top: 0.97 },
-  { icon: '🚀', skill: 1.03, top: 1.03 },
+  { icon: '🐢', name: 'Easy', skill: 0.84, top: 0.9 },
+  { icon: '🐇', name: 'Medium', skill: 0.95, top: 0.97 },
+  { icon: '🚀', name: 'Hard', skill: 1.03, top: 1.03 },
 ];
 const STYLES = { tube: { icon: '🌀', name: 'Tube Race', make: createTube }, open: { icon: '🪐', name: 'Open Space', make: createOpen } };
 const SEND_EVERY = 1 / 15;
@@ -43,7 +47,7 @@ export function mount(stage) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   } catch (e) {
-    ui.innerHTML = '<div class="sd-overlay"><div class="sd-card"><h2>😢 No 3D</h2><p>This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
+    ui.innerHTML = '<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel"><div class="ui-kicker">Star Dash</div><h2 class="ui-title">No 3D here</h2><p class="ui-sub">This game needs WebGL. Try Chrome, Safari or Edge.</p></div></div>';
     return () => css.remove();
   }
   const DPR = Math.min(devicePixelRatio || 1, 2);
@@ -58,7 +62,7 @@ export function mount(stage) {
     phase: 'menu',        // menu | race | results | online | join | lobby
     style: prefs.style || 'tube',
     level: prefs.level ?? 1,
-    joinCode: '', busy: false, sad: 0,
+    busy: false, sad: 0, msg: '',
     net: null,
   };
   let race = null, clock = 0, alive = true, raf = 0;
@@ -288,7 +292,9 @@ export function mount(stage) {
   function frame(now) {
     if (!alive) return;
     raf = requestAnimationFrame(frame);
-    const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (S.paused && !S.net) return;   // pause card open (local races only)
+    clock += dt;
     if (!race) return;
     const R = race, W = R.world;
 
@@ -378,21 +384,18 @@ export function mount(stage) {
   // ---------------------------------------------------------------- screens
   const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
   const click = (node, fn) => node && node.addEventListener('click', e => { e.preventDefault(); fn(e); });
-  const picsHTML = code => `<div class="sd-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
 
   function render() {
     ui.innerHTML = '';
     if (S.phase === 'menu') menuUI();
     if (S.phase === 'race') raceUI();
     if (S.phase === 'results') resultsUI();
-    if (S.phase === 'online') onlineUI();
-    if (S.phase === 'join') joinUI();
     if (S.phase === 'lobby') lobbyUI();
-    if (S.net && S.net.status === 'waiting') ui.appendChild(el('<div class="sd-netwait">📶⏳</div>'));
+    if (S.net && S.net.status === 'waiting') ui.appendChild(el('<div class="sd-netwait ui-chip">Reconnecting…</div>'));
   }
 
   function styleButtons(enabled = true) {
-    return Object.entries(STYLES).map(([k, s]) => `<button class="sd-style ${S.style === k ? 'on' : ''} ${enabled ? '' : 'off'}" data-style="${k}"><span>${s.icon}</span>${s.name}</button>`).join('');
+    return `<div class="ui-choices tight sd-styles">${Object.entries(STYLES).map(([k, s]) => `<button class="sd-style ui-choice ${S.style === k ? 'on' : ''} ${enabled ? '' : 'off'}" data-style="${k}"><span class="i">${s.icon}</span>${s.name}</button>`).join('')}</div>`;
   }
   function wireStyles(box, after) {
     box.querySelectorAll('.sd-style').forEach(b => click(b, () => {
@@ -402,15 +405,19 @@ export function mount(stage) {
   }
 
   function menuUI() {
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-menu">
-      <h1>Star <b>Dash</b></h1>
-      <div class="sd-row">${styleButtons()}</div>
-      <div class="sd-row sd-levels"><span>🤖</span>${LEVELS.map((l, i) => `<button class="sd-level ${S.level === i ? 'on' : ''}" data-l="${i}" aria-label="computer level ${i + 1}">${l.icon}</button>`).join('')}</div>
-      <div class="sd-row sd-play">
-        <button class="sd-go" data-m="ai"><span>🙂 vs 🤖</span>Computer</button>
-        <button class="sd-go" data-m="two"><span>🙂 vs 🙂</span>Same screen</button>
-        <button class="sd-go" data-m="online"><span>🌍</span>Online</button>
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-menu">
+      <h1 class="ui-title">Star Dash</h1>
+      <p class="ui-sub">Race through space. First to the finish wins.</p>
+      <div class="ui-label">Track</div>
+      ${styleButtons()}
+      <div class="sd-line"><span class="ui-label">Computer</span><div class="ui-seg sd-levels">${LEVELS.map((l, i) => `<button class="sd-level ${S.level === i ? 'on' : ''}" data-l="${i}" aria-label="computer level ${i + 1}">${l.icon} ${l.name}</button>`).join('')}</div></div>
+      <div class="ui-label">Play</div>
+      <div class="ui-choices sd-play">
+        <button class="sd-go ui-choice" data-m="ai"><span class="i">🤖</span>vs Computer<small>Just you</small></button>
+        <button class="sd-go ui-choice" data-m="two"><span class="i">👥</span>Same screen<small>Two players</small></button>
       </div>
+      <div class="ui-row sd-together">${S.busy ? '<span class="ui-sub">Connecting…</span>' : togetherButton()}</div>
+      ${S.sad > clock ? `<p class="ui-sub sd-sad">${S.msg}</p>` : ''}
       <p class="sd-keys">Player 1: ← → ↑ ↓ · Player 2: W A S D</p>
     </div></div>`);
     wireStyles(box, () => { demo(); render(); });
@@ -418,33 +425,56 @@ export function mount(stage) {
     box.querySelectorAll('.sd-go').forEach(b => click(b, () => {
       const m = b.dataset.m;
       if (m !== 'two' && tilt.on) askTilt();
-      if (m === 'online') { sound.pop(); S.phase = 'online'; render(); } else startLocal(m);
+      startLocal(m);
     }));
+    const tg = box.querySelector('[data-together]');
+    if (tg) click(tg, () => { sound.pop(); if (tilt.on) askTilt(); hostRoom(); });
     ui.appendChild(box);
   }
 
   function raceUI() {
-    const b = el(`<button class="sd-btn sd-quit" aria-label="Stop race">${icon('close')}</button>`);
-    click(b, () => { sound.pop(); if (S.net) toLobby(); else { S.phase = 'menu'; demo(); render(); } });
+    const b = el(`<button class="ui-hud-btn sd-quit" aria-label="Pause">${icon('pause')}</button>`);
+    click(b, () => { sound.pop(); pauseUI(); });
     ui.appendChild(b);
+  }
+  // Pause card. Local races really pause; online the race goes on (others are racing).
+  function pauseUI() {
+    if (ui.querySelector('.sd-pause')) return;
+    const online = !!S.net;
+    S.paused = !online;
+    const box = el(`<div class="sd-overlay ui-overlay sd-pause"><div class="sd-card ui-panel">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">${online ? 'Leave the race?' : 'Paused'}</h2>
+      <div class="sd-col">
+        <button class="ui-btn primary big" data-a="resume">${icon('play')} ${online ? 'Keep racing' : 'Resume'}</button>
+        ${online ? '' : `<button class="ui-btn" data-a="restart">${icon('retry')} Restart</button>`}
+        <button class="ui-btn ghost" data-a="quit">${icon('leave')} ${online ? 'Back to room' : 'Quit'}</button>
+      </div>
+    </div></div>`);
+    const close = () => { S.paused = false; box.remove(); };
+    click(box.querySelector('[data-a="resume"]'), () => { sound.pop(); close(); });
+    click(box.querySelector('[data-a="restart"]'), () => { sound.pop(); close(); startLocal(race.mode); });
+    click(box.querySelector('[data-a="quit"]'), () => { sound.pop(); close(); if (S.net) toLobby(); else { S.phase = 'menu'; demo(); render(); } });
+    ui.appendChild(box);
   }
 
   function resultsUI() {
     const R = race;
     const order = [...R.finish, ...R.ships.filter(s => !R.finish.includes(s)).sort((a, b) => R.world.progress(b) - R.world.progress(a))];
     const names = sh => {
-      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `🤖 ${LEVELS[S.level].icon}` : `🙂 ${myName() || 'You'}`;
-      if (R.mode === 'two') return `🙂 Player ${sh.slot + 1}`;
+      if (R.mode === 'ai') return sh.ctrl === 'ai' ? `Computer ${LEVELS[S.level].icon}` : (myName() || 'You');
+      if (R.mode === 'two') return `Player ${sh.slot + 1}`;
       const who = S.net && cleanName(S.net.players[sh.pid] && S.net.players[sh.pid].name);
-      return sh.ctrl === 'solo' ? `🙂 ${who || 'You'}` : `🌍 ${who || 'Friend'}`;
+      return sh.ctrl === 'solo' ? (who || 'You') : (who || 'Friend');
     };
     const host = !S.net || S.net.isHost;
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-results">
-      <h2>🏁 Race over!</h2>
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-results">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">Race over</h2>
       <ol>${order.map((sh, i) => `<li style="--pc:${CSS_COLORS[sh.slot]}"><span>${MEDALS[i]}</span><i></i>${names(sh)}</li>`).join('')}</ol>
-      <div class="sd-row">
-        ${host ? `<button class="sd-btn sd-again" aria-label="Race again">${icon('retry')}</button>` : '<span class="sd-wait">⏳</span>'}
-        <button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button>
+      <div class="ui-row sd-foot">
+        <button class="ui-btn ghost sd-back">${icon('back')} ${S.net ? 'Room' : 'Menu'}</button>
+        ${host ? `<button class="ui-btn primary big sd-again">${icon('retry')} Again</button>` : `<span class="ui-sub">Waiting for the host…</span>`}
       </div>
     </div></div>`);
     click(box.querySelector('.sd-again'), again);
@@ -459,41 +489,6 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- online
-  function onlineUI() {
-    const box = el(`<div class="sd-overlay"><div class="sd-card">
-      <h2>🌍 Race a friend</h2>
-      <div class="sd-row sd-play">
-        <button class="sd-go sd-host"><span>🏠</span>Make a room</button>
-        <button class="sd-go sd-join"><span>🔑</span>Join a room</button>
-      </div>
-      ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}
-      <button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button>
-    </div></div>`);
-    click(box.querySelector('.sd-host'), () => { if (!S.busy) hostRoom(); });
-    click(box.querySelector('.sd-join'), () => { if (S.busy) return; sound.pop(); S.joinCode = ''; S.phase = 'join'; render(); });
-    click(box.querySelector('.sd-back'), () => { sound.pop(); S.phase = 'menu'; render(); });
-    ui.appendChild(box);
-  }
-
-  function joinUI() {
-    const slots = Array.from({ length: CODE_LEN }, (_, i) => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
-    const box = el(`<div class="sd-overlay"><div class="sd-card">
-      <div class="sd-code sd-slots">${slots}</div>
-      ${S.busy ? '<p class="sd-wait">⏳</p>' : ''}${S.sad > clock ? '<p class="sd-sad">😢</p>' : ''}
-      <div class="sd-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="sd-row"><button class="sd-btn sd-del" aria-label="Delete">${icon('backspace')}</button><button class="sd-btn sd-back" aria-label="Back">${icon('back')}</button></div>
-    </div></div>`);
-    box.querySelectorAll('.sd-keypad button').forEach(b => click(b, () => {
-      if (S.busy || S.joinCode.length >= CODE_LEN) return;
-      sound.pop();
-      S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) tryJoin(S.joinCode); else render();
-    }));
-    click(box.querySelector('.sd-del'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
-    click(box.querySelector('.sd-back'), () => { S.phase = 'online'; render(); });
-    ui.appendChild(box);
-  }
-
   function lobbyPlayers() {
     const n = S.net;
     return Object.entries(n.players || {})
@@ -503,29 +498,52 @@ export function mount(stage) {
       .map(([id, p]) => ({ id, joined: p.joined, name: cleanName(p.name) }));
   }
 
+  // who's here, as the shared strip wants them (host first)
+  function netPeople() {
+    const n = S.net;
+    const ids = new Set(lobbyPlayers().map(p => p.id));
+    const here = Object.fromEntries(Object.entries(n.players || {}).filter(([id]) => ids.has(id)));
+    return people(here, n.isHost ? n.room.uid : n.meta && n.meta.hostUid);
+  }
+  function setReady(v) {
+    const n = S.net;
+    if (!n || n.isHost || n.ready === v) return;
+    n.ready = v;
+    n.room.setPlayer(n.pid, { joined: n.joined, ...playerInfo(v) });
+  }
+
   function lobbyUI() {
-    const n = S.net, list = lobbyPlayers();
+    const n = S.net, list = lobbyPlayers(), folk = netPeople();
     const style = (n.meta && STYLES[n.meta.style]) ? n.meta.style : S.style;
     if (!n.isHost) S.style = style;
-    const box = el(`<div class="sd-overlay"><div class="sd-card sd-lobby">
-      ${picsHTML(n.code)}
-      <div class="sd-ships">${list.map((p, i) => `<span style="--pc:${CSS_COLORS[i]}">🚀${p.id === n.pid ? '<b>🙂</b>' : ''}${p.name ? `<small class="sd-name">${p.name}</small>` : ''}</span>`).join('')}${list.length < 2 ? '<span class="sd-empty">⏳</span>' : ''}</div>
-      <div class="sd-row">${styleButtons(n.isHost)}</div>
-      <div class="sd-row">
-        ${n.isHost ? `<button class="sd-btn sd-start ${list.length < 2 ? 'off' : ''}" aria-label="Start">${icon('play')}</button>` : '<span class="sd-wait">⏳</span>'}
-        <button class="sd-btn sd-leave" aria-label="Leave">${icon('leave')}</button>
+    const canGo = list.length >= 2 && allReady(folk);
+    const label = canGo ? '' : startLabel(folk);
+    const box = el(`<div class="sd-overlay ui-overlay"><div class="sd-card ui-panel sd-lobby">
+      <div class="ui-kicker">Star Dash</div>
+      <h2 class="ui-title">Play with friends</h2>
+      ${lobbyHTML(folk, { hostDoing: HOST_DOING, myUid: n.room.uid })}
+      ${n.isHost
+        ? `<div class="ui-label">Track</div>${styleButtons(true)}`
+        : waitHTML(folk.find(p => p.host), HOST_DOING, n.ready)}
+      <div class="ui-row sd-foot">
+        <button class="ui-btn ghost sd-leave">${icon('leave')} Leave</button>
+        ${n.isHost ? `<button class="ui-btn primary big sd-start ${canGo ? '' : 'tg-locked'}">${icon('play')} Start</button>` : ''}
       </div>
+      ${n.isHost && label ? `<p class="ui-sub sd-golabel">${label}</p>` : ''}
     </div></div>`);
     if (n.isHost) wireStyles(box, () => { n.room.setMeta({ style: S.style }); demo(); render(); });
-    click(box.querySelector('.sd-start'), () => { if (lobbyPlayers().length >= 2) hostStart(); });
+    click(box.querySelector('.sd-start'), () => { if (lobbyPlayers().length >= 2 && allReady(netPeople())) hostStart(); });
     click(box.querySelector('.sd-leave'), () => { sound.pop(); leaveOnline(); });
+    const r = box.querySelector('[data-ready]');
+    if (r) click(r, () => { sound.pop(); setReady(!n.ready); render(); });
     ui.appendChild(box);
   }
 
   function goOnline(room) {
-    S.net = { room, isHost: room.isHost, code: room.code, pid: room.uid + '_p1', meta: null, players: {}, live: {}, raceId: 0, unsubs: [], status: 'ok', seen: {} };
+    S.net = { room, isHost: room.isHost, code: room.code, pid: room.uid + '_p1', joined: room.now(), ready: false, meta: null, players: {}, live: {}, raceId: 0, unsubs: [], status: 'ok', seen: {} };
     keepAwake(true);
-    room.setPlayer(S.net.pid, { joined: room.now(), name: myName() });
+    room.setPlayer(S.net.pid, { joined: S.net.joined, ...playerInfo(room.isHost) });
+    if (!room.isHost) joined(ID, room.code);
     S.net.unsubs.push(room.onMeta(onMeta));
     S.net.unsubs.push(room.onPlayers(p => { if (!S.net) return; S.net.players = p; if (S.phase === 'lobby') render(); }));
     S.net.unsubs.push(room.onLive(l => { if (S.net) S.net.live = l; }));
@@ -537,8 +555,10 @@ export function mount(stage) {
   async function hostRoom() {
     S.busy = true; render();
     try {
-      const room = await createRoom(GAME, { state: 'lobby', style: S.style, raceId: 0 });
+      const room = await playTogether(ID, () => createRoom(GAME, { state: 'lobby', style: S.style, raceId: 0 }));
       S.busy = false;
+      if (!room) { render(); return; } // friends panel opened instead
+      room.setMeta({ hostUid: room.uid });
       goOnline(room);
     } catch (e) {
       console.warn('online failed', e);
@@ -551,11 +571,11 @@ export function mount(stage) {
     try {
       const room = await joinRoom(GAME, code);
       S.busy = false;
-      if (!room) { S.joinCode = ''; S.sad = clock + 1.5; sound.bump(); render(); return; }
+      if (!room) { S.msg = 'That game has finished'; S.sad = clock + 3; sound.bump(); render(); return; }
       goOnline(room);
     } catch (e) {
       console.warn('online failed', e);
-      S.busy = false; S.joinCode = ''; S.sad = clock + 2; render();
+      S.busy = false; S.msg = ''; S.sad = clock + 2; render();
     }
   }
 
@@ -572,7 +592,7 @@ export function mount(stage) {
   function toLobby() {
     const n = S.net;
     if (n.isHost) n.room.setMeta({ state: 'lobby' });
-    else { demo(); S.phase = 'lobby'; render(); }
+    else { demo(); S.phase = 'lobby'; setReady(false); render(); }
   }
 
   function onMeta(m) {
@@ -594,6 +614,7 @@ export function mount(stage) {
     if (m.state === 'lobby' && S.phase !== 'lobby') {
       if (race && race.mode === 'online') demo();
       S.phase = 'lobby';
+      setReady(false); // get ready again for the next race
     }
     if (S.phase === 'lobby') render();
   }
@@ -620,12 +641,13 @@ export function mount(stage) {
     const n = S.net;
     if (!n) return;
     S.net = null;
+    leftRoom();
     keepAwake(false);
     n.unsubs.forEach(u => u && u());
     n.room.leave();
     if (!alive) return;
     S.phase = 'menu';
-    if (gone) S.sad = clock + 2;
+    if (gone) { S.msg = 'That game has finished'; S.sad = clock + 3; }
     demo();
     render();
   }
@@ -645,9 +667,14 @@ export function mount(stage) {
   // ---------------------------------------------------------------- go
   demo();
   render();
+  const invited = takeJoinCode(ID); // came from a friend's "come and play" pop-up
+  if (invited) tryJoin(invited);
+  // friends coming / going: keep the lobby strip up to date
+  const unFriends = onFriends(() => { if (S.net && S.phase === 'lobby') render(); });
 
   return () => {
     alive = false;
+    unFriends();
     cancelAnimationFrame(raf);
     if (S.net) leaveOnline();
     endRace();

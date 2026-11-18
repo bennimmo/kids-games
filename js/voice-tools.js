@@ -20,12 +20,12 @@ function voiceCtx() {
 }
 
 // Called for each bubble's <audio> whenever things change.
-export function playVoice(audioEl, stream) {
+export function playVoice(audioEl, stream, quiet) {
   const web = voiceOpts().player === 'webaudio';
   if (audioEl.srcObject !== (stream || null)) audioEl.srcObject = stream || null;
-  audioEl.muted = web; // Chrome needs the element playing (muted) for Web Audio to get the sound
+  audioEl.muted = web || !!quiet; // Chrome needs the element playing (muted) for Web Audio to get the sound
   if (stream && audioEl.paused) audioEl.play().catch(() => {});
-  if (web && stream && stream.getAudioTracks().length && !nodes.has(stream)) {
+  if (web && !quiet && stream && stream.getAudioTracks().length && !nodes.has(stream)) {
     try {
       const c = voiceCtx();
       const src = c.createMediaStreamSource(stream);
@@ -61,8 +61,9 @@ async function info() {
   } else rows.push(['My mic', 'off']);
   for (const p of friendPeers()) {
     let codec = '?', rate = '?', level = '?', lost = '?', pkt = '?', jit = '?', buf = '?', speed = '?', path = '?', rtt = '?';
+    let stats = new Map();
     try {
-      const stats = await p.pc.getStats();
+      stats = await p.pc.getStats();
       const byId = new Map(); stats.forEach(r => byId.set(r.id, r));
       stats.forEach(r => {
         if (r.type !== 'inbound-rtp' || r.kind !== 'audio') return;
@@ -88,7 +89,7 @@ async function info() {
         if (r.type !== 'candidate-pair' || !(r.nominated || r.selected) || r.state !== 'succeeded') return;
         const l = byId.get(r.localCandidateId), rm = byId.get(r.remoteCandidateId);
         const kind = c => (c ? `${c.candidateType}${c.protocol ? '/' + c.protocol : ''}` : '?');
-        path = `${kind(l)} → ${kind(rm)}`;
+        path = `${kind(l)} → ${kind(rm)}${l && l.candidateType === 'relay' ? ' (relay)' : ''}`;
         if (r.currentRoundTripTime != null) rtt = Math.round(r.currentRoundTripTime * 1000) + 'ms';
       });
     } catch (e) { /* */ }
@@ -97,6 +98,11 @@ async function info() {
     rows.push(['  jitter / buffer', `${jit} / ${buf}`]);
     rows.push(['  sped up / slowed', speed]);
     rows.push(['  path / delay', `${path} · ${rtt}`]);
+    // what each side found: host = local wifi address, srflx = internet address, relay = TURN
+    const count = type => { const m = {}; stats.forEach(r => { if (r.type === type) { const k = r.candidateType + (r.address && r.address.endsWith('.local') ? '(mdns)' : ''); m[k] = (m[k] || 0) + 1; } }); return Object.entries(m).map(([k, v]) => `${k}×${v}`).join(' ') || 'none'; };
+    rows.push(['  found here', count('local-candidate')]);
+    rows.push(['  found there', count('remote-candidate')]);
+    rows.push(['  link', `${p.pc.connectionState} / ice ${p.pc.iceConnectionState}`]);
   }
   return rows;
 }
@@ -108,7 +114,8 @@ function render() {
   el.querySelector('.vt-sws').innerHTML =
     sw('gameSounds', o.gameSounds, 'Game sounds during calls') +
     sw('player', o.player === 'webaudio', 'Play voices with Web Audio') +
-    sw('echo', o.echo, 'My mic: echo/noise cleaning');
+    sw('echo', o.echo, 'My mic: echo/noise cleaning') +
+    sw('relay', o.relay, 'Force relay (test the TURN server)');
   el.querySelectorAll('.vt-sw').forEach(b => b.addEventListener('click', () => {
     sound.pop();
     const k = b.dataset.k;

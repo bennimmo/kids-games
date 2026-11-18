@@ -13,7 +13,8 @@ import { icon } from '../../js/engine/icons.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from '../race-track/track.js';
 import { makeCourse, smoothTrack, spreadTrack } from './course.js';
 import { createRace, stepRace, standings, ITEMS, ITEM_LIST, zapAhead, boomAt } from './sim.js';
-import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, playerInfo, people, lobbyHTML, waitHTML, allReady, startLabel } from '../../js/engine/together.js';
 import { aiInput } from './ai.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { THEMES, THEME_IDS, PLANT_ICON } from './themes.js';
@@ -84,7 +85,7 @@ export function mount(stage) {
 
   const prefs = loadPrefs();
   const S = {
-    phase: 'build',      // build | saved | online | join | lobby | race | results
+    phase: 'build',      // build | saved | lobby | race | results
     theme: THEME_IDS.includes(prefs.theme) ? prefs.theme : 'country',
     players: (Array.isArray(prefs.players) && prefs.players.length ? prefs.players.slice(0, 2) : [{}]).map((p, i) => ({ id: 'p' + (i + 1), look: cleanLook(p.look, i), controls: i ? 'wasd' : 'arrows' })),
     bots: Number.isInteger(prefs.bots) ? Math.max(0, Math.min(6, prefs.bots)) : 3,
@@ -93,7 +94,7 @@ export function mount(stage) {
     tilt: typeof prefs.tilt === 'boolean' ? prefs.tilt : Math.min(screen.width, screen.height) < 600,
     track: null, modes: [], items: [], course: null,
     stroke: null, drag: null, garage: null, gTab: 'body', paused: false, time: 0,
-    net: null, busy: false, sad: 0, joinCode: '',
+    net: null, busy: false, sad: 0, ready: false, note: null,
   };
   function savePrefs() {
     hostSync();
@@ -122,13 +123,12 @@ export function mount(stage) {
     root.classList.toggle('racing', S.phase === 'race' || S.phase === 'results');
     if (S.phase === 'build') buildUI();
     if (S.phase === 'saved') savedUI();
-    if (S.phase === 'online') onlineUI();
-    if (S.phase === 'join') joinUI();
     if (S.phase === 'lobby') lobbyUI();
-    if (S.net && (S.phase === 'build' || S.phase === 'lobby')) badgeUI();
+    if (S.net && (S.phase === 'build' || S.phase === 'lobby')) stripUI();
+    if (S.note && S.time < S.note.until) ui.appendChild(el(`<div class="kk-note">${S.note.text}</div>`));
     if (S.net && S.net.status === 'waiting') ui.appendChild(el(`<div class="kk-netwait">📶⏳</div>`));
-    if (S.busy) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">⏳</div></div>`));
-    if (S.time < S.sad) ui.appendChild(el(`<div class="kk-overlay"><div class="kk-wait">😢</div></div>`));
+    if (S.busy) ui.appendChild(el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-mini-panel"><div class="kk-wait">⏳</div><p class="ui-sub">One moment…</p></div></div>`));
+    if (S.time < S.sad) ui.appendChild(el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-mini-panel"><div class="kk-wait">😢</div><p class="ui-sub">That didn't work</p></div></div>`));
     if (S.phase === 'race' || S.phase === 'results') raceUI();
     if (S.phase === 'results') resultsUI();
     if (S.garage) garageUI();
@@ -138,14 +138,14 @@ export function mount(stage) {
     const top = el(`<div class="kk-top">
       <div class="kk-themes">${THEME_IDS.map(t => `<button class="kk-theme ${t === S.theme ? 'on' : ''}" data-t="${t}" title="${THEMES[t].name}">${THEMES[t].icon}</button>`).join('')}</div>
       <div class="kk-tools">
-        ${S.net ? '' : `<button class="kk-btn kk-online" title="Race friends">${icon('globe')}</button>`}
-        <button class="kk-btn kk-dice" title="Make me a track">${icon('dice')}</button>
-        <button class="kk-btn kk-saved" title="Saved tracks">${icon('gallery')}</button>
-        <button class="kk-btn kk-clear" title="Clear">${icon('trash')}</button>
+        ${S.net ? '' : togetherButton('Play with friends', 'small')}
+        <button class="kk-btn ui-hud-btn kk-dice" title="Make me a track">${icon('dice')}</button>
+        <button class="kk-btn ui-hud-btn kk-saved" title="Saved tracks">${icon('gallery')}</button>
+        <button class="kk-btn ui-hud-btn kk-clear" title="Clear">${icon('trash')}</button>
       </div></div>`);
     top.querySelectorAll('.kk-theme').forEach(b => click(b, () => { S.theme = b.dataset.t; savePrefs(); setCourse(); render(); }));
     click(top.querySelector('.kk-dice'), randomTrack);
-    click(top.querySelector('.kk-online'), () => { S.phase = 'online'; render(); });
+    click(top.querySelector('[data-together]'), hostRoom);
     click(top.querySelector('.kk-saved'), () => { S.phase = 'saved'; render(); });
     click(top.querySelector('.kk-clear'), () => { S.track = null; S.items = []; S.modes = []; setCourse(); render(); });
     ui.appendChild(top);
@@ -189,9 +189,13 @@ export function mount(stage) {
       pal.appendChild(b);
     });
     bar.appendChild(pal);
-    const go = el(`<button class="kk-go ${S.track ? '' : 'off'}">🏁</button>`);
-    click(go, () => { askTilt(); if (S.track) (S.net ? hostStartRace() : startRace()); });
+    // online: locked until every friend has pressed I'm ready
+    const list = S.net ? people(S.net.players, S.net.room.uid) : [];
+    const locked = S.net && list.length > 1 && !allReady(list);
+    const go = el(`<button class="kk-go ${S.track ? '' : 'off'} ${locked ? 'tg-locked' : ''}">${icon('flag')}<span>Race</span></button>`);
+    click(go, () => { askTilt(); if (S.track && !locked) (S.net ? hostStartRace() : startRace()); });
     bar.appendChild(go);
+    if (locked) ui.appendChild(el(`<div class="kk-waitfor">⏳ ${startLabel(list)}</div>`));
     ui.appendChild(bar);
     ui.appendChild(el(`<div class="kk-bin">${icon('trash')}</div>`));
   }
@@ -258,9 +262,12 @@ export function mount(stage) {
 
   function savedUI() {
     const list = loadTracks();
-    const box = el(`<div class="kk-overlay"><div class="kk-card kk-saved-card"><button class="kk-btn kk-back">${icon('back')}</button><div class="kk-grid"></div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay"><div class="ui-panel wide kk-saved-card">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Saved tracks</h2><p class="ui-sub">Tap a track to race it again. ⭐ keeps it.</p>
+      <div class="kk-grid"></div>
+      <div class="ui-row kk-foot"><button class="ui-btn ghost kk-back">${icon('back')}<span>Back</span></button></div></div></div>`);
     const grid = box.querySelector('.kk-grid');
-    if (!list.length) grid.appendChild(el(`<div class="kk-empty">🏁 ➜ 🖼️</div>`));
+    if (!list.length) grid.appendChild(el(`<div class="kk-empty ui-sub">No tracks yet. Draw one and race it!</div>`));
     list.forEach(s => {
       const card = el(`<div class="kk-saved-item ${s.fav ? 'fav' : ''}"><canvas width="240" height="150"></canvas><button class="kk-star">${icon('star')}</button><button class="kk-del">${icon('close')}</button><button class="kk-del-yes">${icon('trash')}</button></div>`);
       const track = trackFromJSON(s.pts);
@@ -280,18 +287,21 @@ export function mount(stage) {
   // ------------------------------------------------------------ garage
   function openGarage(i) { S.garage = { i }; render(); }
 
-  const TABS = [['body', '🚗'], ['paint', '🎨'], ['wheels', '🛞'], ['driver', '🧑'], ['extras', '✨']];
+  const TABS = [['body', '🚗', 'Kart'], ['paint', '🎨', 'Paint'], ['wheels', '🛞', 'Wheels'], ['driver', '🧑', 'Driver'], ['extras', '✨', 'Extras']];
   function garageUI() {
     const p = S.players[S.garage.i];
     if (!p) { S.garage = null; return; }
     const L = p.look;
-    const box = el(`<div class="kk-overlay kk-garage-wrap"><div class="kk-garage" style="--pc:${P_COLORS[S.garage.i]}">
-      <div class="kk-gleft"><div class="kk-gname">${pname(S.garage.i)} 🔧</div><div class="kk-gview"></div><div class="kk-stats"></div></div>
-      <div class="kk-gright">
-        <div class="kk-tabs">${TABS.map(([id, ic]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}">${ic}</button>`).join('')}</div>
-        <div class="kk-opts"></div>
-        <button class="kk-ok">${icon('check')}</button>
-      </div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay kk-garage-wrap"><div class="ui-panel wide left kk-garage" style="--pc:${P_COLORS[S.garage.i]}">
+      <div class="kk-ghead"><div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">${pname(S.garage.i)}'s kart</h2></div>
+      <div class="kk-gbody">
+        <div class="kk-gleft"><div class="kk-gview"></div><div class="kk-stats"></div></div>
+        <div class="kk-gright">
+          <div class="ui-seg kk-tabs">${TABS.map(([id, ic, name]) => `<button class="kk-tab ${S.gTab === id ? 'on' : ''}" data-tab="${id}"><span>${ic}</span><span class="kk-tabname">${name}</span></button>`).join('')}</div>
+          <div class="kk-opts"></div>
+        </div>
+      </div>
+      <div class="ui-row end kk-foot"><button class="ui-btn go kk-ok">${icon('check')}<span>Done</span></button></div></div></div>`);
     if (preview) { box.querySelector('.kk-gview').appendChild(preview.canvas); preview.show(L); }
     const st = statsOf(L);
     box.querySelector('.kk-stats').innerHTML = [['⚡', 'Speed'], ['🚀', 'Pick-up'], ['🌀', 'Turning'], ['🏋️', 'Weight'], ['🌲', 'Off-road']].map(([ic, name], k) => `<div class="kk-stat"><span>${ic}</span><em>${name}</em><i>${Array.from({ length: 6 }, (_, j) => `<b class="${j < Math.round(st[k]) ? 'on' : ''}"></b>`).join('')}</i></div>`).join('');
@@ -311,7 +321,7 @@ export function mount(stage) {
       if (L.decal === 'number') row('#️⃣', `<button class="kk-ob kk-numdown">${icon('minus')}</button><b class="kk-num">${L.num}</b><button class="kk-ob kk-numup">${icon('plus')}</button>`);
     }
     if (S.gTab === 'wheels') {
-      if (L.body === 'hover') row('', '<div class="kk-note">🛸 ✔️</div>');
+      if (L.body === 'hover') row('', '<div class="ui-sub kk-hovernote">🛸 Hover karts float, so no wheels needed.</div>');
       else row('', WHEELS.map(w => `<button class="kk-ob kk-obig ${L.wheels === w.id ? 'on' : ''}" data-k="wheels" data-v="${w.id}">${kartImg({ ...L, wheels: w.id })}<small>${w.icon}</small></button>`).join(''));
     }
     if (S.gTab === 'driver') {
@@ -447,7 +457,7 @@ export function mount(stage) {
     R.mini = mini;
     R.miniBg = null;
     const guest = S.net && !S.net.isHost;
-    const top = el(`<div class="kk-racetop"><button class="kk-btn kk-pause">${icon(guest ? 'leave' : 'pause')}</button></div>`);
+    const top = el(`<div class="kk-racetop"><button class="kk-btn ui-hud-btn kk-pause" title="${guest ? 'Leave' : 'Pause'}">${icon(guest ? 'leave' : 'pause')}</button></div>`);
     click(top.querySelector('.kk-pause'), () => { if (guest) { leaveOnline(); return; } S.paused = !S.net; pauseUI(); });
     ui.appendChild(top);
     if (S.paused) pauseUI();
@@ -455,9 +465,13 @@ export function mount(stage) {
 
   function pauseUI() {
     if ($('.kk-pausebox')) return;
-    const box = el(`<div class="kk-overlay kk-pausebox"><div class="kk-card"><div class="kk-actions">
-      <button class="kk-big-btn kk-resume">${icon('play')}</button><button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>
-    </div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay kk-pausebox"><div class="ui-panel">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Paused</h2>
+      <div class="kk-stack">
+        <button class="ui-btn primary big kk-resume">${icon('play')}<span>Resume</span></button>
+        <button class="ui-btn kk-again">${icon('retry')}<span>Restart race</span></button>
+        <button class="ui-btn ghost kk-edit">${icon('edit')}<span>Back to the track</span></button>
+      </div></div></div>`);
     click(box.querySelector('.kk-resume'), () => { S.paused = false; box.remove(); });
     click(box.querySelector('.kk-again'), () => raceAgain());
     click(box.querySelector('.kk-edit'), () => toBuild());
@@ -467,8 +481,9 @@ export function mount(stage) {
   function resultsUI() {
     const list = standings(R.race);
     const guest = S.net && !S.net.isHost;
-    const box = el(`<div class="kk-overlay"><div class="kk-card kk-results"><div class="kk-trophy">🏆</div><ol></ol>
-      <div class="kk-actions">${guest ? '<div class="kk-wait">⏳</div>' : `<button class="kk-big-btn kk-again">${icon('retry')}</button><button class="kk-big-btn kk-edit">${icon('edit')}</button>`}</div></div></div>`);
+    const box = el(`<div class="ui-overlay kk-overlay"><div class="ui-panel kk-results">
+      <div class="ui-kicker">Kit's Karts</div><h2 class="ui-title">Results</h2><ol></ol>
+      ${guest ? '<p class="ui-sub">⏳ Waiting for the next race…</p>' : `<div class="ui-row kk-foot"><button class="ui-btn ghost kk-edit">${icon('edit')}<span>Track</span></button><button class="ui-btn primary big kk-again">${icon('retry')}<span>Race again</span></button></div>`}</div></div>`);
     list.forEach((c, i) => {
       const hi = R.localIds.indexOf(c.id);
       const who = hi >= 0 ? pname(hi) : c.cpu ? '🤖 ' + c.name : '🌍 ' + (c.name || '');
@@ -512,7 +527,7 @@ export function mount(stage) {
     S.players.forEach((p, i) => {
       const id = pidOf(p);
       now.add(id);
-      S.net.room.setPlayer(id, { look: p.look, name: (i === 0 && myName()) || DRIVER_ICON[p.look.driver] || '🙂', joined: S.net.joined + i });
+      S.net.room.setPlayer(id, { ...playerInfo(S.ready), look: p.look, name: (i === 0 && myName()) || DRIVER_ICON[p.look.driver] || '🙂', joined: S.net.joined + i });
     });
     S.net.synced.forEach(id => { if (!now.has(id)) S.net.room.setPlayer(id, null); });
     S.net.synced = now;
@@ -543,14 +558,14 @@ export function mount(stage) {
     hostSync();
   }
 
+  // "Play with friends": make a room, friends get an invite (together.js)
   async function hostRoom() {
-    if (!S.track) return;
+    if (S.net || S.busy) return;
     S.busy = true; render();
     try {
-      const room = await createRoom(GAME, { state: 'build', raceId: 0 });
+      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'build', raceId: 0 }));
       S.busy = false;
-      goOnline(room);
-      S.phase = 'build';
+      if (room) { goOnline(room); S.phase = 'build'; }
     } catch (e) {
       console.warn('online failed', e);
       S.busy = false; S.sad = S.time + 2; S.phase = 'build';
@@ -563,12 +578,14 @@ export function mount(stage) {
     try {
       const room = await joinRoom(GAME, code);
       S.busy = false;
-      if (!room) { S.joinCode = ''; S.sad = S.time + 1.5; sound.bump(); render(); return; }
+      if (!room) { S.note = { text: '😢 That game has finished', until: S.time + 3 }; sound.bump(); render(); return; }
+      S.ready = false;
       goOnline(room);
+      joined(GAME, code);
       S.phase = 'lobby';
     } catch (e) {
       console.warn('online failed', e);
-      S.busy = false; S.joinCode = ''; S.sad = S.time + 2;
+      S.busy = false; S.sad = S.time + 2;
     }
     render();
   }
@@ -580,6 +597,8 @@ export function mount(stage) {
     keepAwake(false);
     net.unsubs.forEach(u => u && u());
     net.room.leave();
+    leftRoom();
+    S.ready = false;
     endRace();
     S.paused = false;
     S.phase = 'build';
@@ -592,6 +611,7 @@ export function mount(stage) {
     if (!S.net) return;
     if (!m) { leaveOnline(true); return; } // the host left
     S.net.meta = m;
+    if (m.hostUid !== S.net.hostUid) { S.net.hostUid = m.hostUid; if (['build', 'lobby'].includes(S.phase) && !R) render(); } // now we know who's building
     if (!S.net.isHost && m.track) {
       const key = JSON.stringify(m.track);
       if (key !== S.net.trackKey) {
@@ -605,7 +625,7 @@ export function mount(stage) {
     }
     if (!S.net.isHost && S.phase === 'lobby') { const b = $('.kk-lobby-info'); if (b) b.innerHTML = lobbyInfo(); }
     if (m.state === 'race' && m.raceId !== S.net.raceId) startOnlineRace(m);
-    if (m.state === 'build' && !S.net.isHost && (S.phase === 'race' || S.phase === 'results')) { endRace(); setCourse(); S.phase = 'lobby'; render(); }
+    if (m.state === 'build' && !S.net.isHost && (S.phase === 'race' || S.phase === 'results')) { endRace(); setCourse(); S.phase = 'lobby'; S.ready = false; syncMyPlayers(); render(); }
   }
 
   function hostStartRace() {
@@ -718,64 +738,38 @@ export function mount(stage) {
   const onVisible = () => { if (S.net && document.visibilityState === 'visible') keepAwake(true); };
   document.addEventListener('visibilitychange', onVisible);
 
-  const picsHTML = code => `<div class="kk-code"><b>🔑</b>${codeToPics(code).map(p => `<span>${p}</span>`).join('')}</div>`;
-  function badgeUI() {
-    const list = roster().filter(r => !r.cpu);
-    const b = el(`<div class="kk-badge ${S.phase === 'lobby' ? 'up' : ''}">${picsHTML(S.net.code)}<div class="kk-friends">${list.map(r => `<figure>${kartImg(r.look)}${cleanName(r.name) ? `<b>${cleanName(r.name)}</b>` : ''}</figure>`).join('')}</div><button class="kk-btn kk-leave" title="Leave">${icon('leave')}</button></div>`);
+  // who's in the room and what they're doing (same strip in every game, together.js)
+  function stripUI() {
+    const list = people(S.net.players, (S.net.meta && S.net.meta.hostUid) || (S.net.isHost ? S.net.room.uid : ''));
+    const b = el(`<div class="kk-strip ${S.phase === 'lobby' ? 'up' : ''}">${lobbyHTML(list, { hostDoing: 'building the track', myUid: S.net.room.uid })}<button class="ui-btn danger round small kk-leave" title="Leave">${icon('leave')}</button></div>`);
     click(b.querySelector('.kk-leave'), () => leaveOnline());
     ui.appendChild(b);
   }
   function lobbyInfo() {
     const m = (S.net && S.net.meta) || {};
-    return `✏️⏳ <span>🤖${Math.min(6, m.bots | 0)}</span> <span>🏁${m.laps || 3}</span>`;
+    return `<span>🤖 ${Math.min(6, m.bots | 0)}</span><span>🏁 ${m.laps || 3}</span>`;
   }
-  // a friend waits (and can do up their kart) while the host draws
+  // a friend waits while the host draws: do up your kart, then I'm ready!
   function lobbyUI() {
-    const bar = el(`<div class="kk-bar"><div class="kk-panel kk-players"></div><div class="kk-panel kk-lobby-info">${lobbyInfo()}</div></div>`);
-    const pl = bar.querySelector('.kk-players');
+    const list = people(S.net.players, (S.net.meta && S.net.meta.hostUid) || '');
+    const host = list.find(p => p.host);
+    const card = el(`<div class="kk-bar kk-lobbybar">${waitHTML(host, 'building the track', S.ready)}</div>`);
+    const wait = card.querySelector('.tg-wait');
+    const karts = el(`<div class="kk-mykarts"></div>`);
     S.players.forEach((p, i) => {
-      const card = el(`<div class="kk-player" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${pname(i)}</b>${i ? `<button class="kk-x">${icon('close')}</button>` : ''}<i>🔧</i></div>`);
-      click(card, () => openGarage(i));
-      click(card.querySelector('.kk-x'), () => { S.players.splice(i, 1); savePrefs(); render(); });
-      pl.appendChild(card);
+      const b = el(`<button class="kk-mykart" style="--pc:${P_COLORS[i]}">${kartImg(p.look)}<b>${icon('edit')} ${i ? 'P2 kart' : 'My kart'}</b>${i ? `<span class="kk-x">${icon('close')}</span>` : ''}</button>`);
+      click(b, e => { if (e.target.closest('.kk-x')) { S.players.splice(i, 1); savePrefs(); render(); return; } openGarage(i); });
+      karts.appendChild(b);
     });
     if (S.players.length < 2) {
-      const add = el(`<button class="kk-player kk-add" title="Two players">${icon('plus')}<b>P2</b></button>`);
+      const add = el(`<button class="kk-mykart kk-add2" title="Two players">${icon('plus')}<b>P2</b></button>`);
       click(add, () => { S.players.push({ id: 'p2', look: cleanLook(null, 1), controls: 'wasd' }); savePrefs(); openGarage(1); });
-      pl.appendChild(add);
+      karts.appendChild(add);
     }
-    ui.appendChild(bar);
-  }
-  function onlineUI() {
-    const box = el(`<div class="kk-overlay"><div class="kk-card">
-      <div class="kk-actions">
-        <button class="kk-choice kk-host ${S.track ? '' : 'off'}"><canvas width="240" height="150"></canvas><span>🏠</span></button>
-        <button class="kk-choice kk-join"><div class="kk-blank kk-pics3">🐶🍎🚀</div><span>🔑</span></button>
-      </div>
-      ${S.track ? '' : '<div class="kk-hint">✏️ ➜ 🏠</div>'}
-      <button class="kk-btn kk-back">${icon('back')}</button>
-    </div></div>`);
-    if (S.track) drawThumb(box.querySelector('canvas'), S.course, S.items, S.theme);
-    click(box.querySelector('.kk-host'), () => { if (S.track) hostRoom(); });
-    click(box.querySelector('.kk-join'), () => { S.joinCode = ''; S.phase = 'join'; render(); });
-    click(box.querySelector('.kk-back'), () => { S.phase = 'build'; render(); });
-    ui.appendChild(box);
-  }
-  function joinUI() {
-    const slots = Array.from({ length: CODE_LEN }, (_, i) => `<span>${S.joinCode[i] !== undefined ? CODE_PICS[parseInt(S.joinCode[i], 16)] : ''}</span>`).join('');
-    const box = el(`<div class="kk-overlay"><div class="kk-card">
-      <div class="kk-code kk-slots">${slots}</div>
-      <div class="kk-keypad">${CODE_PICS.map((p, i) => `<button data-h="${i.toString(16)}">${p}</button>`).join('')}</div>
-      <div class="kk-actions"><button class="kk-btn kk-back">${icon('back')}</button><button class="kk-btn kk-del-pic">${icon('backspace')}</button></div>
-    </div></div>`);
-    box.querySelectorAll('.kk-keypad button').forEach(b => click(b, () => {
-      if (S.joinCode.length >= CODE_LEN) return;
-      S.joinCode += b.dataset.h;
-      if (S.joinCode.length === CODE_LEN) { askTilt(); tryJoin(S.joinCode); } else render();
-    }));
-    click(box.querySelector('.kk-del-pic'), () => { S.joinCode = S.joinCode.slice(0, -1); render(); });
-    click(box.querySelector('.kk-back'), () => { S.phase = 'online'; render(); });
-    ui.appendChild(box);
+    karts.appendChild(el(`<div class="kk-lobby-info">${lobbyInfo()}</div>`));
+    wait.insertBefore(karts, wait.querySelector('[data-ready]'));
+    click(wait.querySelector('[data-ready]'), () => { askTilt(); S.ready = !S.ready; syncMyPlayers(); render(); });
+    ui.appendChild(card);
   }
 
   // ------------------------------------------------------------ HUD
@@ -1066,7 +1060,7 @@ export function mount(stage) {
   function edInsets() {
     const rr = root.getBoundingClientRect();
     let top = 12, bottom = 12;
-    for (const sel of ['.kk-top', '.kk-badge']) { const e = $(sel); if (e) top = Math.max(top, e.getBoundingClientRect().bottom - rr.top + 6); }
+    for (const sel of ['.kk-top', '.kk-strip']) { const e = $(sel); if (e) top = Math.max(top, e.getBoundingClientRect().bottom - rr.top + 6); }
     const b = $('.kk-bar'); if (b) bottom = rr.bottom - b.getBoundingClientRect().top + 6;
     return { top, bottom };
   }
@@ -1091,7 +1085,7 @@ export function mount(stage) {
     if (R && S.paused) R.engines.forEach(e => e && e.set(0, false));
   }, () => {
     if (S.sad && S.time >= S.sad) { S.sad = 0; render(); }
-    if (['build', 'saved', 'online', 'join', 'lobby'].includes(S.phase)) {
+    if (['build', 'saved', 'lobby'].includes(S.phase)) {
       editor.frame({ insets: edInsets(), stroke: S.stroke, drag: S.drag && S.drag.item, hint: !S.track && !S.stroke, time: S.time });
     }
     if (S.garage && preview) preview.frame(1 / 60);
@@ -1124,11 +1118,14 @@ export function mount(stage) {
 
   setCourse();
   render();
+  // opened from a friend's invite (together.js): join straight away
+  const inviteCode = takeJoinCode(GAME);
+  if (inviteCode) tryJoin(inviteCode);
   if (location.search.includes('kkdebug')) window.__kk = () => ({ S, R, renderer, tilt });
 
   return () => {
     removeEventListener('deviceorientation', onOrient);
-    if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; }
+    if (S.net) { S.net.unsubs.forEach(u => u && u()); S.net.room.leave(); S.net = null; leftRoom(); }
     keepAwake(false);
     document.removeEventListener('visibilitychange', onVisible);
     stopLoop();

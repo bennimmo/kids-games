@@ -1,17 +1,17 @@
 // Playing with friends. Uses the shared rooms in js/engine/net.js:
 //   meta (host only)   = { v, hostPid, phase: 'lobby'|'play', map, bots: [{ level, look }],
 //                          game: { id, seed, map, roster: [{ pid } | { bot: level, look }] } }
-//   players/<pid>      = { look }
+//   players/<pid>      = { look, name, face, ready }   (name/face/ready: js/engine/together.js)
 //   live/<pid>         = { g: game id, d: <driving/aiming now>, s<turn>: <shot>, a<turn>: <tanks after> }
 // Every device runs the same game from the same seed. Only shots are sent.
 // Computer tanks belong to the host, so the host sends their shots.
 // If someone drops out on their turn, the host sends { skip: 1 } for them.
-import { createRoom, joinRoom, CODE_PICS, codeToPics } from '../../js/engine/net.js';
+import { createRoom, joinRoom } from '../../js/engine/net.js';
+import { playerInfo } from '../../js/engine/together.js';
 import { sanitizeLook } from './render.js';
 import { WEAPON } from './weapons.js';
-import { MAPS, MAX_SPEED, W, H } from './sim.js';
+import { MAPS, MAX_SPEED, MAX_W as W, H } from './sim.js';
 
-export { CODE_PICS };
 export const GAME_ID = 'tank-tantrum';
 const DRIVE_EVERY = 110; // ms
 
@@ -39,11 +39,13 @@ export function connect(room, look, { onChange, onClosed }) {
   const pid = room.uid + '_0';   // database rules: player ids start with "<uid>_"
   let players = {}, live = {}, meta = null;
   let metaSeen = false, closed = false, gameId = null;
+  let myLook = sanitizeLook(look), myReady = false;
+  const writeMe = () => room.setPlayer(pid, { look: myLook, ...playerInfo(myReady) }).catch(() => {});
   let driveTimer = null, drivePending = null, lastDrive = 0;
   const unsubs = [];
   const emit = () => { if (!closed) onChange(); };
 
-  room.setPlayer(pid, { look: sanitizeLook(look) }).catch(() => {});
+  writeMe();
   if (room.isHost) room.setMeta({ hostPid: pid }).catch(() => {});
 
   unsubs.push(room.onPlayers(p => { players = p || {}; emit(); }));
@@ -69,14 +71,17 @@ export function connect(room, look, { onChange, onClosed }) {
 
   return {
     pid,
+    uid: room.uid,
     code: room.code,
-    pics: codeToPics(room.code),
     isHost: room.isHost,
     meta: () => meta,
     hostPid,
     players: () => Object.entries(players).map(([id, p]) => ({ pid: id, me: id === pid, look: sanitizeLook(p && p.look) })),
+    rawPlayers: () => players,
     hasPlayer: id => !!players[id],
-    setLook(l) { room.setPlayer(pid, { look: sanitizeLook(l) }).catch(() => {}); },
+    setLook(l) { myLook = sanitizeLook(l); writeMe(); },
+    ready: () => myReady,
+    setReady(r) { if (myReady === !!r) return; myReady = !!r; writeMe(); },
     // host
     setLobby(data) { if (room.isHost) room.setMeta(data).catch(() => {}); },
     startGame(game) { if (room.isHost) room.setMeta({ phase: 'play', game }).catch(() => {}); },

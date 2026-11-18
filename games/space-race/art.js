@@ -106,7 +106,7 @@ export function textures() {
 
 export function textTex(text, color) {
   return canvasTex(512, 128, (g, w, h) => {
-    g.font = '700 84px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = '700 84px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.shadowColor = color; g.shadowBlur = 24; g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2 + 4);
   });
 }
