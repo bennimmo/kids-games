@@ -37,7 +37,7 @@ export const TRICKS = {
 //   (below 1 it steps out before the front lets go)      drift: how far and fast the back swings when it goes
 export const HANDLING = {
   planted: { name: 'Planted', grip: 17.5, tip: 17, low: 3.2, rear: 1.0, drift: 1.0, hook: 6 },
-  loose: { name: 'Loose', grip: 16.5, tip: 17, low: 3.2, rear: 0.78, drift: 1.7, hook: 3.5 },
+  loose: { name: 'Sharp + drifty', grip: 21, tip: 24, low: 3.8, rear: 0.84, drift: 1.5, hook: 5 },
   sharp: { name: 'Sharp', grip: 21, tip: 24, low: 3.8, rear: 0.92, drift: 1.2, hook: 7 },
 };
 
@@ -58,7 +58,7 @@ export function newRider(world) {
     crashed: false, crashT: 0, finished: false, events: [],
     cp: 0, progress: 0, route: 0, onTrail: true, rough: 0, rattle: 0, noCrash: false,
     P: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 },     // bike stats (bike.js BIKES)
-    H: HANDLING.planted, drift: 0,
+    H: HANDLING.sharp, drift: 0,
   };
   placeAt(b, world, world.start);
   return b;
@@ -163,7 +163,7 @@ function groundStep(b, world, inp, dt, popNow) {
   // ---- what the tyres are on, and how much grip that gives
   const sf = world.surfaceAt ? world.surfaceAt(b.pos.x, b.pos.z, tmpSurf) : tmpSurf;
   const mu = (onDirt ? 1 : 0.72) * world.B.grip * b.P.grip * (sf.wood > 0.5 ? 0.86 : 1) * (sf.stone > 0.5 ? 0.92 : 1) * (wet > 0.02 ? 0.72 : 1);
-  const H = b.H || HANDLING.planted;
+  const H = b.H || HANDLING.sharp;
   const tyre = H.grip * mu * n.y;
   // ---- lean to steer: the stick asks for a turn, the bike leans over to make it, and the lean is what turns you.
   // Slow: you turn the bars (quick, tight). Fast: you can only ask for what the tyres can hold, so the same
@@ -175,7 +175,7 @@ function groundStep(b, world, inp, dt, popNow) {
   b.rollV += (tipIn * tipIn * (rollWant - b.roll) - 2 * tipIn * b.rollV) * dt;
   b.roll += b.rollV * dt;
   // (when the front tyre is pushing wide the bike turns less than its lean asks: understeer)
-  const push = b.brake > 0.5 ? 0 : clamp(b.slip - 1, 0, 2);
+  const push = b.brake > 0.5 ? 0 : clamp((b.slip - 3) / 3, 0, 2);
   const yawRate = G * Math.tan(b.roll) / vv / (1 + 0.45 * push) * (1 + 0.5 * Math.abs(b.drift));      // (with the back stepped out the bike rotates quicker)
   b.yaw = wrap(b.yaw - yawRate * dt * (v > 0.3 ? 1 : 0.3));
   // ---- the back wheel. The front tyre carries the steering and digs in; it almost never slides. The back
@@ -223,16 +223,18 @@ function groundStep(b, world, inp, dt, popNow) {
   const grip = tyre * (b.brake > 0.5 ? 0.72 : 1) * (1 + berm) * (1 - steepSide);
   // tyre grip curve: a little sideways slip gives more and more grip up to a peak; past the peak the tyre lets
   // go gradually and slides with less grip than it had, until you ease off and it hooks up again
-  const vPeak = 1.0 + 0.035 * v, sl = Math.abs(vS) / vPeak;
-  const curve = sl < 1 ? sl * (2 - sl) : Math.max(0.85, 1 - 0.08 * (sl - 1));       // the front tyre keeps biting
+  // (stiff tyres: the peak comes at a very small slip, so in normal cornering - and round a berm - the bike goes
+  //  where its front wheel points instead of creeping sideways)
+  const vPeak = 0.3 + 0.012 * v, sl = Math.abs(vS) / vPeak;
+  const curve = sl < 1 ? sl * (2 - sl) : Math.max(0.88, 1 - 0.03 * (sl - 1));       // the front tyre keeps biting
   const dv = grip * curve * dt;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
   b.slip = sl;
-  if (sl > 0.9 && steepSide < 0.5) {
-    vF -= Math.sign(vF) * Math.min(Math.abs(vF), grip * 0.22 * Math.min(1.5, sl - 0.9) * dt);        // sliding scrubs speed
+  if (sl > 2.5 && steepSide < 0.5) {
+    vF -= Math.sign(vF) * Math.min(Math.abs(vF), grip * 0.1 * Math.min(1.5, (sl - 2.5) / 3) * dt);        // sliding scrubs speed
   }
-  if (steepSide < 0.5) vS -= vS * Math.min(1, 3 * dt);
-  b.slide = lerp(b.slide, clamp(Math.max((sl - 1.2) / 1.2, Math.abs(b.drift) / 0.3), 0, 1), 0.2);
+  if (steepSide < 0.5) vS -= vS * Math.min(1, (6 + 10 * clamp(berm, 0, 1)) * dt);       // ...and a berm holds it harder still
+  b.slide = lerp(b.slide, clamp(Math.max((sl - 3) / 4, Math.abs(b.drift) / 0.3), 0, 1), 0.2);
   b.vS = vS; b.bankUp = bankUp;
 
   b.vel.x = f.x * vF + s.x * vS; b.vel.y = f.y * vF + s.y * vS; b.vel.z = f.z * vF + s.z * vS;
