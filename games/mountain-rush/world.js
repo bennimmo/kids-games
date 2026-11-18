@@ -214,6 +214,44 @@ export function buildWorld(mapId = 'pine-ridge') {
       else if (kind === 'rollers') { const f = { kind, s, n: 4, wl: 9, a: 0.45 }; f.end = s + f.n * f.wl; feats.push(f); s = f.end + gapAfter; }
       else { const f = { kind: 'rocks', s, len: 22 }; f.end = s + f.len; feats.push(f); s = f.end + gapAfter; }
     }
+    // fill the quiet stretches: compact features that don't need a straight or a big landing, so they fit
+    // on bends and near the other route:
+    //   ladder   - a plank ladder bridge humping over the rocks
+    //   rockroll - a rock slab: the trail rises onto it, then rolls steeply off the front
+    //   rollin   - up onto a timber deck, then down a steep plank ramp
+    {
+      const otherD = ri ? BtoA.nd : AtoB.nd;
+      const used = new Uint8Array(N);
+      for (const f of feats) for (let j = Math.max(0, Math.floor(f.s - 9)); j < Math.min(N, f.end + 11); j++) used[j] = 1;
+      // where the two routes run together as one trail, route A owns the features; where they cross, nobody builds
+      const oth = ri ? A : Bl, oi = ri ? BtoA.ni : AtoB.ni;
+      for (let j = 0; j < N; j++) {
+        const par = Math.abs(ln.tx[j] * oth.tz[oi[j]] - ln.tz[j] * oth.tx[oi[j]]) < 0.2;
+        if (taken[j] || (otherD[j] < 9 && (ri === 1 || !par || otherD[j] > 4.5))) used[j] = 1;
+      }
+      let fk = ri;
+      for (let s0 = START + 28; s0 < FINISH - 50; s0++) {
+        let free = 0; while (s0 + free < FINISH - 40 && !used[s0 + free]) free++;
+        if (free < 32) { s0 += free; continue; }
+        // room for one every 36 m or so
+        const count = Math.max(1, Math.floor((free - 2) / 30)), pitch = free / count;
+        for (let q = 0; q < count; q++) {
+          const s = Math.round(s0 + pitch * q + (pitch - 20) / 2);
+          let c = 0; for (let j = s; j < s + 20; j++) c = Math.max(c, Math.abs(ln.curvS[j]));
+          let kind = ['ladder', 'rockroll', 'rollin'][fk++ % 3];
+          if (c > 0.03 && kind !== 'rockroll') kind = c > 0.05 ? 'rollers' : 'rockroll';
+          let f;
+          if (kind === 'ladder') f = { kind, s, len: 16 };
+          else if (kind === 'rockroll') f = { kind, s, run: 11, h: 1.35, len: 3.2 };
+          else if (kind === 'rollin') f = { kind, s, lk: 6, hk: 1.3, top: 3, down: 4.6 };
+          else f = { kind: 'rollers', s, n: 3, wl: 6, a: 0.4 };
+          f.filler = true;
+          f.end = kind === 'ladder' ? s + f.len : kind === 'rockroll' ? s + f.run + f.len : kind === 'rollin' ? s + f.lk + f.top + f.down : s + f.n * f.wl;
+          feats.push(f);
+        }
+        s0 += free;
+      }
+    }
     // the trail gets wider at jumps so you can ride round them (and out of a gap if you come up short)
     let widen = new Float32Array(N);
     for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.4 : 0.9;
@@ -296,6 +334,24 @@ export function buildWorld(mapId = 'pine-ridge') {
             hN += hh * (f.off ? nar(d, f.off, 2.0, 0.5) : f.fw ? nar(d, 0, f.fw + 0.4, f.edge) : nar(d));
           }
           if (f.wood && u > -0.2 && u < f.lk + back) wood = Math.max(wood, nar(d, 0, 1.85, 0.25));
+        } else if (f.kind === 'ladder') {
+          const fade = smooth(0, 2.2, u) * (1 - smooth(f.len - 2.2, f.len, u));
+          const side = nar(d, 0, 1.05, 0.22);
+          hN += (0.3 + 0.45 * Math.sin(clamp(u / f.len, 0, 1) * Math.PI)) * fade * side;      // humps up in the middle like a bridge
+          wood = Math.max(wood, (u > 0.6 && u < f.len - 0.6 ? 1 : 0) * nar(d, 0, 1.2, 0.2));
+          hW += fade * Math.max(0, nz.n2(sc / 1.4 + 31, d / 1.1 + ri * 9)) * 0.3 * smooth(1.3, 2.0, Math.abs(d));   // rocks either side
+        } else if (f.kind === 'rockroll') {
+          if (u < f.run) hW += f.h * smooth(0, f.run, u);
+          else hW += f.h * (1 - smooth(f.run, f.run + f.len, u));
+          jump = 1;
+        } else if (f.kind === 'rollin') {
+          const g1 = f.lk + f.top;
+          const side = nar(d, 0, 1.3, 0.3);
+          if (u < f.lk) hN += f.hk * smooth(0, f.lk, u) * side;
+          else if (u < g1) hN += f.hk * side;
+          else hN += f.hk * (1 - clamp((u - g1) / f.down, 0, 1)) * side;
+          if (u > f.lk - 0.3 && u < g1 + f.down + 0.2) wood = Math.max(wood, nar(d, 0, 1.45, 0.2));
+          jump = 1;
         } else if (f.kind === 'skinny') {
           const fade = smooth(0, 2.5, u) * (1 - smooth(f.len - 2.5, f.len, u));
           hW += -0.75 * fade * smooth(0.5, 0.95, Math.abs(d));       // the ground drops away each side of the plank
@@ -519,6 +575,14 @@ export function buildWorld(mapId = 'pine-ridge') {
     const i = Math.floor(f.s + 1 + r() * (f.len - 2)), w = R.halfW(i), d = (r() * 2 - 1) * (w + 0.6);
     const x = R.x[i] + R.tz[i] * d, z = R.z[i] - R.tx[i] * d;
     rocks.push({ x, z, y: height(x, z), s: 0.2 + r() * 0.35, rot: r() * 6.3, tilt: r() });
+  }
+
+  // boulders flanking the rock rolls and ladder bridges
+  for (const R of routes) for (const f of R.feats) if (f.kind === 'rockroll' || f.kind === 'ladder') for (let k2 = 0; k2 < 10; k2++) {
+    const i = Math.floor(f.kind === 'rockroll' ? f.s + f.run - 3 + r() * (f.len + 4) : f.s + 1 + r() * (f.len - 2)), w = R.halfW(i);
+    const d = (k2 % 2 ? 1 : -1) * (f.kind === 'rockroll' ? w + 0.5 + r() * 1.4 : 1.7 + r() * (w - 0.9));
+    const x = R.x[i] + R.tz[i] * d, z = R.z[i] - R.tx[i] * d;
+    rocks.push({ x, z, y: height(x, z), s: f.kind === 'rockroll' ? 0.7 + r() * 0.9 : 0.25 + r() * 0.4, rot: r() * 6.3, tilt: r() });
   }
 
   // tech zones: a padded tree on the inside of every hard turn (the thing you zig-zag round)
