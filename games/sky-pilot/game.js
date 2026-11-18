@@ -11,7 +11,7 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { createRoom, joinRoom, joinPublic, serverNow } from '../../js/engine/net.js';
+import { createRoom, joinRoom, joinPublic, serverNow, friendUids } from '../../js/engine/net.js';
 import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, lobbyHTML, people, playerInfo } from '../../js/engine/together.js';
 import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, VILLAGES, townMask, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
@@ -58,6 +58,8 @@ export function mount(stage) {
   const hudEl = root.querySelector('.sp-hud'), ui = root.querySelector('.sp-ui');
   const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; };
   const click = (node, fn) => node && node.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); fn(e); });
+  // in-flight buttons: react on finger down (a 'click' never comes if another finger is on the stick)
+  const tap = (node, fn) => node && node.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fn(e); });
 
   const quality = pickQuality();
   let renderer;
@@ -474,23 +476,30 @@ export function mount(stage) {
   }
   function pilotStatus() {
     if (net.room) return '👫 In a friends game';
-    if (!prefs.shared) return '🌍 Shared sky is off (turn it on in ⏸️)';
-    if (!net.pub) return '🌍 Connecting… ⏳';
-    return '🌤️ Nobody else is flying right now';
+    if (!prefs.shared) return '👫 Flying with friends is off (turn it on in ⏸️)';
+    if (!friendUids().length) return '👫 Add friends on the main menu to fly together';
+    if (!net.pub) return '👫 Connecting… ⏳';
+    return '🌤️ No friends flying right now';
   }
+  // rebuild only when who's in the list changes (rebuilding under a finger loses the tap); distances update in place
   function fillPilots(p, box) {
     const list = pilotList();
-    const key = list.map(x => x.pid + Math.round(x.d / 100)).join() + '|' + pilotStatus();
-    if (box.dataset.key === key) return;
-    box.dataset.key = key;
-    box.innerHTML = list.length
-      ? list.slice(0, 12).map(x => `<button data-pid="${x.pid}" style="--rc:#${new THREE.Color(x.r.color).getHexString()}"><span>${PLANES[x.r.type].icon}</span><b>${(x.r.name || "Pilot").replace(/[<>&"]/g, "")}</b><small>${x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1) + ' km'}</small><i>✈️➡️</i></button>`).join('')
-      : `<p>${pilotStatus()}</p>`;
-    box.querySelectorAll('button').forEach(b => click(b, () => { const r = remotes.get(b.dataset.pid); box.classList.remove('show'); if (r) teleportTo(p, r); }));
+    const key = list.slice(0, 12).map(x => x.pid).join() + '|' + (list.length ? '' : pilotStatus());
+    if (box.dataset.key !== key) {
+      box.dataset.key = key;
+      box.innerHTML = list.length
+        ? list.slice(0, 12).map(x => `<button data-pid="${x.pid}" style="--rc:#${new THREE.Color(x.r.color).getHexString()}"><span>${PLANES[x.r.type].icon}</span><b>${(x.r.name || "Pilot").replace(/[<>&"]/g, "")}</b><small></small><i>✈️➡️</i></button>`).join('')
+        : `<p>${pilotStatus()}</p>`;
+      box.querySelectorAll('button').forEach(b => tap(b, () => { const r = remotes.get(b.dataset.pid); box.classList.remove('show'); if (r) teleportTo(p, r); }));
+    }
+    for (const x of list.slice(0, 12)) {
+      const el = box.querySelector(`button[data-pid="${x.pid}"] small`);
+      if (el) { const t = x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1) + ' km'; if (el.textContent !== t) el.textContent = t; }
+    }
   }
   function teleportNext(p) {
     const list = pilotList();
-    if (!list.length) { flash(p, '🌍 Nobody else flying'); return; }
+    if (!list.length) { flash(p, pilotStatus()); return; }
     p.tpIndex = ((p.tpIndex ?? -1) + 1) % list.length;
     teleportTo(p, list[p.tpIndex].r);
   }
@@ -778,7 +787,7 @@ export function mount(stage) {
       const q = s => v.querySelector(s);
       p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), near: q('.sp-near'), nearTxt: q('.sp-near-txt'), nearArrow: q('.sp-near-arrow'), sky: q('.sp-sky'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
       click(q('.sp-cam'), () => cycleView(p));
-      click(q('.sp-c-net'), () => togglePilots(p));
+      tap(q('.sp-c-net'), () => togglePilots(p));
       click(q('.sp-pause'), () => pause(true));
       click(q('.sp-map'), () => { p.mapBig = !p.mapBig; v.classList.toggle('sp-bigmap', p.mapBig); });
       if (p.touch) wireTouch(p, v);
@@ -864,8 +873,10 @@ export function mount(stage) {
     h.flaps.textContent = P.flaps.length > 1 ? '🪶' + Math.round(s.flapPos) : ''; h.flaps.style.display = P.flaps.length > 1 ? '' : 'none';
     h.brake.style.display = s.brakes && s.onGround ? '' : 'none';
     const nOnline = remotes.size;
-    h.net.textContent = net.room ? `🔑 ${nOnline + 1}` : net.pub ? `🌍 ${nOnline + 1}` : '';
-    h.net.style.display = net.room || net.pub ? '' : 'none';
+    const nt = net.room ? `🔑 ${nOnline + 1}` : `👫 ${net.pub ? nOnline + 1 : '…'}`;
+    if (h.net.textContent !== nt) h.net.textContent = nt;
+    const nd = net.room || prefs.shared ? '' : 'none';
+    if (h.net.style.display !== nd) h.net.style.display = nd;
     h.thr.style.height = (s.throttle * 100) + '%';
     h.thr.classList.toggle('ab', s.ab > 0);
     h.cam.textContent = VIEW_ICON[p.view];
@@ -1269,7 +1280,7 @@ export function mount(stage) {
   const SETTINGS = {
     easy: ['Flying', '🧑‍✈️ Real', '🐣 Easy'],
     noDie: ['Crashes', '💥 On', '🛡️ Off'],
-    shared: ['Sky', '🏝️ Just me', '🌍 Shared'],
+    shared: ['Friends', '🏝️ Just me', '👫 Fly with friends'],
     guide: ['Landing hoops', 'Off', '🟢 On'],
     sound: ['Sound', '🔇 Off', '🔊 On'],
   };
