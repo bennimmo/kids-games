@@ -469,12 +469,24 @@ export function mount(stage) {
     sound.pop();
     const box = p.hud.v.querySelector('.sp-pilots');
     if (box.classList.contains('show')) { box.classList.remove('show'); return; }
+    fillPilots(p, box);
+    box.classList.add('show');
+  }
+  function pilotStatus() {
+    if (net.room) return '👫 In a friends game';
+    if (!prefs.shared) return '🌍 Shared sky is off (turn it on in ⏸️)';
+    if (!net.pub) return '🌍 Connecting… ⏳';
+    return '🌤️ Nobody else is flying right now';
+  }
+  function fillPilots(p, box) {
     const list = pilotList();
+    const key = list.map(x => x.pid + Math.round(x.d / 100)).join() + '|' + pilotStatus();
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
     box.innerHTML = list.length
       ? list.slice(0, 12).map(x => `<button data-pid="${x.pid}" style="--rc:#${new THREE.Color(x.r.color).getHexString()}"><span>${PLANES[x.r.type].icon}</span><b>${(x.r.name || "Pilot").replace(/[<>&"]/g, "")}</b><small>${x.d < 1000 ? Math.round(x.d) + ' m' : (x.d / 1000).toFixed(1) + ' km'}</small><i>✈️➡️</i></button>`).join('')
-      : '<p>🌍 ⏳</p>';
+      : `<p>${pilotStatus()}</p>`;
     box.querySelectorAll('button').forEach(b => click(b, () => { const r = remotes.get(b.dataset.pid); box.classList.remove('show'); if (r) teleportTo(p, r); }));
-    box.classList.add('show');
   }
   function teleportNext(p) {
     const list = pilotList();
@@ -971,7 +983,9 @@ export function mount(stage) {
     if (net.pub || net.room || net.connecting) return;
     net.connecting = true;
     try {
-      const api = await joinPublic(GAME);
+      const jp = joinPublic(GAME);
+      jp.then(a => { if (net.pub !== a) setTimeout(() => { if (net.pub !== a) a.leave(); }, 0); }).catch(() => {});
+      const api = await Promise.race([jp, new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 15000))]);
       net.connecting = false;
       if (!alive || !prefs.shared || net.room || S.phase !== 'fly') { api.leave(); return; }
       net.pub = api;
@@ -1169,7 +1183,13 @@ export function mount(stage) {
       if (p.engine) p.engine.set(s.crashed ? 0 : s.rpm, s.speed, s.ab, p.view === 'cockpit');
       updateHud(p, dt);
     }
-    if (flying) { netTick(dt); updateRemotes(dt); }
+    if (flying) {
+      netTick(dt); updateRemotes(dt);
+      // shared sky dropped or never connected: keep trying
+      if (prefs.shared && !net.pub && !net.room && !net.connecting && clock > (net.retryAt || 0)) { net.retryAt = clock + 5; goPublic(); }
+      // keep an open pilot list up to date
+      for (const p of players) { const box = p.hud && p.hud.v.querySelector('.sp-pilots.show'); if (box) fillPilots(p, box); }
+    }
 
     // menu camera: slow circle over the main airport
     if (!flying) {
