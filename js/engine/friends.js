@@ -29,7 +29,7 @@ let lastEcho = voiceOpts().echo;
 onVoiceOpts(o => {
   soundsBack();
   if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
-  if (group) group.peers.forEach(p => { try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
+  if (group) group.peers.forEach(p => { p.relayOnly = false; try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
 });
 export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
@@ -41,28 +41,30 @@ const FRIENDS_KEY = 'kg-friends';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
 const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
-// STUN finds a direct path. TURN = relay for when devices can't link directly (free public
-// Open Relay server: may be slow or down; swap for a paid/own one if it's unreliable).
+// STUN finds a direct path. TURN = relay for when devices can't link directly.
+// Our own free Metered account (20 GB a month). These details are meant to sit in the page;
+// if someone uses up the allowance, make new ones in the Metered dashboard and swap them here.
 const ICE = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: ['stun:stun.relay.metered.ca:80', 'stun:stun.l.google.com:19302'] },
   {
     urls: [
-      'turn:staticauth.openrelay.metered.ca:80',
-      'turn:staticauth.openrelay.metered.ca:80?transport=tcp',
-      'turn:staticauth.openrelay.metered.ca:443',
-      'turns:staticauth.openrelay.metered.ca:443?transport=tcp',
+      'turn:global.relay.metered.ca:80',
+      'turn:global.relay.metered.ca:80?transport=tcp',
+      'turn:global.relay.metered.ca:443',
+      'turns:global.relay.metered.ca:443?transport=tcp',
     ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
+    username: '8afd11852f70919b82fce652',
+    credential: 'UwFRBOq7fSXaEVrn',
   },
 ];
+export const iceServers = () => ICE;
 const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const randomHex = n => [...bytes(n)].map(b => (b & 15).toString(16)).join('');
 const randomGroup = () => 'c' + [...bytes(16)].map(b => (b % 36).toString(36)).join('');
 const plain = x => JSON.parse(JSON.stringify(x)); // Firebase can't store undefined
-const sid = randomHex(10); // this page load
+let sid = randomHex(10); // this page load (new one if we rebuild every link)
 
 let fb = null;
 async function core() { if (!fb) fb = await firebaseCore(); return fb; }
@@ -96,7 +98,7 @@ const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
   inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing, camStatus, myCam: cam,
   invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
-  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam })) : [],
+  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak })) : [],
   declines: declines.slice(),
   // Bubbles: friends who are on now (in a call with me or not).
   buddies: buddies(),
@@ -215,7 +217,7 @@ function addCam(p) {
   if (!cam || p.pc.signalingState === 'closed') return;
   const t = cam.getVideoTracks()[0];
   if (!t) return;
-  if (p.camSender) { p.camSender.replaceTrack(t).catch(() => {}); return; } // no new hand-shake needed
+  if (p.camSender) { p.camSender.replaceTrack(p.weak ? null : t).catch(() => {}); return; } // no new hand-shake needed
   p.camSender = p.pc.addTrack(t, cam);
   try {
     const prm = p.camSender.getParameters();
@@ -292,7 +294,7 @@ export async function newCode() {
         D.update(ref(`${c}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
       }
       codeKnocks = Object.entries(v)
-        .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
+        .filter(([pid, k]) => uidOf(pid, '_k') && k && cleanName(k.name))
         .map(([pid, k]) => ({ pid, room: c, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group) }));
       mergeKnocks();
     }));
@@ -308,6 +310,11 @@ function mergeKnocks() {
   knocks = [...homeKnocks, ...codeKnocks].filter(k => !answered.has(k.room + k.pid) && !seen.has(k.pid) && seen.add(k.pid));
   emit();
 }
+// Ids from other people are checked before use (a crafted id could break the page).
+const UID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+const okUid = u => typeof u === 'string' && UID_RE.test(u);
+const uidOf = (pid, end) => { const u = pid.endsWith(end) ? pid.slice(0, -end.length) : ''; return okUid(u) ? u : ''; };
+const isFriend = u => contacts.some(c => c.uid === u);
 const cleanGroup = g => (typeof g === 'string' && /^c[a-z0-9]{16}$/.test(g) ? g : '');
 
 export async function accept(pid, video) {
@@ -321,7 +328,7 @@ export async function accept(pid, video) {
   try {
     if (k.room[0] !== 'h') { // picture code: just friends, no call
       wantCam = false;
-      saveFriend(pid.slice(0, -2), k.name, k.face);
+      saveFriend(uidOf(pid, '_k'), k.name, k.face);
       await fb.D.update(meta, { [`ok/${pid}`]: 'f' });
       return;
     }
@@ -385,7 +392,8 @@ export async function askFriend(theirCode) {
       if (!m) return finish('none');  // they left / got a new code
       if (m.on === false) return finish('away'); // closed the app
       if (m.ok && m.ok[pid]) {
-        const id = m.ok[pid];
+        const id = m.ok[pid] === 'f' ? 'f' : cleanGroup(m.ok[pid]);
+        if (!id) return;
         if (id === 'f') { // friends now (no call)
           saveFriend(room.host, cleanName(m.name) || '?', cleanFace(m.face));
           finish('added'); return;
@@ -441,10 +449,15 @@ async function joinGroup(id) {
     const v = s.val() || {};
     if (online && !first && !v[`${uid}_m`]) writeMe();
     const seen = new Set();
+    // Who I link up with: saved friends, plus their friends while one of my friends is in the call
+    // (so a stranger can't sit in a call on their own), and never more than the call can hold.
+    const ids = Object.keys(v).map(pid => uidOf(pid, '_m')).filter(u => u && u !== uid && v[u + '_m'] && v[u + '_m'].sid);
+    const friendHere = ids.some(isFriend);
+    const allowed = new Set(ids.filter(u => isFriend(u) || friendHere).sort((a, b) => isFriend(b) - isFriend(a)).slice(0, MAX_FRIENDS));
     for (const [pid, m] of Object.entries(v)) {
-      if (!pid.endsWith('_m') || !m || !m.sid) continue;
-      const u = pid.slice(0, -2);
-      if (u === uid) continue;
+      if (!m || !m.sid) continue;
+      const u = uidOf(pid, '_m');
+      if (!u || u === uid || !allowed.has(u)) continue;
       seen.add(u);
       let p = g.peers.get(u);
       if (p && p.sid !== m.sid) { p.close(); p = null; } // they reloaded
@@ -453,7 +466,9 @@ async function joinGroup(id) {
       p.face = cleanFace(m.face);
       p.game = typeof m.game === 'string' ? m.game.slice(0, 30) : '';
       p.cam = m.cam === true;
-      if (p.name !== '?') saveFriend(u, p.name, p.face);
+      // Only keep friends' names fresh. Someone else in the call (a friend's friend) is NOT added
+      // as my friend: they show while we're in the call, then go.
+      if (p.name !== '?' && contacts.some(c => c.uid === u)) saveFriend(u, p.name, p.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
     // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
@@ -503,6 +518,20 @@ function readSignals(g) {
   }
 }
 
+const isStuck = p => p.status !== 'on' && Date.now() - p.lostAt > 45000;
+
+// Start every link in the group again from scratch: a new page id makes friends' devices
+// treat it like a reload and build fresh links too.
+function rebuildLinks(g) {
+  if (group !== g || !fb) return;
+  g.rebuiltAt = Date.now();
+  sid = randomHex(10);
+  g.peers.forEach(p => p.close());
+  g.peers.clear();
+  fb.D.remove(ref(`${g.id}/live/${fb.uid}_m`)).catch(() => {}).then(() => { if (g.writeMe) g.writeMe(); });
+  emit();
+}
+
 // One WebRTC link to one friend ("perfect negotiation", so either side can add video later).
 function makePeer(g, theirUid, theirSid) {
   const { D } = fb;
@@ -510,13 +539,13 @@ function makePeer(g, theirUid, theirSid) {
   const pc = new RTCPeerConnection(iceConfig());
   const out = ref(`${g.id}/live/${fb.uid}_m/${theirUid}`);
   let n = 0, makingOffer = false, ignoreOffer = false, closed = false, chain = Promise.resolve();
-  const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set() };
+  const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set(), lostAt: Date.now(), weak: false };
   const send = msg => {
     if (closed) return;
     const key = `${sid}_${theirSid}_${String(n++).padStart(6, '0')}`;
     D.set(D.child(out, key), plain(msg)).catch(() => {});
   };
-  const setStatus = st => { if (peer.status !== st) { peer.status = st; emit(); } };
+  const setStatus = st => { if (peer.status !== st) { if (peer.status === 'on') peer.lostAt = Date.now(); peer.status = st; emit(); } };
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -528,7 +557,50 @@ function makePeer(g, theirUid, theirSid) {
   pc.onicecandidate = e => { if (e.candidate) send({ c: e.candidate.toJSON() }); };
   // Not linked yet: try again every 15 s (new network paths, e.g. once the mic is allowed).
   peer.retry = () => { if (!closed && pc.signalingState !== 'closed') { try { pc.restartIce(); } catch (e) { /* */ } } };
-  const watchdog = setInterval(() => { if (closed) clearInterval(watchdog); else if (peer.status !== 'on') peer.retry(); }, 15000);
+  // Normal mode already tries direct first, then the relay. Still stuck after ~30 s? Force the
+  // relay for this friend (and flip back if that doesn't work either), so nobody needs the 🔧 switch.
+  let stuck = 0;
+  peer.relayOnly = false;
+  const watchdog = setInterval(() => {
+    if (closed) { clearInterval(watchdog); return; }
+    if (peer.status === 'on') { stuck = 0; return; }
+    ++stuck;
+    emit(); // bubble: "Connecting…" -> "Can't connect"
+    // ~90 s and still nothing: start every link again from scratch (one side does it, so they don't clash).
+    if (stuck >= 6 && polite && Date.now() - (g.rebuiltAt || 0) > 120000) { rebuildLinks(g); return; }
+    if (stuck % 2 === 0 && !voiceOpts().relay) {
+      peer.relayOnly = !peer.relayOnly;
+      try { pc.setConfiguration({ ...iceConfig(), iceTransportPolicy: peer.relayOnly ? 'relay' : 'all' }); } catch (e) { /* */ }
+    }
+    peer.retry();
+  }, 15000);
+  // Weak line: lots lost or very slow -> stop sending my video to this friend (voice keeps going),
+  // send it again once the line is better. Shows "Weak line" on their bubble.
+  let weakN = 0;
+  const weakCheck = setInterval(async () => {
+    if (closed) { clearInterval(weakCheck); return; }
+    if (peer.status !== 'on') return;
+    let rtt = 0, avail = Infinity, lost = 0;
+    try {
+      (await pc.getStats()).forEach(r => {
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') {
+          rtt = r.currentRoundTripTime || 0;
+          if (r.availableOutgoingBitrate) avail = r.availableOutgoingBitrate;
+        }
+        if (r.type === 'remote-inbound-rtp') lost = Math.max(lost, r.fractionLost || 0);
+      });
+    } catch (e) { return; }
+    const sendingVideo = !!(peer.camSender && peer.camSender.track);
+    const bad = rtt > 0.7 || lost > 0.12 || (sendingVideo && avail < 80000);
+    weakN = bad ? Math.min(weakN + 1, 8) : Math.max(weakN - 1, 0);
+    const was = peer.weak;
+    if (!peer.weak && weakN >= 3) peer.weak = true;
+    else if (peer.weak && weakN === 0) peer.weak = false;
+    if (was !== peer.weak) {
+      if (peer.camSender && cam) peer.camSender.replaceTrack(peer.weak ? null : cam.getVideoTracks()[0]).catch(() => {});
+      emit();
+    }
+  }, 4000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
@@ -541,7 +613,8 @@ function makePeer(g, theirUid, theirSid) {
     // One stream per friend holding their voice and (if on) camera, whichever arrives first.
     if (!peer.stream) peer.stream = new MediaStream();
     if (!peer.stream.getTracks().includes(e.track)) {
-      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => peer.stream.removeTrack(t));
+      // keep every video track (both sides adding a camera can make two); the bubble shows the one with pictures
+      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => { if (t.readyState === 'ended') peer.stream.removeTrack(t); });
       peer.stream.addTrack(e.track);
     }
     e.track.onunmute = e.track.onmute = () => emit();
@@ -580,6 +653,7 @@ function makePeer(g, theirUid, theirSid) {
     if (closed) return;
     closed = true;
     clearInterval(watchdog);
+    clearInterval(weakCheck);
     try { pc.close(); } catch (e) { /* already */ }
     D.remove(out).catch(() => {});
   };
@@ -588,10 +662,12 @@ function makePeer(g, theirUid, theirSid) {
 
 // ------------------------------------------------------------ invites ("come and play my game")
 
-// Tell every friend who's on: come and join my room in this game (on my home, they all watch it).
+// Tell friends: come and join my room in this game (on my home, they all watch it).
+// to = the uids picked (null = everyone who's on).
 let myInvite = null;
-export function sendInvite(game, roomCode) {
+export function sendInvite(game, roomCode, to = null) {
   myInvite = { game, code: roomCode, at: fb ? fb.now() : Date.now() };
+  if (to && to.length) myInvite.to = Object.fromEntries(to.map(u => [u, true]));
   if (home && fb) fb.D.update(ref(`${home.id}/meta`), { invite: myInvite }).catch(() => {});
   return true;
 }
@@ -605,7 +681,7 @@ function liveInvites() {
   for (const c of contacts) {
     const pr = presence.get(c.uid);
     const v = pr && pr.on && pr.invite;
-    if (v && v.game && v.code && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
+    if (v && v.game && v.code && (!v.to || v.to[fb.uid] === true) && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
   }
   return out.sort((x, y) => y.at - x.at);
 }
@@ -618,6 +694,30 @@ export function declineInvite(inv) {
   fb.D.onDisconnect(r).remove();
   fb.D.set(r, { code: inv.code, at: fb.now() }).catch(() => {});
 }
+// ------------------------------------------------------------ quick messages
+// Sent to the friend's home room, shown as a speech bubble, then deleted (never kept).
+export const MSG_MAX = 80;
+const msgSubs = new Set();
+export function onMessage(cb) { msgSubs.add(cb); return () => msgSubs.delete(cb); }
+export function sendMessage(uid, text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+  if (!text || !fb) return false;
+  const r = ref(`${homeId(uid)}/players/${fb.uid}_t`);
+  fb.D.onDisconnect(r).remove();
+  fb.D.set(r, { text, at: fb.now() }).catch(() => {});
+  return true;
+}
+function readMessages(id, v) {
+  for (const [pid, m] of Object.entries(v)) {
+    if (!pid.endsWith('_t') || !m) continue;
+    fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {});
+    const uid = uidOf(pid, '_t'), c = uid && contacts.find(x => x.uid === uid);
+    const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+    if (!c || !text || fb.now() - (m.at || 0) > 120000) continue; // friends only, nothing old
+    msgSubs.forEach(cb => cb({ uid, name: c.name, face: c.face, text }));
+  }
+}
+
 // Friends who are on now: { uid, name, face, game, inCall, status, stream }
 function buddies() {
   const out = [];
@@ -626,11 +726,11 @@ function buddies() {
     const p = group && group.peers.get(c.uid);
     if (!pr.on && !p) continue;
     out.push({ uid: c.uid, name: p ? p.name : c.name, face: p ? (p.face || '') : c.face, game: p ? (p.game || '') : (pr.game || ''),
-      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam),
+      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam), stuck: !!p && isStuck(p), weak: !!(p && p.weak),
       calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking') });
   }
   if (group) for (const p of group.peers.values()) if (!out.some(o => o.uid === p.uid)) {
-    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, calling: false });
+    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak, calling: false });
   }
   return out;
 }
@@ -646,6 +746,7 @@ function loadFriends() {
 }
 function storeFriends() { try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(contacts)); } catch (e) { /* private mode */ } }
 function saveFriend(uid, name, face) {
+  if (!okUid(uid)) return;
   const old = contacts.find(c => c.uid === uid);
   if (old && old.name === name && old.face === face) return;
   // Same person on a new device id (cleared browser): keep just the newest.
@@ -709,11 +810,13 @@ async function openHome() {
       D.update(ref(`${id}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
     }
     declines = Object.entries(v)
-      .filter(([pid, r]) => pid.endsWith('_r') && r && r.code)
-      .map(([pid, r]) => ({ uid: pid.slice(0, -2), code: String(r.code) }));
+      .filter(([pid, r]) => isFriend(uidOf(pid, '_r')) && r && r.code)
+      .map(([pid, r]) => ({ uid: uidOf(pid, '_r'), code: String(r.code).slice(0, 12) }));
+    readMessages(id, v);
+    // Calls: only from saved friends, shown with the name I saved (not whatever they send).
     homeKnocks = Object.entries(v)
-      .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
-      .map(([pid, k]) => ({ pid, room: id, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group), saved: true }));
+      .filter(([pid, k]) => k && isFriend(uidOf(pid, '_k')))
+      .map(([pid, k]) => { const c = contacts.find(x => x.uid === uidOf(pid, '_k')); return { pid, room: id, name: c.name, face: c.face, group: cleanGroup(k.group), saved: true }; });
     mergeKnocks();
   }));
   // Self-repair: an old tab's late "gone" (onDisconnect) can mark me offline while I'm here.
@@ -760,8 +863,9 @@ export function startFriends() {
 export function nameChanged() {
   const name = myName();
   if (!name) { stopAsking(); dropCode(); codeStatus = 'noname'; emit(); return; }
-  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); return; }
+  if (codeStatus === 'noname' || codeStatus === 'offline') { newCode(); openHome().catch(() => {}); return; }
   if (code && fb) fb.D.update(ref(`${code}/meta`), { name, face: myFace() }).catch(() => {});
   if (group && group.writeMe) group.writeMe();
   if (home && home.put) home.put().catch(() => {}); else openHome().catch(() => {});
 }
+export const _rebuildNow = () => { if (group) { group.rebuiltAt = 0; rebuildLinks(group); } }; // for tests

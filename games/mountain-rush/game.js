@@ -374,7 +374,7 @@ export function mount(stage) {
       ${online.net.room ? `<div class="ui-label">Riding with friends</div><div class="mr-roomstrip">${online.stripHTML()}</div>
         <div class="ui-row">${online.isHost() ? '<button class="ui-btn primary mr-race">🏁 Race!</button>' : '<span class="mr-best">Your friend can start a race</span>'}<button class="ui-btn ghost mr-leave">Leave friends</button></div>`
         : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
-      <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">🌍 See everyone online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
+      <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">👫 See friends online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
       <div class="ui-label">Handling (try each one)</div>
       <div class="ui-seg mr-hd">${Object.entries(HANDLING).map(([k, h]) => `<button data-h="${k}" class="${(prefs.handling || 'planted') === k ? 'on' : ''}">${h.name}</button>`).join('')}</div>
       <div class="ui-seg mr-nc"><button data-n="0" class="${prefs.noCrash ? '' : 'on'}">💥 Crashes on</button><button data-n="1" class="${prefs.noCrash ? 'on' : ''}">🛟 No crashes (easy)</button></div>

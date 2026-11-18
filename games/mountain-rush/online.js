@@ -1,14 +1,14 @@
 // Mountain Rush: riding with other people.
 //
-// - Everyone online: each map has one shared mountain (joinPublic). You see every rider on
-//   the same map, with their name over them. Nothing to set up.
+// - Friends online: each map has one shared mountain (joinPublic, FRIENDS ONLY). You see your
+//   saved friends riding the same map, with their name over them. Never strangers.
 // - Friends: "Ride with friends" makes a room and invites friends who are on (together.js).
 //   Everyone in the room rides the host's map, sees each other, and the host can start a race:
 //   all riders go back to the start gate, count down 3-2-1, and the times go on a board.
 //
 // Each device sends its own rider ~8 times a second: position, rotation, speed and pose.
 import * as THREE from '../../js/vendor/three.module.min.js';
-import { createRoom, joinRoom, joinPublic, firebaseCore } from '../../js/engine/net.js';
+import { createRoom, joinRoom, joinPublic, firebaseCore, friendUids } from '../../js/engine/net.js';
 import { playTogether, joined, leftRoom, people, playerInfo, lobbyHTML } from '../../js/engine/together.js';
 import { myName, myFace, cleanName, nameHTML } from '../../js/engine/profile.js';
 
@@ -186,7 +186,8 @@ export function createOnline(ctx) {
     try {
       const { D, db, uid } = await firebaseCore();
       const v = (await D.get(D.ref(db, `games/${GAME}/rooms/lb-${map}/players`))).val() || {};
-      return Object.entries(v).filter(([, e]) => e && Number.isFinite(e.time) && e.time > 20)
+      const ok = new Set([uid, ...friendUids()]);   // child safety: only you and your friends
+      return Object.entries(v).filter(([pid, e]) => ok.has(pid.split('_')[0]) && e && Number.isFinite(e.time) && e.time > 20)
         .map(([pid, e]) => ({ me: pid.startsWith(uid + '_'), name: cleanName(e.name) || 'Rider', face: e.face || '🙂', time: e.time, score: e.score || 0 }))
         .sort((a, b) => a.time - b.time).slice(0, 10);
     } catch (e) { return []; }
