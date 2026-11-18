@@ -258,29 +258,33 @@ export function createBike(T, env, look = {}, type = 'trek') {
   const rider = new THREE.Group();
   const add = (g, m, shadow = true) => { const mesh = new THREE.Mesh(g, m); mesh.castShadow = shadow; rider.add(mesh); return mesh; };
   // smooth tapered limb, 1 m long along +y (scaled to fit between two joints each frame)
-  const limbGeo = (r0, r1, bulge = 0, at = 0.4, seg = 14) => {
+  // (bulge = muscle or baggy cloth at `at`; hem = the cloth flares a little and ends in a rolled edge near the far end)
+  const limbGeo = (r0, r1, bulge = 0, at = 0.4, seg = 18, hem = 0) => {
     const pts = [new THREE.Vector2(0.0001, -0.04)];
-    for (let i = 0; i <= 10; i++) { const t = i / 10; pts.push(new THREE.Vector2(r0 + (r1 - r0) * t + bulge * Math.exp(-((t - at) ** 2) / 0.06), t)); }
+    for (let i = 0; i <= 20; i++) { const t = i / 20;
+      let rr = r0 + (r1 - r0) * t + bulge * Math.exp(-((t - at) ** 2) / 0.05);
+      if (hem) rr += hem * Math.exp(-((t - 0.93) ** 2) / 0.002) + hem * 0.5 * (t > 0.6 ? (t - 0.6) / 0.4 : 0);
+      pts.push(new THREE.Vector2(rr, t)); }
     pts.push(new THREE.Vector2(0.0001, 1.04));
     return new THREE.LatheGeometry(pts, seg);
   };
   const P = {
-    thigh: [0, 1].map(() => add(limbGeo(0.078, 0.058, 0.008, 0.3), mats.pants)),
-    shin: [0, 1].map(() => add(limbGeo(0.057, 0.043, 0.008, 0.28), mats.pants)),
-    knee: [0, 1].map(() => add(new THREE.SphereGeometry(1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), mats.pad)),
+    thigh: [0, 1].map(() => add(limbGeo(0.086, 0.062, 0.014, 0.3), mats.pants)),
+    shin: [0, 1].map(() => add(limbGeo(0.06, 0.046, 0.014, 0.24, 18, 0.007), mats.pants)),
+    knee: [0, 1].map(() => add(kneePadGeo(), mats.pad)),
     shoe: [0, 1].map(() => add(shoeGeo(), mats.shoe)),
-    sole: [0, 1].map(() => add(new THREE.BoxGeometry(0.1, 0.022, 0.27), mats.sole, false)),
-    upper: [0, 1].map(() => add(limbGeo(0.052, 0.043, 0.006, 0.35), mats.sleeve)),
-    fore: [0, 1].map(() => add(limbGeo(0.043, 0.033, 0.005, 0.25), mats.sleeve)),
-    elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1, 14, 10), mats.sleeve)),
+    sole: [0, 1].map(() => add(soleGeo(), mats.sole, false)),
+    upper: [0, 1].map(() => add(limbGeo(0.058, 0.047, 0.01, 0.32), mats.sleeve)),
+    fore: [0, 1].map(() => add(limbGeo(0.047, 0.036, 0.009, 0.22, 18, 0.005), mats.sleeve)),
+    elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1.12, 14, 10), mats.sleeve)),
     cuff: [0, 1].map(() => add(new THREE.CylinderGeometry(0.042, 0.04, 0.07, 12), mats.glove)),
     hand: [0, 1].map(() => add(handGeo(), mats.glove)),
-    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.0505, 16, 12), mats.sleeve)),
-    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.0555, 14, 10), mats.pants)),
-    hipJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.08, 14, 10), mats.pants)),
+    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.058, 16, 12), mats.sleeve)),
+    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.0605, 14, 10), mats.pants)),
+    hipJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.088, 14, 10), mats.pants)),
   };
   // body: one smooth shape from hips to collar; shorts over the hips
-  const torsoGeo = new THREE.LatheGeometry([[0.0001, -0.02], [0.15, 0], [0.142, 0.18], [0.135, 0.3], [0.15, 0.5], [0.165, 0.7], [0.168, 0.82], [0.13, 0.93], [0.07, 0.99], [0.055, 1.02], [0.0001, 1.03]].map(([r, y]) => new THREE.Vector2(r, y)), 24);
+  const torsoGeo = new THREE.LatheGeometry([[0.0001, -0.02], [0.148, 0], [0.146, 0.1], [0.138, 0.22], [0.134, 0.32], [0.142, 0.44], [0.156, 0.56], [0.168, 0.68], [0.174, 0.78], [0.17, 0.86], [0.148, 0.92], [0.1, 0.965], [0.066, 0.985], [0.062, 1.0], [0.066, 1.02], [0.058, 1.035], [0.0001, 1.04]].map(([r, y]) => new THREE.Vector2(r, y)), 24);
   const torso = add(torsoGeo, mats.jersey);
   const shorts = add(new THREE.LatheGeometry([[0.0001, -0.12], [0.13, -0.1], [0.155, -0.02], [0.148, 0.08], [0.13, 0.12], [0.0001, 0.13]].map(([r, y]) => new THREE.Vector2(r, y)), 24), mats.pants);
   const neck = add(new THREE.CylinderGeometry(0.046, 0.052, 0.08, 12), mats.skin);
@@ -305,7 +309,12 @@ export function createBike(T, env, look = {}, type = 'trek') {
     full.visible = !look.open; open.visible = !!look.open;
     head.userData.full = full; head.userData.open = open;
     // peak: thin, tipped slightly up, like a real MTB helmet
-    const peak = H(roundBox(0.19, 0.008, 0.12, 0.003), mats.helmet); peak.rotation.x = -0.1; peak.position.set(0, 0.098, 0.19);
+    const peak = H(peakGeo(), mats.helmet); peak.rotation.x = -0.1; peak.position.set(0, 0.104, 0.19); peak.scale.set(1.05, 1, 1.1);
+    // vents: dark slots over the top and in the chin bar, and a mesh mouthpiece
+    for (const [vx, vy, vz, rx, w, l] of [[0, 0.146, 0.03, -0.2, 0.014, 0.06], [0.04, 0.139, 0.02, -0.15, 0.012, 0.055], [-0.04, 0.139, 0.02, -0.15, 0.012, 0.055], [0.036, 0.132, -0.07, 0.5, 0.012, 0.05], [-0.036, 0.132, -0.07, 0.5, 0.012, 0.05], [0, 0.138, -0.075, 0.5, 0.014, 0.05]]) {
+      const v = H(roundBox(w, 0.006, l, 0.003), mats.helmetIn); v.position.set(vx, vy, vz); v.rotation.x = rx; v.rotation.z = -vx * 5; v.castShadow = false; }
+    if (!look.open) { const mouth = H(roundBox(0.07, 0.03, 0.01, 0.004), mats.helmetIn); mouth.position.set(0, -0.085, 0.178); mouth.castShadow = false; head.userData.mouth = mouth;
+      for (const sx of [-1, 1]) { const cv = H(roundBox(0.01, 0.022, 0.035, 0.003), mats.helmetIn); cv.position.set(sx * 0.062, -0.082, 0.158); cv.rotation.y = sx * 0.75; cv.castShadow = false; } }
     for (const sx of [-1, 1]) { const st = H(roundBox(0.012, 0.03, 0.05, 0.004), mats.helmet); st.position.set(sx * 0.082, 0.085, 0.135); st.rotation.x = -0.5; }
     // goggles: frame + shiny lens sitting in the opening, strap round the helmet
     const gframe = H(new THREE.CylinderGeometry(0.139, 0.139, 0.088, 28, 1, true, -0.92, 1.84), mats.goggleFrame); gframe.position.set(0, 0.014, 0.012); gframe.scale.set(1, 1, 1.1);
@@ -408,7 +417,7 @@ export function createBike(T, env, look = {}, type = 'trek') {
       const kneeFwd = V(0, 0, 1).sub(shinDir.clone().multiplyScalar(shinDir.z)).normalize();
       orient(P.knee[i], shinDir.clone().negate().lerp(kneeFwd, 0.75).normalize(), shinDir);
       P.knee[i].position.copy(knee).addScaledVector(kneeFwd, 0.035).addScaledVector(shinDir, 0.05);
-      P.knee[i].visible = false;      // joints sit flush with the limbs (no bobbles)
+      P.knee[i].scale.setScalar(1);      // a shaped knee pad strapped over the trousers
       P.kneeJ[i].position.copy(knee); P.hipJ[i].position.copy(hips[i]);
       P.shoe[i].position.copy(foot).add(V(0, -0.015, 0.035)); P.shoe[i].rotation.set(0.05, 0, 0);
       P.sole[i].position.copy(foot).add(V(0, -0.05, 0.035)); P.sole[i].rotation.set(0.05, 0, 0);
@@ -494,18 +503,41 @@ function roundedPath(path, pts, r) {
   path.closePath();
   return path;
 }
-// shoe: rounded box, toe a bit narrower (built along +z, sole at y = 0)
+// flat-pedal shoe (built along +z, heel at -z): rounded toe box, a heel cup and a padded ankle collar
+const shoeOutline = (z) => { const t = (z + 0.13) / 0.26; return (1 - 0.2 * Math.pow(t, 2.2)) * Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(t * 2 - 1), 5))) ; };    // half-width factor along the foot
 function shoeGeo() {
-  const g = new THREE.BoxGeometry(0.1, 0.075, 0.26, 4, 3, 6);
+  const g = new THREE.BoxGeometry(0.1, 0.075, 0.26, 8, 6, 16);
   const pa = g.attributes.position;
   for (let i = 0; i < pa.count; i++) {
     let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
     const t = (z + 0.13) / 0.26;                  // 0 heel .. 1 toe
-    x *= 1 - 0.18 * t * t; y *= 1 - 0.25 * t * t;
-    // round the edges
-    const k = 0.75 + 0.25 * Math.cos(Math.max(Math.abs(x) / 0.05, Math.abs(y) / 0.0375) * 1.2);
-    pa.setXYZ(i, x * (0.9 + 0.1 * k), y + 0.01, z);
+    const ty = (y + 0.0375) / 0.075;              // 0 sole .. 1 top
+    x *= shoeOutline(z) * (1 - 0.22 * ty * ty);   // narrower toward the top
+    // top line: high padded collar round the ankle, sloping down the instep to a low toe box
+    const top = t < 0.42 ? 0.055 + 0.02 * Math.cos(t / 0.42 * Math.PI) * 0.5 : 0.055 - 0.05 * Math.pow((t - 0.42) / 0.58, 0.8);
+    y = -0.0375 + ty * (0.0375 + top);
+    pa.setXYZ(i, x, y + 0.01, z);
   }
+  g.computeVertexNormals();
+  return g;
+}
+function soleGeo() {
+  const g = new THREE.BoxGeometry(0.106, 0.024, 0.268, 6, 1, 16), pa = g.attributes.position;
+  for (let i = 0; i < pa.count; i++) pa.setX(i, pa.getX(i) * Math.max(0.2, shoeOutline(pa.getZ(i) / 0.268 * 0.26)));
+  g.computeVertexNormals();
+  return g;
+}
+// knee pad: a shallow hard shell, long down the shin (+y points out from the knee)
+function kneePadGeo() {
+  const g = new THREE.SphereGeometry(0.07, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
+  g.scale(0.92, 0.5, 1.5); g.translate(0, 0.012, 0.01);
+  return g;
+}
+// helmet peak: a thin visor that curves round the brow and droops a little at the sides
+function peakGeo() {
+  const g = new THREE.BoxGeometry(0.2, 0.008, 0.15, 12, 1, 8), pa = g.attributes.position;
+  for (let i = 0; i < pa.count; i++) { const x = pa.getX(i), z = pa.getZ(i), u = x / 0.1, f = (z + 0.075) / 0.15;
+    pa.setXYZ(i, x * (1 - 0.3 * f * f), pa.getY(i) - 0.02 * u * u - 0.004 * f, z - 0.035 * u * u * (0.4 + f)); }
   g.computeVertexNormals();
   return g;
 }
@@ -552,8 +584,11 @@ function cloth() {
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
     // darker side panels (u = 0.25 and 0.75 are the sides; u 0 front, 0.5 back)
     for (const cx of [0.25, 0.75]) { const gr = g.createLinearGradient((cx - 0.12) * w, 0, (cx + 0.12) * w, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.3, 'rgba(0,0,0,.45)'); gr.addColorStop(0.7, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect((cx - 0.12) * w, 0, 0.24 * w, h); }
-    // chest stripes
-    // (plain chest: stripes wrapped badly round the back)
+    // shoulder yoke, a chest band and a hem, like a real race jersey (v = 0 is the collar end)
+    g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(0, 0, w, h * 0.16);
+    g.fillStyle = 'rgba(255,255,255,.0)';
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(0, h * 0.3, w, h * 0.035); g.fillRect(0, h * 0.345, w, h * 0.012);
+    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(0, h * 0.94, w, h * 0.06);
     // number on the back
     // (the race number is a separate print on the back)
     // collar
@@ -562,6 +597,20 @@ function cloth() {
   jersey.colorSpace = THREE.SRGBColorSpace;
   const knit = mk(128, 128, (g, w, h) => { const im = g.createImageData(w, h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = 128 + 50 * Math.sin(x * 1.6) * Math.sin(y * 0.8 + (x % 2) * 1.5) + (Math.random() - 0.5) * 30; const i = (y * w + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; } g.putImageData(im, 0, 0); });
   knit.repeat.set(6, 6);
+  // soft folds, like real cloth hanging off the body (used as the bump on jersey and trousers)
+  const folds = mk(256, 256, (g, w, h) => {
+    g.fillStyle = '#808080'; g.fillRect(0, 0, w, h);
+    let s = 7; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for (let i = 0; i < 70; i++) { const x = rnd() * w, y = rnd() * h, len = 40 + rnd() * 90, a = (rnd() - 0.5) * 0.9, lw = 3 + rnd() * 9, dark = rnd() < 0.5;
+      for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) { const gr = g.createLinearGradient(x + ox, y + oy - lw, x + ox, y + oy + lw);
+        gr.addColorStop(0, 'rgba(128,128,128,0)'); gr.addColorStop(0.5, dark ? 'rgba(40,40,40,.55)' : 'rgba(225,225,225,.55)'); gr.addColorStop(1, 'rgba(128,128,128,0)');
+        g.save(); g.translate(x + ox, y + oy); g.rotate(a); g.translate(-(x + ox), -(y + oy)); g.fillStyle = gr; g.fillRect(x + ox - len / 2, y + oy - lw, len, lw * 2); g.restore(); } }
+    const im = g.getImageData(0, 0, w, h); for (let i = 0; i < im.data.length; i += 4) { const n = (rnd() - 0.5) * 14; im.data[i] += n; im.data[i + 1] += n; im.data[i + 2] += n; } g.putImageData(im, 0, 0);
+  });
+  folds.repeat.set(2, 2);
+  // sleeves: darker cuff and two stripes
+  const sleeve = mk(64, 256, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, w, h * 0.1); g.fillStyle = 'rgba(255,255,255,1)'; g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, h * 0.42, w, h * 0.05); g.fillRect(0, h * 0.5, w, h * 0.025); });
+  sleeve.colorSpace = THREE.SRGBColorSpace;
   const pants = mk(256, 256, (g, w, h) => {
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h);
     g.fillStyle = 'rgba(255,255,255,1)';
@@ -579,7 +628,7 @@ function cloth() {
     g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(w * 0.23, 0, w * 0.04, h * 0.6); g.fillRect(w * 0.73, 0, w * 0.04, h * 0.6);
   });
   helmet.colorSpace = THREE.SRGBColorSpace;
-  clothTex = { jersey, knit, pants, helmet };
+  clothTex = { jersey, knit, pants, helmet, folds, sleeve };
   return clothTex;
 }
 
@@ -678,11 +727,11 @@ function makeMaterials(T, env, look, BK = {}) {
     tire: std({ color: 0x1c1c1c, roughness: 0.92 }),
     grip: std({ color: 0x222222, roughness: 0.95 }),
     plate: std({ color: 0xffffff, roughness: 0.6 }),
-    sleeve: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, bumpMap: cloth().knit, bumpScale: 0.6, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
-    jersey: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, map: cloth().jersey, bumpMap: cloth().knit, bumpScale: 0.6, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
-    pants: phys({ color: 0x23262d, roughness: 0.88, envMapIntensity: 0.3, map: cloth().pants, bumpMap: cloth().knit, bumpScale: 0.8, sheen: 0.4, sheenRoughness: 0.6, sheenColor: 0xbfc4cc }),
-    pad: phys({ color: 0x2a2c31, roughness: 0.45, clearcoat: 0.4, envMapIntensity: 0.6 }),
-    shoe: std({ color: 0x202226, roughness: 0.75 }),
+    sleeve: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, map: cloth().sleeve, bumpMap: cloth().folds, bumpScale: 1.2, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
+    jersey: phys({ color: 0x1e88e5, roughness: 0.82, envMapIntensity: 0.35, map: cloth().jersey, bumpMap: cloth().folds, bumpScale: 1.4, sheen: 0.6, sheenRoughness: 0.5, sheenColor: 0xffffff }),
+    pants: phys({ color: 0x23262d, roughness: 0.88, envMapIntensity: 0.3, map: cloth().pants, bumpMap: cloth().folds, bumpScale: 1.6, sheen: 0.4, sheenRoughness: 0.6, sheenColor: 0xbfc4cc }),
+    pad: phys({ color: 0x17181b, roughness: 0.4, clearcoat: 0.5, envMapIntensity: 0.7 }),
+    shoe: std({ color: 0x24262b, roughness: 0.7, bumpMap: cloth().knit, bumpScale: 0.5 }),
     sole: std({ color: 0xd9d9d0, roughness: 0.9 }),
     glove: phys({ color: 0x15161a, roughness: 0.75, sheen: 0.3, sheenColor: 0x777777 }),
     skin: std({ color: 0xd9a27e, roughness: 0.6, envMapIntensity: 0.3 }),
