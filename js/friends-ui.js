@@ -9,7 +9,7 @@ import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
+  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, sendMessage, onMessage, MSG_MAX, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
@@ -102,13 +102,14 @@ function renderBubbles(s) {
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><div class="fb-where"></div></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><button class="fb-chat" aria-label="Send a message">${icon('chat')}</button><div class="fb-where"></div></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
       el.querySelector('.fb-quiet').addEventListener('click', () => {
         sound.pop();
         quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
         openDock(true);
         renderBubbles(friendState());
       });
+      el.querySelector('.fb-chat').addEventListener('click', () => { sound.pop(); openCompose(el.dataset.uid); });
       el.querySelectorAll('.fb-ring').forEach(b => b.addEventListener('click', () => { sound.pop(); callFriend(f.uid, b.classList.contains('fb-vring')); openDock(true); }));
       list.appendChild(el);
       sound.pop();
@@ -264,6 +265,7 @@ function closePanel() {
 function friendRow(c, s) {
   const full = s.friends.length >= MAX_FRIENDS;
   let act = '';
+  const chat = c.online && !editing ? `<button class="frow-btn fchat" data-msg="${c.uid}" aria-label="Send a message">${icon('chat')}</button>` : '';
   if (editing) act = `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
   else if (c.inCall) act = `<span class="frow-tag">${icon('phone')} In call</span>`;
   else if (c.calling) act = `<button class="frow-btn fcancel calling" aria-label="Stop">${icon('close')}</button>`;
@@ -274,8 +276,58 @@ function friendRow(c, s) {
   return `<div class="frow${c.online ? ' on' : ''}${c.inCall ? ' incall' : ''}">
       <span class="frow-face" style="--c:${colorFor(c.uid)}">${c.face || nameHTML(c.name).slice(0, 1)}<i></i></span>
       <span class="frow-txt"><b>${nameHTML(c.name)}</b><small>${c.online && g ? `<span class="frow-game">${gameArt(g.id) || g.icon}</span>` : ''}${status}</small>${said}</span>
-      ${act}
+      ${chat}${act}
     </div>`;
+}
+
+// ------------------------------------------------------------ quick messages (never kept)
+const QUICK = ['👋 Hi!', '😂', '👍', '❤️', '🎮 Come and play!', '📞 Call me!'];
+let composeEl = null;
+function openCompose(uid) {
+  const c = friendState().contacts.find(x => x.uid === uid);
+  if (!c) return;
+  if (composeEl) composeEl.remove();
+  const o = composeEl = document.createElement('div');
+  o.className = 'app-help fmsg-box';
+  o.innerHTML = `<form class="app-help-card fmsg-card">
+      <div class="fmsg-to"><span class="frow-face" style="--c:${colorFor(uid)}">${c.face || nameHTML(c.name).slice(0, 1)}</span><b>Message ${nameHTML(c.name)}</b></div>
+      <div class="fmsg-quick">${QUICK.map(q => `<button type="button" class="ui-chip">${q}</button>`).join('')}</div>
+      <div class="fmsg-row"><input class="name-input fmsg-input" maxlength="${MSG_MAX}" placeholder="Type a message" autocomplete="off" spellcheck="true" enterkeyhint="send" aria-label="Message">
+        <button type="submit" class="app-btn name-ok fmsg-send" aria-label="Send">${icon('send')}</button></div>
+    </form>`;
+  const input = o.querySelector('input');
+  const close = () => { o.remove(); if (composeEl === o) composeEl = null; };
+  const send = text => {
+    if (!sendMessage(uid, text)) { input.focus(); return; }
+    sound.pop(); close();
+    sayAt(uid, `${icon('check')} Sent`, true);
+  };
+  o.querySelectorAll('.fmsg-quick button').forEach(b => b.addEventListener('click', () => send(b.textContent)));
+  o.querySelector('form').addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+  o.addEventListener('click', e => { if (e.target === o) close(); });
+  shield(o);
+  document.body.appendChild(o);
+  input.focus();
+}
+// A speech bubble out of a friend's bubble (or a note at the top if their bubble isn't showing).
+function sayAt(uid, html, mine) {
+  const fb = list && list.querySelector(`.fb[data-uid="${uid}"]`);
+  const host = fb || document.body;
+  const old = host.querySelector(':scope > .fb-say');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'fb-say' + (fb ? '' : ' loose') + (mine ? ' mine' : '');
+  el.innerHTML = html;
+  if (!mine) el.addEventListener('click', e => { e.stopPropagation(); sound.pop(); el.remove(); openCompose(uid); });
+  host.appendChild(el);
+  const ms = mine ? 1800 : Math.min(15000, 6000 + el.textContent.length * 120);
+  setTimeout(() => { el.classList.add('bye'); setTimeout(() => el.remove(), 400); }, ms);
+}
+function showMessage(m) {
+  const t = m.text.replace(/[<>&"]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[ch]));
+  const inBubble = list && list.querySelector(`.fb[data-uid="${m.uid}"]`);
+  sayAt(m.uid, inBubble ? t : `<b>${m.face || ''} ${nameHTML(m.name)}</b> ${t}`);
+  sound.pop();
 }
 
 function renderPanel(s) {
@@ -368,6 +420,7 @@ function panelClick(e) {
   } else if (btn.matches('.fcancel')) { sound.pop(); cancelAsk(); }
   else if (btn.matches('.fleave')) { sound.pop(); leaveGroup(); }
   else if (btn.matches('.ftools')) { sound.pop(); openVoiceTools(); }
+  else if (btn.dataset.msg) { sound.pop(); const u = btn.dataset.msg; closePanel(); openCompose(u); }
 }
 
 // ------------------------------------------------------------ start
@@ -430,6 +483,7 @@ export function mountFriends({ editName }) {
     wasAsking = !!(s.outgoing && s.outgoing.status === 'asking');
   });
   onVoiceOpts(() => renderBubbles(friendState()));
+  onMessage(showMessage);
   startFriends();
 }
 

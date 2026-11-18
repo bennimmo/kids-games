@@ -618,6 +618,30 @@ export function declineInvite(inv) {
   fb.D.onDisconnect(r).remove();
   fb.D.set(r, { code: inv.code, at: fb.now() }).catch(() => {});
 }
+// ------------------------------------------------------------ quick messages
+// Sent to the friend's home room, shown as a speech bubble, then deleted (never kept).
+export const MSG_MAX = 80;
+const msgSubs = new Set();
+export function onMessage(cb) { msgSubs.add(cb); return () => msgSubs.delete(cb); }
+export function sendMessage(uid, text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+  if (!text || !fb) return false;
+  const r = ref(`${homeId(uid)}/players/${fb.uid}_t`);
+  fb.D.onDisconnect(r).remove();
+  fb.D.set(r, { text, at: fb.now() }).catch(() => {});
+  return true;
+}
+function readMessages(id, v) {
+  for (const [pid, m] of Object.entries(v)) {
+    if (!pid.endsWith('_t') || !m) continue;
+    fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {});
+    const uid = pid.slice(0, -2), c = contacts.find(x => x.uid === uid);
+    const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
+    if (!c || !text || fb.now() - (m.at || 0) > 120000) continue; // friends only, nothing old
+    msgSubs.forEach(cb => cb({ uid, name: c.name, face: c.face, text }));
+  }
+}
+
 // Friends who are on now: { uid, name, face, game, inCall, status, stream }
 function buddies() {
   const out = [];
@@ -711,6 +735,7 @@ async function openHome() {
     declines = Object.entries(v)
       .filter(([pid, r]) => pid.endsWith('_r') && r && r.code)
       .map(([pid, r]) => ({ uid: pid.slice(0, -2), code: String(r.code) }));
+    readMessages(id, v);
     homeKnocks = Object.entries(v)
       .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
       .map(([pid, k]) => ({ pid, room: id, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group), saved: true }));

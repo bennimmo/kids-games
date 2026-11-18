@@ -58,6 +58,7 @@ Then open http://localhost:8000
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
 - Some networks block direct links: a TURN server would fix that (not added yet).
 
+- **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
 2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
