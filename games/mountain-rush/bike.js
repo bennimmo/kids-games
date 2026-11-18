@@ -241,7 +241,7 @@ export function createBike(T, env, look = {}, type = 'trek') {
     const lev = part(front, roundBox(0.085, 0.009, 0.012, 0.003), mats.dark, V(sx * 0.3, 0.012, 0.05).add(BAR_C)); lev.rotation.y = sx * -0.25;
     // brake hose loops forward and down to the frame / fork
     curveTube(front, [V(sx * 0.245, 0.028, 0.02).add(BAR_C), V(sx * 0.17, 0.0, 0.13).add(BAR_C), V(sx * 0.07, -0.12, 0.12).add(BAR_C), V(sx * 0.045, -0.2, 0.045).add(BAR_C)], 0.0032, mats.dark, 16);
-    GRIPS.push(gp);
+    GRIPS[sx > 0 ? 0 : 1] = gp;      // [0] = the +x hand, to match the shoulders
   }
   { const pl = part(front, roundBox(0.19, 0.16, 0.006, 0.002), mats.plate, BAR_C.clone().add(V(0, -0.075, 0.075))); pl.rotation.x = -0.22; pl.castShadow = false; }
   const TRAVEL = dual ? 0.17 : (BK.short ? 0.08 : 0.13), RTRAVEL = hard ? 0 : (dual ? 0.34 : 0.28);
