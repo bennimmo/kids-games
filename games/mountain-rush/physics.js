@@ -32,13 +32,12 @@ export const TRICKS = {
   nofoot: { name: 'No footer', pts: 350 },
 };
 
-// Handling set-ups you can pick in the menu.
-//   grip: how hard the tyres hold      tip: how fast the bike leans in      rear: how much the back tyre holds
-//   (below 1 it steps out before the front lets go)      drift: how far and fast the back swings when it goes
+// How the bike handles.
+//   grip: how hard the tyres hold      tip: how fast the bike leans in      low: turn rate at walking pace
+//   rear: how much the back tyre holds (below 1 it steps out before the front lets go)
+//   drift: how far and fast the back swings when it goes      hook: how quickly it grips again
 export const HANDLING = {
-  planted: { name: 'Planted', grip: 17.5, tip: 17, low: 3.2, rear: 1.0, drift: 1.0, hook: 6 },
-  loose: { name: 'Sharp + drifty', grip: 21, tip: 24, low: 3.8, rear: 0.84, drift: 1.5, hook: 5 },
-  sharp: { name: 'Sharp', grip: 21, tip: 24, low: 3.8, rear: 0.92, drift: 1.2, hook: 7 },
+  sharp: { grip: 21, tip: 24, low: 3.8, rear: 0.92, drift: 1.2, hook: 7 },
 };
 
 export function newRider(world) {

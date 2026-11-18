@@ -150,7 +150,7 @@ export function mount(stage) {
     rider = newRider(W);
     rider.P = { ...BIKES[bikeType()].stats };
     rider.noCrash = !!prefs.noCrash;
-    rider.H = HANDLING[prefs.handling] || HANDLING.sharp;
+    rider.H = HANDLING.sharp;
     resize();
     camera.far = Q.viewDist + 140; camera.updateProjectionMatrix();
     snapCamera();
@@ -375,8 +375,6 @@ export function mount(stage) {
         <div class="ui-row">${online.isHost() ? '<button class="ui-btn primary mr-race">🏁 Race!</button>' : '<span class="mr-best">Your friend can start a race</span>'}<button class="ui-btn ghost mr-leave">Leave friends</button></div>`
         : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
       <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">👫 See friends online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
-      <div class="ui-label">Handling (try each one)</div>
-      <div class="ui-seg mr-hd">${Object.entries(HANDLING).map(([k, h]) => `<button data-h="${k}" class="${(prefs.handling || 'sharp') === k ? 'on' : ''}">${h.name}</button>`).join('')}</div>
       <div class="ui-seg mr-nc"><button data-n="0" class="${prefs.noCrash ? '' : 'on'}">💥 Crashes on</button><button data-n="1" class="${prefs.noCrash ? 'on' : ''}">🛟 No crashes (easy)</button></div>
       <div class="mr-note mr-best"></div>
       <div class="ui-label">Fastest on ${MAPS[S.map].name}</div><div class="mr-lb mr-best">Loading…</div>
@@ -398,7 +396,6 @@ export function mount(stage) {
     if (tb) click(tb, async () => { tb.disabled = true; try { const r = await online.hostRoom(S.map); if (r) menu(); else tb.disabled = false; } catch (e) { tb.disabled = false; showMenuNote('Could not go online'); } });
     click(ui.querySelector('.mr-race'), () => online.startRace());
     click(ui.querySelector('.mr-leave'), () => { online.leaveRoom(); menu(); });
-    ui.querySelectorAll('.mr-hd button').forEach(b => click(b, () => { prefs.handling = b.dataset.h; savePrefs(); rider.H = HANDLING[prefs.handling] || HANDLING.sharp; ui.querySelectorAll('.mr-hd button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-nc button').forEach(b => click(b, () => { prefs.noCrash = b.dataset.n === '1'; savePrefs(); rider.noCrash = prefs.noCrash; ui.querySelectorAll('.mr-nc button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-onl button').forEach(b => click(b, () => { prefs.online = b.dataset.o === '1'; savePrefs(); ui.querySelectorAll('.mr-onl button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-q button').forEach(b => click(b, () => {
