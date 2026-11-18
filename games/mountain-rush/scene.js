@@ -38,14 +38,28 @@ export function createScene(world, T, Q) {
         #include <colorspace_fragment>
       }`,
   });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat);
+  let sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), skyMat);
+  // a real photographed sky (Poly Haven) on mid/high: the picture covers from straight up to just below the
+  // horizon, turned so its sun sits where our sun light comes from, and fading into the fog at the horizon
+  const SKY = { forest: { u: 0.5967, el: 51 }, desert: { u: 0.5986, el: 43.9 }, snow: { u: 0.6182, el: 0, sunI: 0.62, hemiI: 1.35 } }[world.biome];
+  if (T.sky && SKY) {
+    if (SKY.el) { const az = Math.atan2(SUN_DIR.x, SUN_DIR.z), e = SKY.el * Math.PI / 180; SUN_DIR.set(Math.sin(az) * Math.cos(e), Math.sin(e), Math.cos(az) * Math.cos(e)); }
+    const m = new THREE.MeshBasicMaterial({ map: T.sky, side: THREE.BackSide, depthWrite: false, fog: false });
+    m.onBeforeCompile = sh => { sh.uniforms.uFogC = { value: FOG };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vDirY;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvDirY = normalize(position).y;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vDirY; uniform vec3 uFogC;').replace('#include <map_fragment>', '#include <map_fragment>\ndiffuseColor.rgb = mix(uFogC, diffuseColor.rgb, smoothstep(0.0, 0.16, vDirY));'); };
+    sky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 20, 0, Math.PI * 2, 0, 101.25 * Math.PI / 180), m);
+    const ps = SKY.u * Math.PI * 2;
+    sky.rotation.y = Math.atan2(SUN_DIR.x, SUN_DIR.z) - Math.atan2(-Math.cos(ps), Math.sin(ps));
+  }
   sky.frustumCulled = false; sky.renderOrder = -1;
   scene.add(sky);
 
   // ---------------------------------------------------------------- lights
-  const hemi = new THREE.HemisphereLight(B.hemiSky, B.hemiGround, B.hemiI);
+  const photoSky = !!(T.sky && SKY);
+  const hemi = new THREE.HemisphereLight(B.hemiSky, B.hemiGround, B.hemiI * (photoSky ? 0.55 * (SKY.hemiI || 1) : 1));       // with a photo sky, most of the fill light comes from the sky picture itself
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(B.sunColor, B.sunI);
+  const sun = new THREE.DirectionalLight(B.sunColor, B.sunI * (photoSky && SKY.sunI ? SKY.sunI : 1));
   sun.castShadow = Q.shadows > 0;
   if (Q.shadows) {
     sun.shadow.mapSize.set(Q.shadows, Q.shadows);
@@ -57,7 +71,8 @@ export function createScene(world, T, Q) {
 
   // ---------------------------------------------------------------- ground
   const terrainMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
-  terrainMat.customProgramCacheKey = () => 'mr-terrain';
+  terrainMat.defines = { ROCKS: T.photo ? '0.21' : '0.09', ...(T.photo ? { PHOTO: 1 } : {}) };        // photo textures cover less ground per tile than the painted ones
+  terrainMat.customProgramCacheKey = () => 'mr-terrain' + (T.photo ? 'p' : '');
   terrainMat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { tGrass: { value: T.grass }, tFloor: { value: T.floor }, tDirt: { value: T.dirt }, tRock: { value: T.rock }, tBump: { value: T.dirtBump }, tPlank: { value: T.planks } });
     sh.vertexShader = sh.vertexShader
@@ -88,7 +103,7 @@ export function createScene(world, T, Q) {
         float forestW = smoothstep(0.42, 0.62, macro);
         vec3 dirt = texture2D(tDirt, wp * 0.22).rgb * (0.9 + 0.2 * texture2D(tDirt, wp * 0.031).g);
         vec3 an = abs(vWNrm); an /= (an.x + an.y + an.z);
-        vec3 rock = texture2D(tRock, vWPos.xz * 0.09).rgb * an.y + texture2D(tRock, vWPos.xy * 0.09).rgb * an.z + texture2D(tRock, vWPos.zy * 0.09).rgb * an.x;
+        vec3 rock = texture2D(tRock, vWPos.xz * ROCKS).rgb * an.y + texture2D(tRock, vWPos.xy * ROCKS).rgb * an.z + texture2D(tRock, vWPos.zy * ROCKS).rgb * an.x;
         float slope = 1. - vWNrm.y;
         gRockW = smoothstep(0.33, 0.55, slope);
         gDirtW = smoothstep(0.12, 0.7, vTrail + (texture2D(tGrass, wp * 0.33).r - 0.5) * 0.5 * smoothstep(0.02, 0.3, vTrail) * (1.0 - smoothstep(0.75, 1.0, vTrail)));     // ragged edges: grass creeps in, dirt spills out
@@ -141,7 +156,11 @@ export function createScene(world, T, Q) {
           float bx = vTuv.x * 3.125, bid = floor(bx), bf = fract(bx);
           float shade = 0.8 + 0.34 * fract(sin(bid * 12.9898 + 4.1) * 43758.5453);
           float gap = smoothstep(0.0, 0.07, bf) * smoothstep(1.0, 0.93, bf);
+          #ifdef PHOTO
+          vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.5)).rgb * 1.15;          // the photo has its own boards and gaps
+          #else
           vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.5)).rgb * shade * mix(0.3, 1.0, gap);
+          #endif
           col = mix(col, plank, wd); gRockW *= 1. - wd; gDirtW *= 1. - wd;
           // bare rock slabs (rock rolls): grey stone with cracks and lighter worn patches
           float rk = smoothstep(0.3, 0.7, -vWood);
@@ -156,7 +175,7 @@ export function createScene(world, T, Q) {
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
           float bs = 0.02 * gDirtW + 0.035 * gRockW;
-          vec2 buv = (gRockW > 0.5 ? vWPos.xz * 0.09 : vWPos.xz * 0.22);
+          vec2 buv = (gRockW > 0.5 ? vWPos.xz * ROCKS : vWPos.xz * 0.22);
           float hb = texture2D(tBump, buv).r;
           vec2 dh = vec2(dFdx(hb), dFdy(hb)) * bs * 40.;
           if (bs > 0.0001) normal = perturbN(-vViewPosition, normal, dh, faceDirection);
@@ -203,8 +222,8 @@ export function createScene(world, T, Q) {
     const ribMat = terrainMat.clone();
     ribMat.onBeforeCompile = terrainMat.onBeforeCompile;
     ribMat.polygonOffset = true; ribMat.polygonOffsetFactor = -1 - path.id; ribMat.polygonOffsetUnits = -2 - path.id * 2;
-    ribMat.defines = { ...(ribMat.defines || {}), RIBBON: 1 };
-    ribMat.customProgramCacheKey = () => 'mr-ribbon';
+    ribMat.defines = { ...terrainMat.defines, RIBBON: 1 };
+    ribMat.customProgramCacheKey = () => 'mr-ribbon' + (T.photo ? 'p' : '');
     const STEP_S = 0.5, COLS = 44, ex = {};
     const segLen = 80;     // metres per mesh (so far-away bits can be culled)
     for (let s0 = 0; s0 < path.n - 1; s0 += segLen) {
@@ -357,7 +376,7 @@ export function createScene(world, T, Q) {
     props.update(dt);
   }
 
-  return { scene, sun, update, dust, spray, skids, props, uniforms };
+  return { scene, sun, sky, photoSky, update, dust, spray, skids, props, uniforms };
 }
 
 // ------------------------------------------------------------------ pine tree: trunk, inner body, branch cards

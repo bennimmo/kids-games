@@ -15,7 +15,7 @@ import { MAP_ORDER } from './biomes.js';
 import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.js';
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
-import { makeTextures } from './textures.js';
+import { makeTextures, loadPhotoTextures } from './textures.js';
 import { createOnline } from './online.js';
 import { togetherButton, takeJoinCode } from '../../js/engine/together.js';
 import { clamp, lerp } from '../sky-pilot/noise.js';
@@ -110,12 +110,15 @@ export function mount(stage) {
     if (!alive) return;
     W = buildWorld(S.map);
     loadingUI('Painting the ground', 0.3); await tick();
-    if (!T || tBiome !== W.biome) { if (T) Object.values(T).forEach(t => t.dispose && t.dispose()); T = makeTextures(TOUCH ? 512 : 1024, W.B); tBiome = W.biome; envTex = null; }
+    const tKey = W.biome + (Q.name === 'low' ? ':painted' : ':photo');
+    if (!T || tBiome !== tKey) { if (T) Object.values(T).forEach(t => t && t.dispose && t.dispose()); T = makeTextures(TOUCH ? 512 : 1024, W.B); if (Q.name !== 'low') await loadPhotoTextures(T, W.biome, W.B); tBiome = tKey; envTex = null; }
+    if (!alive) return;
     loadingUI('Growing the forest', 0.5); await tick();
     if (scene) disposeScene(scene.scene);
     renderer.shadowMap.enabled = Q.shadows > 0;
     scene = createScene(W, T, Q);
-    if (!envTex) envTex = makeEnv();
+    envTex = makeEnv();
+    scene.scene.environment = scene.photoSky ? envTex : null;      // the photo sky lights the whole world softly
     if (bike) bike.dispose && bike.dispose();
     loadingUI('Pumping up the tyres', 0.85); await tick();
     bike = createBike(T, envTex, lookColors(), bikeType());
@@ -140,8 +143,8 @@ export function mount(stage) {
     // soft sky reflections for the shiny bits (frame, helmet, goggles)
     const pm = new THREE.PMREMGenerator(renderer);
     const es = new THREE.Scene();
-    const sky = scene.scene.children.find(o => o.isMesh && o.material && o.material.type === 'ShaderMaterial');
-    if (sky) es.add(sky.clone());
+    const sky = scene.sky;
+    if (sky) { const c = sky.clone(); c.position.set(0, 0, 0); es.add(c); }
     const ground = new THREE.Mesh(new THREE.CircleGeometry(400, 24), new THREE.MeshBasicMaterial({ color: W.B.snow ? 0xc8d0d8 : W.B.terrace ? 0x8a5a3a : 0x3c4a32 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -20; es.add(ground);
     const tex = pm.fromScene(es, 0.03, 1, 1000).texture;

@@ -1,4 +1,5 @@
-// Mountain Rush: textures painted in code (no image files). All tile seamlessly.
+// Mountain Rush: textures. Painted in code (used on the low setting and as a fallback), and on mid/high
+// replaced by photo textures from Poly Haven (polyhaven.com, CC0) in assets/tex.
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { rng } from '../sky-pilot/noise.js';
 
@@ -234,5 +235,41 @@ export function makeTextures(size = 512, B) {
 
   // ---- carbon/paint flakes for the frame (tiny noise for clearcoat sparkle)
   T.flake = toTex(paint(128, 51, (u, v, N) => { const x = 110 + N(u, v, 64, 2) * 60; return [x, x, x]; }).c, false);
+  return T;
+}
+
+
+// ---------------------------------------------------------------- photo textures (mid / high settings)
+// Swaps the painted ground, rock, plank, bark and pine-branch textures for photos. Anything that fails to
+// load just stays painted.
+const TEX_DIR = new URL('./assets/tex/', import.meta.url).href;
+function loadImage(name) {
+  return new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = TEX_DIR + name; setTimeout(() => res(null), 15000); });
+}
+export async function loadPhotoTextures(T, biome, B) {
+  const names = { grass: biome + '_grass.jpg', floor: biome + '_floor.jpg', dirt: biome + '_dirt.jpg', rock: biome === 'desert' ? 'desert_rock.jpg' : 'rock.jpg', planks: 'planks.jpg', bark: 'bark.jpg', rust: 'rust.jpg', branch: 'sprig.png', sky: '../sky/' + biome + '.jpg' };
+  const keys = Object.keys(names), imgs = await Promise.all(keys.map(k => loadImage(names[k])));
+  let got = 0;
+  keys.forEach((k, i) => {
+    const im = imgs[i]; if (!im) return;
+    const tex = new THREE.Texture(im);
+    const rep = k !== 'branch' && k !== 'sky';
+    tex.wrapS = tex.wrapT = rep ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.needsUpdate = true;
+    if (k === 'sky') { tex.wrapS = THREE.RepeatWrapping; tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter; tex.anisotropy = 1; }
+    if (T[k] && T[k].dispose) T[k].dispose();
+    T[k] = tex; got++;
+    if (k === 'dirt') {      // bumps for the trail: the bright bits of the photo stand proud
+      const c = canvas(512), g = c.getContext('2d'); g.filter = 'grayscale(1) contrast(1.5)'; g.drawImage(im, 0, 0, 512, 512);
+      if (T.dirtBump) T.dirtBump.dispose(); T.dirtBump = toTex(c, false);
+    }
+    if (k === 'branch') {    // the same bough with snow lying on it
+      const c = canvas(512), g = c.getContext('2d'), r = rng(78); g.drawImage(im, 0, 0, 512, 512);
+      g.globalCompositeOperation = 'source-atop';
+      for (let q = 0; q < 300; q++) { const x = r() * 512, y = r() * 512; g.fillStyle = `rgba(250,252,255,${0.55 + r() * 0.4})`; g.beginPath(); g.ellipse(x, y, 8 + r() * 16, 4 + r() * 6, 0, 0, 7); g.fill(); }
+      if (T.branchSnow) T.branchSnow.dispose(); T.branchSnow = toTex(c, true, false); T.branchSnow.wrapS = T.branchSnow.wrapT = THREE.ClampToEdgeWrapping;
+    }
+  });
+  T.photo = got >= 6;
   return T;
 }
