@@ -294,7 +294,7 @@ export async function newCode() {
         D.update(ref(`${c}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
       }
       codeKnocks = Object.entries(v)
-        .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
+        .filter(([pid, k]) => uidOf(pid, '_k') && k && cleanName(k.name))
         .map(([pid, k]) => ({ pid, room: c, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group) }));
       mergeKnocks();
     }));
@@ -310,6 +310,11 @@ function mergeKnocks() {
   knocks = [...homeKnocks, ...codeKnocks].filter(k => !answered.has(k.room + k.pid) && !seen.has(k.pid) && seen.add(k.pid));
   emit();
 }
+// Ids from other people are checked before use (a crafted id could break the page).
+const UID_RE = /^[A-Za-z0-9_-]{6,64}$/;
+const okUid = u => typeof u === 'string' && UID_RE.test(u);
+const uidOf = (pid, end) => { const u = pid.endsWith(end) ? pid.slice(0, -end.length) : ''; return okUid(u) ? u : ''; };
+const isFriend = u => contacts.some(c => c.uid === u);
 const cleanGroup = g => (typeof g === 'string' && /^c[a-z0-9]{16}$/.test(g) ? g : '');
 
 export async function accept(pid, video) {
@@ -323,7 +328,7 @@ export async function accept(pid, video) {
   try {
     if (k.room[0] !== 'h') { // picture code: just friends, no call
       wantCam = false;
-      saveFriend(pid.slice(0, -2), k.name, k.face);
+      saveFriend(uidOf(pid, '_k'), k.name, k.face);
       await fb.D.update(meta, { [`ok/${pid}`]: 'f' });
       return;
     }
@@ -387,7 +392,8 @@ export async function askFriend(theirCode) {
       if (!m) return finish('none');  // they left / got a new code
       if (m.on === false) return finish('away'); // closed the app
       if (m.ok && m.ok[pid]) {
-        const id = m.ok[pid];
+        const id = m.ok[pid] === 'f' ? 'f' : cleanGroup(m.ok[pid]);
+        if (!id) return;
         if (id === 'f') { // friends now (no call)
           saveFriend(room.host, cleanName(m.name) || '?', cleanFace(m.face));
           finish('added'); return;
@@ -443,10 +449,15 @@ async function joinGroup(id) {
     const v = s.val() || {};
     if (online && !first && !v[`${uid}_m`]) writeMe();
     const seen = new Set();
+    // Who I link up with: saved friends, plus their friends while one of my friends is in the call
+    // (so a stranger can't sit in a call on their own), and never more than the call can hold.
+    const ids = Object.keys(v).map(pid => uidOf(pid, '_m')).filter(u => u && u !== uid && v[u + '_m'] && v[u + '_m'].sid);
+    const friendHere = ids.some(isFriend);
+    const allowed = new Set(ids.filter(u => isFriend(u) || friendHere).sort((a, b) => isFriend(b) - isFriend(a)).slice(0, MAX_FRIENDS));
     for (const [pid, m] of Object.entries(v)) {
-      if (!pid.endsWith('_m') || !m || !m.sid) continue;
-      const u = pid.slice(0, -2);
-      if (u === uid) continue;
+      if (!m || !m.sid) continue;
+      const u = uidOf(pid, '_m');
+      if (!u || u === uid || !allowed.has(u)) continue;
       seen.add(u);
       let p = g.peers.get(u);
       if (p && p.sid !== m.sid) { p.close(); p = null; } // they reloaded
@@ -700,7 +711,7 @@ function readMessages(id, v) {
   for (const [pid, m] of Object.entries(v)) {
     if (!pid.endsWith('_t') || !m) continue;
     fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {});
-    const uid = pid.slice(0, -2), c = contacts.find(x => x.uid === uid);
+    const uid = uidOf(pid, '_t'), c = uid && contacts.find(x => x.uid === uid);
     const text = String(m.text || '').replace(/\s+/g, ' ').trim().slice(0, MSG_MAX);
     if (!c || !text || fb.now() - (m.at || 0) > 120000) continue; // friends only, nothing old
     msgSubs.forEach(cb => cb({ uid, name: c.name, face: c.face, text }));
@@ -735,6 +746,7 @@ function loadFriends() {
 }
 function storeFriends() { try { localStorage.setItem(FRIENDS_KEY, JSON.stringify(contacts)); } catch (e) { /* private mode */ } }
 function saveFriend(uid, name, face) {
+  if (!okUid(uid)) return;
   const old = contacts.find(c => c.uid === uid);
   if (old && old.name === name && old.face === face) return;
   // Same person on a new device id (cleared browser): keep just the newest.
@@ -798,12 +810,13 @@ async function openHome() {
       D.update(ref(`${id}/meta`), { [`ok/${pid}`]: null, [`no/${pid}`]: null, [`full/${pid}`]: null }).catch(() => {});
     }
     declines = Object.entries(v)
-      .filter(([pid, r]) => pid.endsWith('_r') && r && r.code)
-      .map(([pid, r]) => ({ uid: pid.slice(0, -2), code: String(r.code) }));
+      .filter(([pid, r]) => isFriend(uidOf(pid, '_r')) && r && r.code)
+      .map(([pid, r]) => ({ uid: uidOf(pid, '_r'), code: String(r.code).slice(0, 12) }));
     readMessages(id, v);
+    // Calls: only from saved friends, shown with the name I saved (not whatever they send).
     homeKnocks = Object.entries(v)
-      .filter(([pid, k]) => pid.endsWith('_k') && k && cleanName(k.name))
-      .map(([pid, k]) => ({ pid, room: id, name: cleanName(k.name), face: cleanFace(k.face), group: cleanGroup(k.group), saved: true }));
+      .filter(([pid, k]) => k && isFriend(uidOf(pid, '_k')))
+      .map(([pid, k]) => { const c = contacts.find(x => x.uid === uidOf(pid, '_k')); return { pid, room: id, name: c.name, face: c.face, group: cleanGroup(k.group), saved: true }; });
     mergeKnocks();
   }));
   // Self-repair: an old tab's late "gone" (onDisconnect) can mark me offline while I'm here.

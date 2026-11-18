@@ -96,7 +96,7 @@ function renderBubbles(s) {
   const want = new Map(s.buddies.map(f => [f.uid, f]));
   for (const el of [...list.children]) if (!want.has(el.dataset.uid)) el.remove();
   for (const f of s.buddies) {
-    let el = list.querySelector(`[data-uid="${f.uid}"]`);
+    let el = list.querySelector(`[data-uid="${CSS.escape(f.uid)}"]`);
     if (!el) {
       el = document.createElement('div');
       el.className = 'fb';
@@ -323,7 +323,7 @@ function openCompose(uid) {
 }
 // A speech bubble out of a friend's bubble (or a note at the top if their bubble isn't showing).
 function sayAt(uid, html, mine) {
-  const fb = list && list.querySelector(`.fb[data-uid="${uid}"]`);
+  const fb = list && list.querySelector(`.fb[data-uid="${CSS.escape(uid)}"]`);
   const host = fb || document.body;
   const old = host.querySelector(':scope > .fb-say');
   if (old) old.remove();
@@ -337,7 +337,7 @@ function sayAt(uid, html, mine) {
 }
 function showMessage(m) {
   const t = m.text.replace(/[<>&"]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[ch]));
-  const inBubble = list && list.querySelector(`.fb[data-uid="${m.uid}"]`);
+  const inBubble = list && list.querySelector(`.fb[data-uid="${CSS.escape(m.uid)}"]`);
   sayAt(m.uid, inBubble ? t : `<b>${m.face || ''} ${nameHTML(m.name)}</b> ${t}`);
   sound.pop();
 }
