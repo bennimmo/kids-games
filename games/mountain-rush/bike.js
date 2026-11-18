@@ -504,17 +504,17 @@ function roundedPath(path, pts, r) {
   return path;
 }
 // flat-pedal shoe (built along +z, heel at -z): rounded toe box, a heel cup and a padded ankle collar
-const shoeOutline = (z) => { const t = (z + 0.13) / 0.26; return (1 - 0.2 * Math.pow(t, 2.2)) * Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(t * 2 - 1), 5))) ; };    // half-width factor along the foot
+const shoeOutline = (z) => { const t = Math.min(1, Math.max(0, (z + 0.13) / 0.26)); return (1 - 0.2 * Math.pow(t, 2.2)) * Math.sqrt(Math.max(0, 1 - Math.pow(Math.abs(t * 2 - 1), 5))) ; };    // half-width factor along the foot
 function shoeGeo() {
   const g = new THREE.BoxGeometry(0.1, 0.075, 0.26, 8, 6, 16);
   const pa = g.attributes.position;
   for (let i = 0; i < pa.count; i++) {
     let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
-    const t = (z + 0.13) / 0.26;                  // 0 heel .. 1 toe
-    const ty = (y + 0.0375) / 0.075;              // 0 sole .. 1 top
+    const t = Math.min(1, Math.max(0, (z + 0.13) / 0.26));                  // 0 heel .. 1 toe
+    const ty = Math.min(1, Math.max(0, (y + 0.0375) / 0.075));              // 0 sole .. 1 top
     x *= shoeOutline(z) * (1 - 0.22 * ty * ty);   // narrower toward the top
     // top line: high padded collar round the ankle, sloping down the instep to a low toe box
-    const top = t < 0.42 ? 0.055 + 0.02 * Math.cos(t / 0.42 * Math.PI) * 0.5 : 0.055 - 0.05 * Math.pow((t - 0.42) / 0.58, 0.8);
+    const top = t < 0.42 ? 0.055 + 0.02 * Math.cos(t / 0.42 * Math.PI) * 0.5 : 0.055 - 0.05 * Math.pow(Math.max(0, (t - 0.42) / 0.58), 0.8);
     y = -0.0375 + ty * (0.0375 + top);
     pa.setXYZ(i, x, y + 0.01, z);
   }
