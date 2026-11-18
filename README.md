@@ -53,10 +53,12 @@ Then open http://localhost:8000
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.
 - Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
-- 📷 Video: camera off until you tap 📷 in the bubble buttons. Small (240px, 15fps, ~150kbps). Your own mirrored "Me" bubble shows while it's on. Tap a friend's video to make it bigger.
-- 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
+- 📹 Video: call with 📞 (voice) or 📹 (video); answer with ✓ or 📹. Your camera goes to everyone in the call. Small (240px, 15fps, ~150kbps). Tap a friend's video to make it bigger.
+- "Me" bubble during a call: your 🎤 / 📹 / hang up pop out beside it. Friends' bubbles have their own buttons (mute them, call, chat).
+- 🎤 Voice: mic turns on when you join (asks once). Pick a mic in the 📞 panel (if more than one).
+- Reliability: direct link first, relay if needed; still stuck after ~30s → force the relay; ~90s → rebuild every link. Bubbles show "Connecting…" / "Can't connect" / "Weak line" (weak = my video to them pauses, voice keeps going). 🔧 → 📡 Test connection checks direct (STUN) and relay (TURN).
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
-- Some networks block direct links: a TURN server would fix that (not added yet).
+- Relay (TURN): our free Metered account (20 GB/month), details in `ICE` in `friends.js`. New details in the Metered dashboard if they're ever used up.
 
 - **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
 ## 👫 Play together (the same in every game)

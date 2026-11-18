@@ -57,13 +57,14 @@ const ICE = [
     credential: 'UwFRBOq7fSXaEVrn',
   },
 ];
+export const iceServers = () => ICE;
 const iceConfig = () => ({ iceServers: ICE, iceTransportPolicy: voiceOpts().relay ? 'relay' : 'all' });
 
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const randomHex = n => [...bytes(n)].map(b => (b & 15).toString(16)).join('');
 const randomGroup = () => 'c' + [...bytes(16)].map(b => (b % 36).toString(36)).join('');
 const plain = x => JSON.parse(JSON.stringify(x)); // Firebase can't store undefined
-const sid = randomHex(10); // this page load
+let sid = randomHex(10); // this page load (new one if we rebuild every link)
 
 let fb = null;
 async function core() { if (!fb) fb = await firebaseCore(); return fb; }
@@ -97,7 +98,7 @@ const state = () => ({
   code, codeStatus, outgoing, knocks: knocks.slice(),
   inGroup: !!group, micStatus, muted, uid: fb ? fb.uid : null, playing, camStatus, myCam: cam,
   invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
-  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam })) : [],
+  friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak })) : [],
   declines: declines.slice(),
   // Bubbles: friends who are on now (in a call with me or not).
   buddies: buddies(),
@@ -216,7 +217,7 @@ function addCam(p) {
   if (!cam || p.pc.signalingState === 'closed') return;
   const t = cam.getVideoTracks()[0];
   if (!t) return;
-  if (p.camSender) { p.camSender.replaceTrack(t).catch(() => {}); return; } // no new hand-shake needed
+  if (p.camSender) { p.camSender.replaceTrack(p.weak ? null : t).catch(() => {}); return; } // no new hand-shake needed
   p.camSender = p.pc.addTrack(t, cam);
   try {
     const prm = p.camSender.getParameters();
@@ -504,6 +505,20 @@ function readSignals(g) {
   }
 }
 
+const isStuck = p => p.status !== 'on' && Date.now() - p.lostAt > 45000;
+
+// Start every link in the group again from scratch: a new page id makes friends' devices
+// treat it like a reload and build fresh links too.
+function rebuildLinks(g) {
+  if (group !== g || !fb) return;
+  g.rebuiltAt = Date.now();
+  sid = randomHex(10);
+  g.peers.forEach(p => p.close());
+  g.peers.clear();
+  fb.D.remove(ref(`${g.id}/live/${fb.uid}_m`)).catch(() => {}).then(() => { if (g.writeMe) g.writeMe(); });
+  emit();
+}
+
 // One WebRTC link to one friend ("perfect negotiation", so either side can add video later).
 function makePeer(g, theirUid, theirSid) {
   const { D } = fb;
@@ -511,13 +526,13 @@ function makePeer(g, theirUid, theirSid) {
   const pc = new RTCPeerConnection(iceConfig());
   const out = ref(`${g.id}/live/${fb.uid}_m/${theirUid}`);
   let n = 0, makingOffer = false, ignoreOffer = false, closed = false, chain = Promise.resolve();
-  const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set() };
+  const peer = { uid: theirUid, sid: theirSid, name: '', status: 'connecting', stream: null, pc, handled: new Set(), lostAt: Date.now(), weak: false };
   const send = msg => {
     if (closed) return;
     const key = `${sid}_${theirSid}_${String(n++).padStart(6, '0')}`;
     D.set(D.child(out, key), plain(msg)).catch(() => {});
   };
-  const setStatus = st => { if (peer.status !== st) { peer.status = st; emit(); } };
+  const setStatus = st => { if (peer.status !== st) { if (peer.status === 'on') peer.lostAt = Date.now(); peer.status = st; emit(); } };
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -536,12 +551,43 @@ function makePeer(g, theirUid, theirSid) {
   const watchdog = setInterval(() => {
     if (closed) { clearInterval(watchdog); return; }
     if (peer.status === 'on') { stuck = 0; return; }
-    if (++stuck % 2 === 0 && !voiceOpts().relay) {
+    ++stuck;
+    emit(); // bubble: "Connecting…" -> "Can't connect"
+    // ~90 s and still nothing: start every link again from scratch (one side does it, so they don't clash).
+    if (stuck >= 6 && polite && Date.now() - (g.rebuiltAt || 0) > 120000) { rebuildLinks(g); return; }
+    if (stuck % 2 === 0 && !voiceOpts().relay) {
       peer.relayOnly = !peer.relayOnly;
       try { pc.setConfiguration({ ...iceConfig(), iceTransportPolicy: peer.relayOnly ? 'relay' : 'all' }); } catch (e) { /* */ }
     }
     peer.retry();
   }, 15000);
+  // Weak line: lots lost or very slow -> stop sending my video to this friend (voice keeps going),
+  // send it again once the line is better. Shows "Weak line" on their bubble.
+  let weakN = 0;
+  const weakCheck = setInterval(async () => {
+    if (closed) { clearInterval(weakCheck); return; }
+    if (peer.status !== 'on') return;
+    let rtt = 0, avail = Infinity, lost = 0;
+    try {
+      (await pc.getStats()).forEach(r => {
+        if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded') {
+          rtt = r.currentRoundTripTime || 0;
+          if (r.availableOutgoingBitrate) avail = r.availableOutgoingBitrate;
+        }
+        if (r.type === 'remote-inbound-rtp') lost = Math.max(lost, r.fractionLost || 0);
+      });
+    } catch (e) { return; }
+    const sendingVideo = !!(peer.camSender && peer.camSender.track);
+    const bad = rtt > 0.7 || lost > 0.12 || (sendingVideo && avail < 80000);
+    weakN = bad ? Math.min(weakN + 1, 8) : Math.max(weakN - 1, 0);
+    const was = peer.weak;
+    if (!peer.weak && weakN >= 3) peer.weak = true;
+    else if (peer.weak && weakN === 0) peer.weak = false;
+    if (was !== peer.weak) {
+      if (peer.camSender && cam) peer.camSender.replaceTrack(peer.weak ? null : cam.getVideoTracks()[0]).catch(() => {});
+      emit();
+    }
+  }, 4000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
@@ -554,7 +600,8 @@ function makePeer(g, theirUid, theirSid) {
     // One stream per friend holding their voice and (if on) camera, whichever arrives first.
     if (!peer.stream) peer.stream = new MediaStream();
     if (!peer.stream.getTracks().includes(e.track)) {
-      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => peer.stream.removeTrack(t));
+      // keep every video track (both sides adding a camera can make two); the bubble shows the one with pictures
+      if (e.track.kind === 'video') peer.stream.getVideoTracks().forEach(t => { if (t.readyState === 'ended') peer.stream.removeTrack(t); });
       peer.stream.addTrack(e.track);
     }
     e.track.onunmute = e.track.onmute = () => emit();
@@ -593,6 +640,7 @@ function makePeer(g, theirUid, theirSid) {
     if (closed) return;
     closed = true;
     clearInterval(watchdog);
+    clearInterval(weakCheck);
     try { pc.close(); } catch (e) { /* already */ }
     D.remove(out).catch(() => {});
   };
@@ -663,11 +711,11 @@ function buddies() {
     const p = group && group.peers.get(c.uid);
     if (!pr.on && !p) continue;
     out.push({ uid: c.uid, name: p ? p.name : c.name, face: p ? (p.face || '') : c.face, game: p ? (p.game || '') : (pr.game || ''),
-      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam),
+      inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam), stuck: !!p && isStuck(p), weak: !!(p && p.weak),
       calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking') });
   }
   if (group) for (const p of group.peers.values()) if (!out.some(o => o.uid === p.uid)) {
-    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, calling: false });
+    out.push({ uid: p.uid, name: p.name, face: p.face || '', game: p.game || '', inCall: true, status: p.status, stream: p.stream, cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak, calling: false });
   }
   return out;
 }
@@ -803,3 +851,4 @@ export function nameChanged() {
   if (group && group.writeMe) group.writeMe();
   if (home && home.put) home.put().catch(() => {}); else openHome().catch(() => {});
 }
+export const _rebuildNow = () => { if (group) { group.rebuiltAt = 0; rebuildLinks(group); } }; // for tests

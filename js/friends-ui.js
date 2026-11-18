@@ -1,7 +1,7 @@
 // Friends on screen: the bar + panel on the menu, the "wants to connect" popup,
 // and the floating friend bubbles that stay on top of every game.
 import { CODE_PICS, picImg } from './engine/net.js';
-import { nameHTML } from './engine/profile.js';
+import { nameHTML, myName, myFace } from './engine/profile.js';
 import { sound } from './engine/sound.js';
 import { icon } from './engine/icons.js';
 import { GAMES } from './games.js';
@@ -102,7 +102,7 @@ function renderBubbles(s) {
       el.className = 'fb';
       el.dataset.uid = f.uid;
       // <audio> plays their voice. <video> (muted, sound comes from <audio>) is ready for cameras.
-      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('camera')}</button><button class="fb-chat" aria-label="Send a message">${icon('chat')}</button><div class="fb-where"></div></div><div class="fb-name"></div><audio autoplay playsinline></audio>`;
+      el.innerHTML = `<div class="fb-face" style="--c:${colorFor(f.uid)}"><b></b><video playsinline autoplay muted></video></div><span class="fb-game" hidden></span><div class="fb-side"><button class="fb-quiet" aria-label="Mute friend"></button><button class="fb-ring" aria-label="Call">${icon('phone')}</button><button class="fb-ring fb-vring" aria-label="Video call">${icon('video')}</button><button class="fb-chat" aria-label="Send a message">${icon('chat')}</button><div class="fb-where"></div></div><div class="fb-name"></div><div class="fb-state" hidden></div><audio autoplay playsinline></audio>`;
       el.querySelector('.fb-quiet').addEventListener('click', () => {
         sound.pop();
         quiet.has(f.uid) ? quiet.delete(f.uid) : quiet.add(f.uid);
@@ -128,27 +128,37 @@ function renderBubbles(s) {
     el.title = `${f.name}: ${whereText(true, f.game)}`;
     const v = el.querySelector('video'), a = el.querySelector('audio');
     // Video only gets the stream while their camera is on (iPad: two players on one voice can sound wrong).
-    const vt = f.stream && f.stream.getVideoTracks()[0];
-    const showVid = !!(f.inCall && f.cam && vt && vt.readyState === 'live');
-    const vs = showVid ? f.stream : null;
+    const vts = f.stream ? f.stream.getVideoTracks().filter(t => t.readyState === 'live') : [];
+    const vt = vts.find(t => !t.muted) || vts[vts.length - 1]; // 'muted' isn't always right, so it's only a preference
+    const showVid = !!(f.inCall && f.cam && vt);
+    if (vt && (!el._vs || el._vs.getVideoTracks()[0] !== vt)) el._vs = new MediaStream([vt]); // video only: voice plays from <audio>
+    const vs = showVid ? el._vs : null;
     if (v.srcObject !== vs) { v.srcObject = vs; if (vs) v.play().catch(() => {}); }
     const q = quiet.has(f.uid);
     playVoice(a, f.stream, q);
     el.classList.toggle('quiet', q);
     el.querySelector('.fb-quiet').textContent = q ? '🔈' : '🔊';
     el.classList.toggle('video', showVid);
+    // How the link is doing (always shown, not just on hover)
+    const stTxt = !f.inCall ? '' : f.status !== 'on' ? (f.stuck ? "Can't connect" : 'Connecting…') : f.weak ? 'Weak line' : '';
+    const stEl = el.querySelector('.fb-state');
+    stEl.textContent = stTxt; stEl.hidden = !stTxt;
+    stEl.classList.toggle('bad', !!f.stuck);
     if (!showVid) el.classList.remove('big');
   }
   for (const u of quiet) if (!want.has(u) || !want.get(u).inCall) quiet.delete(u);
   tidyVoices(new Set(s.buddies.filter(f => f.inCall && !quiet.has(f.uid)).map(f => f.stream).filter(Boolean)));
   dock.classList.toggle('incall', s.inGroup);
   // my camera: button + my own little (mirrored) bubble while it's on
-  camBtn.hidden = !s.inGroup;
-  camBtn.innerHTML = s.camStatus === 'asking' ? '⏳' : s.camStatus === 'denied' ? '🚫' : icon('camera');
+  camBtn.innerHTML = s.camStatus === 'asking' ? '⏳' : s.camStatus === 'denied' ? '🚫' : icon(s.camStatus === 'on' ? 'video' : 'videoOff');
   camBtn.classList.toggle('off', s.camStatus !== 'on');
   const mv = meEl.querySelector('video');
   if (mv.srcObject !== (s.myCam || null)) { mv.srcObject = s.myCam || null; if (s.myCam) mv.play().catch(() => {}); }
-  meEl.hidden = !s.myCam;
+  // "Me" bubble while in a call: my controls pop out beside it (they're about me, for everyone).
+  meEl.hidden = !s.inGroup;
+  meEl.classList.toggle('video', !!s.myCam);
+  meEl.classList.toggle('has-face', !!myFace());
+  meEl.querySelector('.fb-face b').textContent = myFace() || [...(myName() || '?')][0];
   micBtn.innerHTML = s.micStatus === 'denied' ? '🚫' : s.micStatus === 'asking' ? '⏳' : icon(s.micStatus === 'on' && !s.muted ? 'mic' : 'micOff');
   micBtn.classList.toggle('off', s.micStatus !== 'on' || s.muted);
   badge.hidden = !(s.muted || s.micStatus === 'denied');
@@ -173,7 +183,7 @@ function renderKnock(s) {
       <div class="fi-says">${k.saved ? 'is calling you' : 'wants to be friends'}</div>
       <div class="name-row">
         <button class="app-btn fk-no" aria-label="No">${icon('close')}</button>
-        <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>${k.saved ? `<button class="app-btn fk-yes fk-video name-ok" aria-label="Yes with video">${icon('camera')}</button>` : ''}
+        <button class="app-btn fk-yes name-ok" aria-label="Yes">${icon('check')}</button>${k.saved ? `<button class="app-btn fk-yes fk-video name-ok" aria-label="Yes with video">${icon('video')}</button>` : ''}
       </div>
     </div>`;
   knockEl.querySelectorAll('.fk-yes').forEach(b => b.addEventListener('click', () => { sound.pop(); accept(k.pid, b.classList.contains('fk-video')); }));
@@ -269,7 +279,7 @@ function friendRow(c, s) {
   if (editing) act = `<button class="frow-btn frm" data-rm="${c.uid}" aria-label="Remove">${icon('trash')}</button>`;
   else if (c.inCall) act = `<span class="frow-tag">${icon('phone')} In call</span>`;
   else if (c.calling) act = `<button class="frow-btn fcancel calling" aria-label="Stop">${icon('close')}</button>`;
-  else if (c.online && !full) act = `<button class="frow-btn fring fvring" data-call="${c.uid}" data-video="1" aria-label="Video call">${icon('camera')}</button><button class="frow-btn fring" data-call="${c.uid}" aria-label="Call">${icon('phone')}</button>`;
+  else if (c.online && !full) act = `<button class="frow-btn fring fvring" data-call="${c.uid}" data-video="1" aria-label="Video call">${icon('video')}</button><button class="frow-btn fring" data-call="${c.uid}" aria-label="Call">${icon('phone')}</button>`;
   const said = c.said && c.said !== 'asking' && OUT_MSG[c.said] ? `<small class="frow-said">${OUT_MSG[c.said]()}</small>` : '';
   const status = c.calling ? `Calling… ⏳` : whereText(c.online, c.game);
   const g = gameOf(c.game);
@@ -429,7 +439,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera" hidden>${icon('camera')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-list"></div><div class="fb fb-me on video" hidden><div class="fb-face"><video playsinline autoplay muted></video></div><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-list"></div><div class="fb fb-me on" hidden><div class="fb-face"><b></b><video playsinline autoplay muted></video></div><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera">${icon('videoOff')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
