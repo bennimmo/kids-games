@@ -57,7 +57,7 @@ export function placeAt(b, world, p) {
   b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
   b.whip = b.bar = 0; for (const k of HOLDS) b[k] = 0; b.holdT = {}; b.whipping = b.barring = false;
   b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = []; b.rattle = 0;
-  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0;
+  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0; b.carve = 0; b.spinSet = 0;
   world.normal(b.pos.x, b.pos.z, b.n); copy(b.up, b.n);
 }
 
@@ -86,6 +86,8 @@ export function stepRider(b, world, inp, dt) {
   const turnIn = Math.abs(inp.steer) > Math.abs(b.steer) && inp.steer * b.steer >= 0;
   b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 5 : 8) : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
+  // how hard you're carving right now: turning into a lip is what sets up a spin
+  if (b.ground) b.carve = lerp(b.carve || 0, inp.steer, 1 - Math.exp(-dt * 5));
   b.pedal = b.ground ? Math.max(0, inp.throttle) : 0;
   b.stretch = !!inp.stretch; b.pump = !!inp.pump;
   b.brake = b.ground ? Math.max(0, -inp.throttle) : 0;
@@ -141,7 +143,10 @@ function groundStep(b, world, inp, dt, popNow) {
   else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
   // steering: tighter when slow
-  const rate = lerp(2.4, 1.05, clamp(Math.abs(vF) / 16, 0, 1)) * (b.manual > 0.3 ? 0.6 : 1);
+  // (never asks the tyres for more than they can hold, so at speed the bike carves instead of sliding;
+  //  it only lets go under hard braking or on steep side-slopes)
+  const tyre = (onDirt ? 14 : 10) * world.B.grip * b.P.grip * n.y;
+  const rate = Math.min(lerp(2.4, 1.05, clamp(Math.abs(vF) / 16, 0, 1)), 0.96 * tyre / Math.max(1, Math.abs(vF))) * (b.manual > 0.3 ? 0.6 : 1);
   b.yaw = wrap(b.yaw - b.steer * rate * dt * (Math.abs(vF) > 0.3 ? 1 : 0.3));
 
   // forces along the bike
@@ -162,14 +167,20 @@ function groundStep(b, world, inp, dt, popNow) {
   if (Math.abs(vF) < 0.05 && b.pedal === 0 && Math.abs(gF) < 0.6) vF = 0;   // stop on gentle bits
 
   // sideways: grip, or slide (drift) when asking too much
-  vS += gS * dt;
+  // on a bank the tyres dig in: the slope turns the bike down and round it (you ride up a berm and
+  // carve back off it) rather than the whole bike slipping sideways
+  const dig = Math.abs(s.y) < 0.5 ? 0.85 * (1 - b.rough * 0.8) : 0;
+  // (gentle cross-slopes, like the dish of the trail, don't steer you)
+  const gDig = Math.abs(vF) > 1.5 ? -G * Math.sign(s.y) * Math.max(0, Math.abs(s.y) - 0.13) * dig : 0;
+  b.yaw = wrap(b.yaw + gDig / Math.max(3, Math.abs(vF)) * Math.sign(vF) * dt);
+  vS += (gS - gDig) * dt;
   // a berm holds you: when the ground banks up on the outside of your turn it pushes you round,
   // so you can rail it flat out without sliding
   const bankUp = s.y * Math.sign(vS || b.steer);              // > 0 when the ground rises on the side you're being pushed toward
   const berm = clamp(bankUp * 6, 0, 2.6);
   // a steep side-slope that isn't holding you up as a berm: the tyres let go and you slip straight down it
-  const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.42) * 5, 0, 1) : 0;
-  const grip = (onDirt ? 10.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm) * (1 - steepSide);
+  const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.44) * 6, 0, 1) : 0;
+  const grip = tyre * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm) * (1 - steepSide);
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
@@ -220,7 +231,7 @@ function groundStep(b, world, inp, dt, popNow) {
     const hv = Math.hypot(b.vel.x, b.vel.z) || 1, dx = b.vel.x / hv * 0.8, dz = b.vel.z / hv * 0.8;
     const kap = (world.height(b.pos.x + dx, b.pos.z + dz) - 2 * h + world.height(b.pos.x - dx, b.pos.z - dz)) / 0.64;
     const need = -kap * hv * hv;
-    if (need > G * b.P.soak * (b.rough > 0.3 && speed < 9 ? 1.6 : 1) || b.pos.y > h + 0.25) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+    if (need > G * b.P.soak * (b.rough > 0.3 ? 2.4 : 1) || b.pos.y > h + (b.rough > 0.3 ? 0.45 : 0.25)) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
   }
   b.pos.y = h;
   if (into < 0) {   // ground came up: lose the bit going into it (suspension soaks it up)
@@ -232,7 +243,9 @@ function groundStep(b, world, inp, dt, popNow) {
   } else if (into > 0) { // ground falls away a bit: follow it
     b.vel.x -= n2.x * into; b.vel.y -= n2.y * into; b.vel.z -= n2.z * into;
   }
-  b.up.x = lerp(b.up.x, n2.x, 0.3); b.up.y = lerp(b.up.y, n2.y, 0.3); b.up.z = lerp(b.up.z, n2.z, 0.3); norm(b.up);
+  // over rocks the wheels and suspension do the work: the frame and rider stay steady, not see-sawing
+  const follow = b.rough > 0.2 ? 0.035 : 0.3;
+  b.up.x = lerp(b.up.x, n2.x, follow); b.up.y = lerp(b.up.y, n2.y, follow); b.up.z = lerp(b.up.z, n2.z, follow); norm(b.up);
   // pedal crank + wheels
   b.wheel += vF * dt / 0.36;
   if (b.pedal > 0) b.crank += dt * (4 + vF * 0.5);
@@ -264,6 +277,7 @@ function takeOff(b) {
   if (b.stretch && b.vel.y > 0) { const n = b.n, vn = dot(b.vel, n); if (vn > 0) { b.vel.x -= n.x * vn * 0.45; b.vel.y -= n.y * vn * 0.45; b.vel.z -= n.z * vn * 0.45; } }
   b.ground = false; b.air = 0;
   b.flip = b.spin = 0; b.flipV = b.spinV = 0;
+  b.spinSet = b.carve || 0;
   const hs = Math.hypot(b.vel.x, b.vel.z);
   // start with the bike pitched like the ground it left
   const f = bikeForward(b.yaw, 0, tmpB);
@@ -297,7 +311,10 @@ function airStep(b, world, inp, dt) {
   // flips and spins (only once properly in the air)
   const can = b.air > 0.12;
   const wantFlip = can && !inp.flipLock ? -b.lean * 7.2 * b.P.spin : 0;            // down / back = backflip (nose up)
-  const wantSpin = can && !inp.spinLock ? -b.steer * 7.6 * b.P.spin : 0;           // right = spin right
+  // spins come from the take-off: carve into the lip and you can keep it turning (a 360 and more);
+  // with no set-up you can only nudge the bike round a little
+  const set = b.spinSet || 0, setUp = b.steer * set > 0 ? clamp(Math.abs(set) * 1.35, 0, 1) : 0;
+  const wantSpin = can && !inp.spinLock ? -b.steer * 7.6 * b.P.spin * (0.15 + 0.85 * setUp) : 0;           // right = spin right
   b.flipV = lerp(b.flipV, wantFlip, 1 - Math.exp(-dt * (Math.abs(wantFlip) > 0.1 ? 5 : 7)));
   b.spinV = lerp(b.spinV, wantSpin, 1 - Math.exp(-dt * (Math.abs(wantSpin) > 0.1 ? 6 : 8)));
   b.flip += b.flipV * dt; b.spin += b.spinV * dt;

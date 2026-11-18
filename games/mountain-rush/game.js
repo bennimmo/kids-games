@@ -434,7 +434,7 @@ export function mount(stage) {
   }
   function controlsHTML() {
     if (TOUCH) return `<div class="ui-label">How to ride</div><div class="mr-keys">
-      <kbd>Stick</kbd><span>Steer. Pull down to brake. In the air: flip and spin (let go of the stick before you take off)</span>
+      <kbd>Stick</kbd><span>Steer. Pull down to brake. In the air: flip. To spin, turn into the jump as you take off and keep holding</span>
       <kbd>Pedal</kbd><span>Hold the big green button to pedal</span>
       <kbd>Jump</kbd><span>Hold to crouch, let go to pop. Pop at the top of a jump to go higher</span>
       <kbd>Tricks</kbd><span>In the air: Tailwhip, Barspin, Superman, No hands. Tweak = table top (stick left: can-can, right: no footer). Let go before you land!</span>
@@ -442,6 +442,7 @@ export function mount(stage) {
       <kbd>↺</kbd><span>Back to the last checkpoint</span></div>`;
     return `<div class="ui-label">How to ride</div><div class="mr-keys">
       <kbd>Z</kbd><span>Pedal &nbsp; <kbd>← →</kbd> steer &nbsp; <kbd>↑ ↓</kbd> lean (↓ brakes; in the air: flip)</span>
+      <kbd>Spin</kbd><span>Turn into the jump as you take off and keep holding ← or →. No turn-in, no 360</span>
       <kbd>X</kbd><span>Bunny hop (hold, then let go at a lip to go higher)</span>
       <kbd>S</kbd><span>Crouch / pump: hold going down rollers for speed &nbsp; <kbd>D</kbd> stretch to stay low off lips</span>
       <kbd>C + arrows</kbd><span>Tricks in the air: ← tailwhip, → barspin, ↑ superman, ↓ no hander. On the ground C + ↓ = manual</span>
@@ -736,7 +737,7 @@ export function mount(stage) {
       fovT += 6;
     } else {
       camera.up.set(0, 1, 0);
-      const dist = 5.0 + clamp(b.speed / 18, 0, 1) * 1.4, height = 2.05;
+      const dist = 5.0 + clamp(b.speed / 18, 0, 1) * 1.4, height = 2.5;
       const want = new THREE.Vector3(focus.x - Math.sin(cam.yaw) * dist, focus.y + height, focus.z - Math.cos(cam.yaw) * dist);
       // stay above the ground (and above the trail behind on steep bits)
       const gh = W.height(want.x, want.z) + 1.1;

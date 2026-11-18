@@ -49,12 +49,12 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (let z = 270; z < L - 340 && out.length < want; z += 15) {
       let clear = true;
       for (let q = z - 30; q < z + 100; q += 6) if (Math.abs(own(q) - other(q)) < 30) { clear = false; break; }
-      if (clear && (!out.length || z - out[out.length - 1].z0 > 300)) out.push({ z0: z, len: 78, amp: 4.4, lam: 31 });
+      if (clear && (!out.length || z - out[out.length - 1].z0 > 210)) out.push({ z0: z, len: 78, amp: 4.6, lam: 30 });
     }
     return out;
   };
-  const zonesA = pickZones(xA, xB, 1), zonesB = pickZones(xB, xA, 2);
-  const zig = (zones, z) => { let o = 0; for (const q of zones) if (z > q.z0 && z < q.z0 + q.len) o += q.amp * Math.sin((z - q.z0) / q.lam * Math.PI * 2) * smooth(q.z0, q.z0 + 8, z) * (1 - smooth(q.z0 + q.len - 8, q.z0 + q.len, z)); return o; };
+  const zonesA = pickZones(xA, xB, 2), zonesB = pickZones(xB, xA, 3);
+  const zig = (zones, z) => { let o = 0; for (const q of zones) if (z > q.z0 && z < q.z0 + q.len) o += q.amp * Math.sin((z - q.z0) / q.lam * Math.PI * 2) * smooth(q.z0, q.z0 + 5, z) * (1 - smooth(q.z0 + q.len - 8, q.z0 + q.len, z)); return o; };
   const lines = [z => xA(z) + zig(zonesA, z), z => xB(z) + zig(zonesB, z)].map(fx => makeLine(fx, L, HALF));
   lines[0].zones = zonesA; lines[1].zones = zonesB;
 
@@ -88,6 +88,7 @@ export function buildWorld(mapId = 'pine-ridge') {
   Bl.yc = blur(Float32Array.from(Bl.x, (x, i) => nat(x, Bl.z[i])), 30);
   pullB(Bl.yc);
   Bl.yc = gradeFix(Bl.yc, pullB);
+  Bl.yc = blur(Bl.yc, 4);        // no sudden steps where the nearest point on A jumps
   A.busy = Float32Array.from(AtoB.nd, (d, i) => (A.z[i] > 150 && A.z[i] < L - 250 && d < 13 ? 1 : 0));   // A keeps features where the lines share
   Bl.busy = Float32Array.from(BtoA.nd, d => (d < 13 ? 1 : 0));
 
@@ -108,6 +109,15 @@ export function buildWorld(mapId = 'pine-ridge') {
           const pick = n % 2;                                   // take turns: A jumps, then B
           const jumper = straight(pick) ? pick : straight(1 - pick) ? 1 - pick : -1;
           if (jumper >= 0) { crossings.push({ i: [i, j], gap: Math.max(9, gap), jumper }); n++; }
+        }
+        // road gap: the other trail dips into a cutting and you jump across the top of it.
+        // No mounds needed, so the gap is short and works on flatter ground.
+        const lastC = crossings[crossings.length - 1];
+        if (ang > 0.85 && (!lastC || j - lastC.i[1] > 90)) {
+          const okRun = q => { let m = 0; const [ln2, c0] = q ? [Bl, j] : [A, i]; for (let t = c0 - 26; t < c0 + 22; t++) m = Math.max(m, Math.abs(ln2.curvS[clamp(t, 0, ln2.n - 1)])); let step = 0; for (let t = c0 - 40; t < c0 + 20; t++) step = Math.max(step, Math.abs(ln2.yc[clamp(t, 0, ln2.n - 2)] - ln2.yc[clamp(t + 1, 1, ln2.n - 1)])); return step < 0.6 && m < 0.03 && (ln2.yc[Math.max(0, c0 - 45)] - ln2.yc[Math.max(0, c0 - 5)]) / 40 > 0.06; };
+          const pick = n % 2, jumper = okRun(pick) ? pick : okRun(1 - pick) ? 1 - pick : -1;
+          if (jumper >= 0) { const sx = A.tx[i] * Bl.tz[j] - A.tz[i] * Bl.tx[j];      // which side of the lower trail the jumper lands on
+            crossings.push({ i: [i, j], gap: (2.0 + 3.2) / Math.sin(ang) + 2.2, jumper, cut: true, ang, es: jumper === 0 ? Math.sign(sx) : -Math.sign(sx) }); n++; }
         }
       }
       if (side) prev = side;
@@ -131,9 +141,16 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (const c of crossings) if (c.jumper === ri) {
       const i0 = c.i[ri], half = c.gap / 2;
       // a low, long take-off (keeps your speed) and a low landing (more hang time), so it clears at a normal pace
-      const f = { kind: 'kicker', s: i0 - half - 8, lk: 8, hk: 1.9, gap: c.gap, ll: 14, off: 0, flat: true, hoop: true, over: true, fw: 1.2, edge: 0.4 };
-      f.hl = f.hk * 0.35; f.face = 1.2; f.end = f.s + f.lk + f.gap + f.ll + f.face; feats.push(f);
+      const f = c.cut ? { kind: 'kicker', s: i0 - 2.0 / Math.sin(c.ang) - 1.8 - 5.6, lk: 5.6, hk: 1.4, gap: c.gap, ll: 9, off: 0, flat: true, hoop: false, over: true, fw: 1.3, edge: 0.4 }
+        : { kind: 'kicker', s: i0 - half - 8, lk: 8, hk: 1.9, gap: c.gap, ll: 14, off: 0, flat: true, hoop: true, over: true, fw: 1.2, edge: 0.4 };
+      f.hl = c.cut ? 0.25 : f.hk * 0.35; f.face = c.cut ? 0.6 : 1.2; f.end = f.s + f.lk + f.gap + f.ll + f.face; feats.push(f);
       for (let j = Math.max(0, Math.floor(f.s - 22)); j < Math.min(N, f.end + 16); j++) taken[j] = 1;
+    }
+    // road gaps: this route is the one underneath, so it dips through a cutting
+    for (const c of crossings) if (c.cut && c.jumper !== ri) {
+      const i0 = c.i[ri], fl = 2.6 / Math.sin(c.ang) + 1.5;      // flat floor right under the jump
+      const f = { kind: 'cut', s: i0 - fl - 13, end: i0 + fl + 13, fl, mid: i0, D: 2.1, es: c.es, sin: Math.sin(c.ang) }; feats.push(f);
+      for (let j = Math.max(0, Math.floor(f.s - 20)); j < Math.min(N, f.end + 20); j++) taken[j] = 1;
     }
     // tech zones: steep rocky pitch on the way in, rock steps part-way through, nothing else inside
     const idxAtZ = z => { let lo = 0, hi = N - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (ln.z[m] < z) lo = m + 1; else hi = m; } return lo; };
@@ -141,9 +158,9 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (const q of ln.zones) {
       const i0 = idxAtZ(q.z0), i1 = idxAtZ(q.z0 + q.len);
       zoneIdx.push([i0, i1]);
-      const t = { kind: 'tech', s: i0 - 26, len: 24, D: 2.8, ret: 170 }; t.end = t.s + t.len; feats.push(t);
-      const st = { kind: 'stairs', s: Math.round(i0 + (i1 - i0) * 0.5), n: 3, sp: 4.5, st: 0.45, ret: 170 }; st.D = st.n * st.st; st.end = st.s + st.n * st.sp; feats.push(st);
-      for (let j = Math.max(0, i0 - 60); j < Math.min(N, i1 + 14); j++) taken[j] = 1;
+      const t = { kind: 'tech', s: i0 + 5, len: 24, D: 2.8, ret: 170 }; t.end = t.s + t.len; feats.push(t);
+      const st = { kind: 'stairs', s: Math.round(i0 + (i1 - i0) * 0.62), n: 3, sp: 4.5, st: 0.45, ret: 170 }; st.D = st.n * st.st; st.end = st.s + st.n * st.sp; feats.push(st);
+      for (let j = Math.max(0, i0 - 40); j < Math.min(N, i1 + 14); j++) taken[j] = 1;
     }
     let s = 64, k = 0;
     while (s < FINISH - 70) {
@@ -157,16 +174,18 @@ export function buildWorld(mapId = 'pine-ridge') {
       if (STRAIGHT.has(kind) && maxC > 0.026) {
         // too twisty here for a jump: something that works on a bend instead, or move on
         // (the jump stays next in line for the next straight)
-        if (r() < 0.4) { kind = ['rollers', 'whoops', 'stairs'][Math.floor(r() * 3)]; k--; } else { s += 5; continue; }
+        if (r() < 0.4) { kind = ['rollers', 'lowtable', 'whoops'][Math.floor(r() * 3)]; k--; } else { s += 5; continue; }
       }
       k++;
       const grade = (ln.yc[Math.max(0, s - 40)] - ln.yc[s]) / 40;
       if ((kind === 'stepup' || kind === 'woodstep') && grade < 0.09) kind = 'table';     // these need speed coming in
       // rocky pitches belong before a bend, not in the middle of a straight
-      if (kind === 'tech' || kind === 'rocks') { let bend = 0; for (let j = s + 20; j < s + 60 && j < N; j++) bend = Math.max(bend, Math.abs(ln.curvS[j])); if (bend < 0.022) kind = grade > 0.13 ? 'drop' : 'table'; else kind = 'tech'; }
+      // rocks only live in the tech zones (sharp turns round trees), never out on a straight
+      if (kind === 'tech' || kind === 'rocks' || kind === 'stairs') kind = grade > 0.13 ? 'drop' : ['rollers', 'table', 'whoops'][k % 3];
       const gapAfter = 17 + r() * 8;
       const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
       if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11, hoop: r() < 0.6 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + gapAfter;
+      else if (kind === 'lowtable') s = kick(s, { lk: 4.5, hk: 1.15, gap: 4.5, ll: 7, table: true }).end + gapAfter;
       else if (kind === 'table') s = kick(s, { lk: 6.5, hk: 1.8, gap: 8, table: true }).end + gapAfter;
       else if (kind === 'gap') s = kick(s, { lk: 8, hk: 2.6, gap: 12.5, ll: 15, hoop: true }).end + gapAfter;
       else if (kind === 'double') { const f = kick(s, { lk: 6.5, hk: 1.9, gap: 9 }); s = kick(f.end + 4, { lk: 6, hk: 1.6, gap: 8, table: true }).end + gapAfter; }
@@ -238,6 +257,11 @@ export function buildWorld(mapId = 'pine-ridge') {
           if (sc > f.s - 3 && sc < f.s) jump = 1;
         } else if (sc < f.s - 1 || sc > f.end + 1) {
           // not near this one
+        } else if (f.kind === 'cut') {
+          const a = Math.abs(sc - f.mid);
+          // steep walls, but a ramp out on the jumper's landing side, so coming up short isn't a trap
+          const notch = (1 - smooth(1.0, 1.7, a * f.sin)) * (d * f.es > 0 ? 1 : 0);
+          hN += -f.D * (1 - smooth(f.fl, f.fl + 13, a)) * lerp(1 - smooth(1.25, 2.0, Math.abs(d)), 1 - smooth(0.3, 3.2, Math.abs(d)), notch);
         } else if (f.kind === 'stepup') {
           jump = 1;
           const g0 = f.lk + f.gap, g1 = g0 + f.face, g2 = g1 + f.top;
