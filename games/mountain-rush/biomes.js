@@ -36,7 +36,7 @@ export const BIOMES = {
 
 export const MAPS = {
   'pine-ridge': { name: 'Pine Ridge', sub: 'Forest flow, berms and jumps', style: { twist: 1, width: 0, minG: 0.07, maxG: 0.36, drop: 1 }, biome: 'forest', seed: 7, W: 520, L: 1300, top: 330, hills: 34, ridges: 10,
-    routes: [{ name: 'Flow line', kinds: ['table', 'woodstep', 'rollers', 'hip', 'kicker', 'triple', 'woodkicker', 'whoops', 'stepdown', 'double', 'stepup', 'drop'] }, { name: 'Tech line', kinds: ['tech', 'woodstep', 'drop', 'skinny', 'gap', 'stairs', 'woodkicker', 'rocks', 'stepdown', 'tech', 'hip', 'drop'] }] },
+    routes: [{ name: 'Flow line', kinds: ['table', 'woodstep', 'rollers', 'hip', 'kicker', 'triple', 'woodkicker', 'whoops', 'stepdown', 'double', 'stepup', 'drop'] }, { name: 'Tech line', kinds: ['tech', 'woodstep', 'drop', 'skinny', 'gap', 'stairs', 'woodkicker', 'whoops', 'stepdown', 'tech', 'hip', 'drop'] }] },
   'red-rock': { name: 'Red Rock', sub: 'Wide, steep and fast. Big drops', biome: 'desert', seed: 23, W: 560, L: 1250, top: 330, hills: 40, ridges: 18, style: { twist: 0.6, width: 0.5, minG: 0.09, maxG: 0.42, drop: 1.5 },
     routes: [{ name: 'Canyon line', kinds: ['table', 'stepdown', 'woodkicker', 'triple', 'drop', 'hip', 'woodstep', 'rollers', 'gap', 'whoops', 'stepup'] }, { name: 'Mesa line', kinds: ['stairs', 'drop', 'gap', 'woodstep', 'tech', 'stepdown', 'skinny', 'drop', 'woodkicker', 'tech', 'gap'] }] },
   'snow-peak': { name: 'Snow Peak', sub: 'Twisty, slippy, tight berms', biome: 'snow', seed: 41, W: 520, L: 1350, top: 380, hills: 30, ridges: 14, style: { twist: 1.35, width: -0.15, minG: 0.08, maxG: 0.34, drop: 1 },

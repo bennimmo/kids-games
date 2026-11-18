@@ -44,7 +44,7 @@ export function newRider(world) {
     crank: 0, wheel: 0, slide: 0, speed: 0, pedal: 0, brake: 0,
     // state
     crashed: false, crashT: 0, finished: false, events: [],
-    cp: 0, progress: 0, route: 0, onTrail: true, rough: 0, rattle: 0,
+    cp: 0, progress: 0, route: 0, onTrail: true, rough: 0, rattle: 0, noCrash: false,
     P: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 },     // bike stats (bike.js BIKES)
   };
   placeAt(b, world, world.start);
@@ -104,7 +104,8 @@ export function stepRider(b, world, inp, dt) {
     for (const t of world.treesNear(b.pos.x, b.pos.z)) {
       const dx = b.pos.x - t.x, dz = b.pos.z - t.z, d = Math.hypot(dx, dz), rr = 0.5 + 0.25 * t.s;
       if (d < rr && b.pos.y < t.y + 10) {
-        if (sp > 5) { crash(b, 'tree'); break; }
+        if (sp > 5 && !b.noCrash) { crash(b, 'tree'); break; }
+        if (sp > 5) { b.vel.x *= 0.5; b.vel.z *= 0.5; b.events.push({ type: 'save', why: 'tree' }); }      // no-crash mode: bump off it
         const nx = dx / (d || 1), nz = dz / (d || 1), into = b.vel.x * nx + b.vel.z * nz;
         if (into < 0) { b.vel.x -= into * nx; b.vel.z -= into * nz; }
         b.pos.x = t.x + nx * rr; b.pos.z = t.z + nz * rr;
@@ -134,7 +135,7 @@ function groundStep(b, world, inp, dt, popNow) {
   // rock gardens on the tech sections: fine slowly; too fast and they shake you off
   b.rough = world.roughAt(b.pos.x, b.pos.z);
   const safe = 9.2 + (b.P.soak - 1.6) * 4;
-  if (b.rough > 0.4 && speed > safe && !b.crashed) { b.rattle += (speed - safe) * dt * 0.55 * b.rough; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
+  if (b.rough > 0.4 && speed > safe && !b.crashed) { b.rattle += (speed - safe) * dt * 0.55 * b.rough; if (b.rattle > 1) { if (b.noCrash) { b.rattle = 0.4; b.vel.x *= 0.7; b.vel.z *= 0.7; b.events.push({ type: 'save', why: 'rocks' }); } else { crash(b, 'rocks'); return; } } }
   else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
   // steering: tighter when slow
@@ -240,7 +241,7 @@ function hitWall(b, world, ox, oy, oz) {
   b.pos.x = ox; b.pos.z = oz; b.pos.y = Math.max(oy, world.height(ox, oz));
   const into = -(b.vel.x * nx + b.vel.z * nz);
   if (into > 0) { b.vel.x += nx * into * 1.05; b.vel.z += nz * into * 1.05; }
-  if (into > 6.5) { crash(b, 'wall'); return true; }
+  if (into > 6.5 && !b.noCrash) { crash(b, 'wall'); return true; }
   return false;
 }
 
@@ -356,7 +357,8 @@ function land(b, world, h) {
   // landing on the up-slope (came up short: "cased it") hurts but you ride away
   const cased = t.y > 0.08 && Math.abs(wrap(b.flip)) < 0.6 && Math.abs(wrap(b.spin)) < 0.6;
   const okErr = shortHop ? 1.1 : cased ? 1.5 : 0.85;
-  if (err > okErr || into > 16 || whipBad || barBad || poseBad) {
+  const wouldCrash = err > okErr || into > 16 || whipBad || barBad || poseBad;
+  if (wouldCrash && !b.noCrash) {
     crash(b, err > okErr ? 'angle' : into > 15 ? 'hard' : 'trick');
     b.crashInfo = { err, into, air: b.air, flip: b.flip, spin: b.spin, base: b.basePitch };
     return;
@@ -379,7 +381,8 @@ function land(b, world, h) {
   if (b.air > 0.7) { const airPts = Math.round(b.air * 60 / 10) * 10; pts += airPts; if (!list.length) list.push(`Air ${b.air.toFixed(1)}s`); }
   if (perfect && list.length) { pts += 100; }
   // keep going the way we were going, bike now points along the ground
-  b.yaw = wrap(Math.atan2(bf.x, bf.z));
+  b.yaw = wouldCrash ? wrap(Math.atan2(b.vel.x, b.vel.z)) : wrap(Math.atan2(bf.x, bf.z));
+  if (wouldCrash) { list.length = 0; pts = 0; b.events.push({ type: 'save', why: 'landing' }); }
   // sharp landings lose speed
   const keep = 1 - clamp(err / 0.85, 0, 1.4) * 0.3 - clamp(into / 15, 0, 1) * 0.15;
   const vt = { x: b.vel.x + n.x * into, y: b.vel.y + n.y * into, z: b.vel.z + n.z * into };
@@ -389,7 +392,7 @@ function land(b, world, h) {
   copy(b.up, n);
   // landing in the rocks too fast shakes you
   const rgh = world.roughAt(b.pos.x, b.pos.z), safe = 9.2 + (b.P.soak - 1.6) * 4, hsp = Math.hypot(b.vel.x, b.vel.z);
-  if (rgh > 0.4 && hsp > safe) { b.rattle += 0.35 + (hsp - safe) * 0.08; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
+  if (rgh > 0.4 && hsp > safe) { b.rattle += 0.35 + (hsp - safe) * 0.08; if (b.rattle > 1) { if (b.noCrash) b.rattle = 0.4; else { crash(b, 'rocks'); return; } } }
   b.events.push({ type: 'land', v: into, air: b.air, perfect, cased: cased && err > 0.85 });
   if (list.length && pts > 0) b.events.push({ type: 'trick', list, pts, perfect });
   b.air = 0;

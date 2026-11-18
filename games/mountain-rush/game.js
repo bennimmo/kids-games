@@ -27,9 +27,9 @@ const STEP = 1 / 120;
 const PARAMS = new URLSearchParams(location.search);
 
 const QUALITY = {
-  low: { name: 'low', dpr: 1, shadows: 0, shadowBox: 40, trees: 0.55, plants: 0.3, grass: 0, grassPatch: 0, particles: 300, fog: 0.0105, viewDist: 190 },
-  mid: { name: 'mid', dpr: 1.25, shadows: 2048, shadowBox: 42, trees: 0.8, plants: 0.6, grass: 0.7, grassPatch: 40, particles: 500, fog: 0.0088, viewDist: 230 },
-  high: { name: 'high', dpr: 2, shadows: 4096, shadowBox: 48, trees: 1, plants: 1, grass: 0.5, grassPatch: 48, particles: 800, fog: 0.0076, viewDist: 260 },
+  low: { name: 'low', dpr: 1, shadows: 0, shadowBox: 40, trees: 0.55, plants: 0.3, grass: 0, grassPatch: 0, particles: 300, fog: 0.0118, viewDist: 170 },
+  mid: { name: 'mid', dpr: 1.25, shadows: 2048, shadowBox: 42, trees: 0.8, plants: 0.6, grass: 0.7, grassPatch: 40, particles: 500, fog: 0.0099, viewDist: 205 },
+  high: { name: 'high', dpr: 2, shadows: 4096, shadowBox: 48, trees: 1, plants: 1, grass: 0.5, grassPatch: 48, particles: 800, fog: 0.0086, viewDist: 232 },
 };
 
 export function mount(stage) {
@@ -44,7 +44,7 @@ export function mount(stage) {
 
   // ---------------------------------------------------------------- prefs
   const prefs = (() => {
-    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'trek', points: 0, online: true };
+    const d = { quality: PARAMS.get('mrq') || (Math.min(screen.width, screen.height) < 520 ? 'low' : TOUCH ? 'mid' : 'high'), cam: 'chase', sound: true, best: {}, look: { frame: 0, jersey: 0, helmet: 0, pants: 0, goggle: 0, open: 0 }, map: 'pine-ridge', bike: 'trek', points: 0, online: true, noCrash: false };
     try { const p = { ...d, ...(JSON.parse(localStorage.getItem(PREFS_KEY)) || {}) }; p.look = { ...d.look, ...p.look }; return p; } catch (e) { return d; }
   })();
   const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ } };
@@ -123,6 +123,7 @@ export function mount(stage) {
     scene.scene.add(bike.root); scene.scene.add(bike.rider);
     rider = newRider(W);
     rider.P = { ...BIKES[bikeType()].stats };
+    rider.noCrash = !!prefs.noCrash;
     resize();
     camera.far = Q.viewDist + 140; camera.updateProjectionMatrix();
     snapCamera();
@@ -347,6 +348,7 @@ export function mount(stage) {
         <div class="ui-row">${online.isHost() ? '<button class="ui-btn primary mr-race">🏁 Race!</button>' : '<span class="mr-best">Your friend can start a race</span>'}<button class="ui-btn ghost mr-leave">Leave friends</button></div>`
         : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
       <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">🌍 See everyone online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
+      <div class="ui-seg mr-nc"><button data-n="0" class="${prefs.noCrash ? '' : 'on'}">💥 Crashes on</button><button data-n="1" class="${prefs.noCrash ? 'on' : ''}">🛟 No crashes (easy)</button></div>
       <div class="mr-note mr-best"></div>
       <div class="ui-label">Fastest on ${MAPS[S.map].name}</div><div class="mr-lb mr-best">Loading…</div>
       ${controlsHTML()}
@@ -367,6 +369,7 @@ export function mount(stage) {
     if (tb) click(tb, async () => { tb.disabled = true; try { const r = await online.hostRoom(S.map); if (r) menu(); else tb.disabled = false; } catch (e) { tb.disabled = false; showMenuNote('Could not go online'); } });
     click(ui.querySelector('.mr-race'), () => online.startRace());
     click(ui.querySelector('.mr-leave'), () => { online.leaveRoom(); menu(); });
+    ui.querySelectorAll('.mr-nc button').forEach(b => click(b, () => { prefs.noCrash = b.dataset.n === '1'; savePrefs(); rider.noCrash = prefs.noCrash; ui.querySelectorAll('.mr-nc button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-onl button').forEach(b => click(b, () => { prefs.online = b.dataset.o === '1'; savePrefs(); ui.querySelectorAll('.mr-onl button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-q button').forEach(b => click(b, () => {
       if (b.dataset.q === Q.name) return;
@@ -843,6 +846,7 @@ export function mount(stage) {
         snd('crash'); cam.shake = 0.35; loseCombo();
         showMsg({ tree: 'Ouch! Tree!', edge: 'Off the mountain!', rocks: 'Too fast for the rocks!', wall: 'Bonk! Ride round or jump it' }[e.why] || 'Crashed!', 1.4);
       } else if (e.type === 'pop') snd('pop');
+      else if (e.type === 'save') { cam.shake = Math.max(cam.shake, 0.2); snd('land', 0.6); if (performance.now() - (S.saveT || 0) > 1500) { S.saveT = performance.now(); showMsg(e.why === 'tree' ? '🛟 Bumped a tree!' : e.why === 'rocks' ? '🛟 Whoa, rocks!' : '🛟 Saved it!', 1); } if (S.combo) loseCombo(); }
     }
   }
   function updateHUD(dt) {

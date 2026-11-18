@@ -690,6 +690,55 @@ function makeProps(world, T) {
     im.castShadow = true;
     group.add(im);
   }
+  // ---------------------------------------------------------------- course detail
+  // Everything below is merged by material (a handful of draw calls for hundreds of things).
+  const Y = new THREE.Vector3(0, 1, 0), M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E3 = new THREE.Euler(), S3 = new THREE.Vector3(), P3 = new THREE.Vector3();
+  const bins = new Map();
+  const put = (mat, geo, x, y, z, yaw = 0, sx = 1, sy = 1, sz = 1, pitch = 0) => {
+    E3.set(pitch, yaw, 0, 'YXZ'); Q4.setFromEuler(E3); M4.compose(P3.set(x, y, z), Q4, S3.set(sx, sy, sz));
+    const g = geo.clone(); g.applyMatrix4(M4);
+    if (!bins.has(mat)) bins.set(mat, []); bins.get(mat).push(g);
+  };
+  const signTex = draw => { const c = document.createElement('canvas'); c.width = c.height = 128; draw(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  const postG = new THREE.CylinderGeometry(0.03, 0.035, 1, 6); postG.translate(0, 0.5, 0);
+  const quad = new THREE.PlaneGeometry(1, 1);
+  // crash pads round the trees you zig-zag past
+  const padMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.7 });
+  const padG = new THREE.CylinderGeometry(0.42, 0.42, 1.5, 14); padG.translate(0, 0.95, 0);
+  const bandG = new THREE.CylinderGeometry(0.43, 0.43, 0.12, 14); bandG.translate(0, 1.2, 0);
+  const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.7 });
+  for (const p of world.pads) { put(padMat, padG, p.x, p.y - 0.25, p.z); put(whiteMat, bandG, p.x, p.y - 0.25, p.z); }
+  // roots snaking from trees across the edge of the trail
+  { const pts = []; for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push(new THREE.Vector3(Math.sin(t * 5) * 0.07, 0.05 * Math.sin(t * Math.PI) + 0.01, t)); }
+    const rootG = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.05, 5, false);
+    const pa = rootG.attributes.position; for (let i = 0; i < pa.count; i++) { const k = 1 - pa.getZ(i) * 0.65; pa.setX(i, pa.getX(i) * k + (1 - k) * Math.sin(pa.getZ(i) * 5) * 0.07); pa.setY(i, pa.getY(i) * k); }
+    const rootMat = new THREE.MeshStandardMaterial({ map: T.bark, color: world.B.snow ? 0x9a9088 : 0xa88868, roughness: 0.95 });
+    for (const rt of world.roots) {
+      const x1 = rt.x + Math.sin(rt.rot) * rt.len, z1 = rt.z + Math.cos(rt.rot) * rt.len, y1 = world.height(x1, z1);
+      put(rootMat, rootG, rt.x, rt.y + 0.02, rt.z, rt.rot, 1.3, 1.3, rt.len, -Math.atan2(y1 - rt.y, rt.len)); } }
+  // stumps
+  { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
+    const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);
+    const topMat = new THREE.MeshStandardMaterial({ color: 0xc9a66b, roughness: 0.85 });
+    for (const st of world.stumps) { put(wood, g1, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); put(topMat, g2, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); } }
+  // arrow boards on sharp turns, warning signs before the tricky bits
+  { const arrow = dir => signTex(g => { g.fillStyle = '#ffd400'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#111'; g.lineWidth = 6; g.strokeStyle = '#111'; g.strokeRect(3, 3, 122, 122);
+      g.translate(64, 64); g.scale(dir, 1); for (const o of [-26, 14]) { g.beginPath(); g.moveTo(o + 22, -40); g.lineTo(o - 14, 0); g.lineTo(o + 22, 40); g.lineTo(o + 4, 40); g.lineTo(o - 32, 0); g.lineTo(o + 4, -40); g.fill(); } });
+    const aL = new THREE.MeshStandardMaterial({ map: arrow(1), roughness: 0.6, side: THREE.DoubleSide }), aR = new THREE.MeshStandardMaterial({ map: arrow(-1), roughness: 0.6, side: THREE.DoubleSide });
+    for (const a of world.arrows) { put(postMat, postG, a.x, a.y - 0.1, a.z, 0, 1.4, 1.5, 1.4); put(a.dir > 0 ? aL : aR, quad, a.x, a.y + 1.2, a.z, a.yaw + Math.PI, 0.8, 0.8, 1); }
+    const warnMat = new THREE.MeshStandardMaterial({ map: signTex(g => { g.clearRect(0, 0, 128, 128); g.fillStyle = '#e53935'; g.beginPath(); g.moveTo(64, 6); g.lineTo(124, 118); g.lineTo(4, 118); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(64, 28); g.lineTo(104, 106); g.lineTo(24, 106); g.fill(); g.fillStyle = '#111'; g.font = '900 64px Arial Black, sans-serif'; g.textAlign = 'center'; g.fillText('!', 64, 100); }), transparent: true, alphaTest: 0.5, roughness: 0.6, side: THREE.DoubleSide });
+    for (const a of world.warns) { put(postMat, postG, a.x, a.y - 0.1, a.z, 0, 1.4, 1.3, 1.4); put(warnMat, quad, a.x, a.y + 1.35, a.z, a.yaw + Math.PI, 0.75, 0.75, 1); } }
+  // feather flags at the jumps
+  { const poleG = new THREE.CylinderGeometry(0.02, 0.025, 1, 6); poleG.translate(0, 0.5, 0);
+    const fg = new THREE.PlaneGeometry(0.5, 1.9, 1, 6); { const pa = fg.attributes.position; for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); pa.setX(i, pa.getX(i) * (1 - Math.max(0, y) * 0.35) + 0.25); pa.setZ(i, Math.sin(y * 3) * 0.05); } }
+    const cols = [0x1f6feb, 0xf59e0b, 0xe11d48].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, side: THREE.DoubleSide }));
+    for (const f of world.flags) { put(pole, poleG, f.x, f.y - 0.1, f.z, 0, 1, 3.1, 1); put(cols[f.tint || 0], fg, f.x, f.y + 1.95, f.z, f.yaw + Math.PI / 2); } }
+  // banners along the straights
+  { const bMat = new THREE.MeshStandardMaterial({ map: bannerTex('MOUNTAIN RUSH', '#111827', '#ffffff'), roughness: 0.7, side: THREE.DoubleSide });
+    for (const b of world.banners) { const sx = Math.cos(b.yaw), sz = -Math.sin(b.yaw);
+      for (const e of [-1, 1]) put(postMat, postG, b.x + Math.sin(b.yaw) * 1.9 * e, world.height(b.x + Math.sin(b.yaw) * 1.9 * e, b.z + Math.cos(b.yaw) * 1.9 * e) - 0.1, b.z + Math.cos(b.yaw) * 1.9 * e, 0, 1.6, 1.25, 1.6);
+      put(bMat, quad, b.x, b.y + 0.72, b.z, b.yaw + Math.PI / 2, 3.8, 0.62, 1); } }
+  for (const [mat, list] of bins) { const m = new THREE.Mesh(mergeGeos(list), mat); m.castShadow = true; m.receiveShadow = true; group.add(m); }
   return { group, update(dt) { /* flags could wave later */ } };
 }
 

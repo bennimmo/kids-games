@@ -42,7 +42,21 @@ export function buildWorld(mapId = 'pine-ridge') {
   const xA = z => smooth(0, 70, z) * (95 * Math.sin(z / 150 + ph[0]) + 38 * tw * Math.sin(z / 61 + ph[1]) + 16 * tw * Math.sin(z / 27 + ph[2]) + 6 * tw * tw * Math.sin(z / 14.5 + ph[3] * 2));
   const env = z => smooth(70, 170, z) * (1 - smooth(L - 230, L - 120, z));
   const xB = z => xA(z) + env(z) * (68 * Math.sin(z / 96 + ph[3]) + 26 * Math.sin(z / 41 + ph[4]) + 12 * Math.sin(z / 19 + ph[5]));
-  const lines = [xA, xB].map(fx => makeLine(fx, L, HALF));
+  // tech zones: a stretch where the trail zig-zags hard between trees (after a steep rocky pitch).
+  // Picked where the two routes are well apart, so the wiggles never run into the other trail.
+  const pickZones = (own, other, want) => {
+    const out = [];
+    for (let z = 270; z < L - 340 && out.length < want; z += 15) {
+      let clear = true;
+      for (let q = z - 30; q < z + 100; q += 6) if (Math.abs(own(q) - other(q)) < 30) { clear = false; break; }
+      if (clear && (!out.length || z - out[out.length - 1].z0 > 300)) out.push({ z0: z, len: 78, amp: 4.4, lam: 31 });
+    }
+    return out;
+  };
+  const zonesA = pickZones(xA, xB, 1), zonesB = pickZones(xB, xA, 2);
+  const zig = (zones, z) => { let o = 0; for (const q of zones) if (z > q.z0 && z < q.z0 + q.len) o += q.amp * Math.sin((z - q.z0) / q.lam * Math.PI * 2) * smooth(q.z0, q.z0 + 8, z) * (1 - smooth(q.z0 + q.len - 8, q.z0 + q.len, z)); return o; };
+  const lines = [z => xA(z) + zig(zonesA, z), z => xB(z) + zig(zonesB, z)].map(fx => makeLine(fx, L, HALF));
+  lines[0].zones = zonesA; lines[1].zones = zonesB;
 
   // trail heights: route A follows the smoothed ground; route B too, but matches A where they meet
   const MIN_G = ST.minG, MAX_G = ST.maxG;
@@ -121,6 +135,16 @@ export function buildWorld(mapId = 'pine-ridge') {
       f.hl = f.hk * 0.35; f.face = 1.2; f.end = f.s + f.lk + f.gap + f.ll + f.face; feats.push(f);
       for (let j = Math.max(0, Math.floor(f.s - 22)); j < Math.min(N, f.end + 16); j++) taken[j] = 1;
     }
+    // tech zones: steep rocky pitch on the way in, rock steps part-way through, nothing else inside
+    const idxAtZ = z => { let lo = 0, hi = N - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (ln.z[m] < z) lo = m + 1; else hi = m; } return lo; };
+    const zoneIdx = [];
+    for (const q of ln.zones) {
+      const i0 = idxAtZ(q.z0), i1 = idxAtZ(q.z0 + q.len);
+      zoneIdx.push([i0, i1]);
+      const t = { kind: 'tech', s: i0 - 26, len: 24, D: 2.8, ret: 170 }; t.end = t.s + t.len; feats.push(t);
+      const st = { kind: 'stairs', s: Math.round(i0 + (i1 - i0) * 0.5), n: 3, sp: 4.5, st: 0.45, ret: 170 }; st.D = st.n * st.st; st.end = st.s + st.n * st.sp; feats.push(st);
+      for (let j = Math.max(0, i0 - 60); j < Math.min(N, i1 + 14); j++) taken[j] = 1;
+    }
     let s = 64, k = 0;
     while (s < FINISH - 70) {
       s = Math.round(s);                 // whole metres: the checks below index the route's points
@@ -133,11 +157,13 @@ export function buildWorld(mapId = 'pine-ridge') {
       if (STRAIGHT.has(kind) && maxC > 0.026) {
         // too twisty here for a jump: something that works on a bend instead, or move on
         // (the jump stays next in line for the next straight)
-        if (r() < 0.4) { kind = ['rocks', 'rollers', 'whoops', 'stairs', 'tech'][Math.floor(r() * 5)]; k--; } else { s += 5; continue; }
+        if (r() < 0.4) { kind = ['rollers', 'whoops', 'stairs'][Math.floor(r() * 3)]; k--; } else { s += 5; continue; }
       }
       k++;
       const grade = (ln.yc[Math.max(0, s - 40)] - ln.yc[s]) / 40;
       if ((kind === 'stepup' || kind === 'woodstep') && grade < 0.09) kind = 'table';     // these need speed coming in
+      // rocky pitches belong before a bend, not in the middle of a straight
+      if (kind === 'tech' || kind === 'rocks') { let bend = 0; for (let j = s + 20; j < s + 60 && j < N; j++) bend = Math.max(bend, Math.abs(ln.curvS[j])); if (bend < 0.022) kind = grade > 0.13 ? 'drop' : 'table'; else kind = 'tech'; }
       const gapAfter = 17 + r() * 8;
       const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
       if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11, hoop: r() < 0.6 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + gapAfter;
@@ -262,7 +288,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       return { hN, hW, jump, rough, wood };
     };
     const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.05 + ST.width + Math.min(1.2, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 45) + lerp(widen[i0], widen[i1], f); };
-    return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm };
+    return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm, zones: ln.zones, zoneIdx };
   });
 
   // ---------------------------------------------------------------- ground shape near a route
@@ -467,6 +493,44 @@ export function buildWorld(mapId = 'pine-ridge') {
     rocks.push({ x, z, y: height(x, z), s: 0.2 + r() * 0.35, rot: r() * 6.3, tilt: r() });
   }
 
+  // tech zones: a padded tree on the inside of every hard turn (the thing you zig-zag round)
+  const pads = [];
+  for (const R of routes) for (const q of R.zones) for (let a = 0; a * q.lam / 2 + q.lam / 4 < q.len - 6; a++) {
+    const i = indexAtZ(R, q.z0 + q.lam / 4 + a * q.lam / 2), c = R.curvS[i];
+    if (Math.abs(c) < 0.012) continue;
+    const dd = (R.halfW(i) + 0.75) * Math.sign(c), x = R.x[i] + R.tz[i] * dd, z = R.z[i] - R.tx[i] * dd;
+    const t = { x, z, y: height(x, z), s: 0.85, rot: r() * 6.3, kind: B.trees.kinds[0][0], tint: r() };
+    trees.push(t); pads.push({ x, z, y: t.y });
+  }
+  // roots: trees close to a trail send roots out across its edge
+  const roots = [];
+  for (const t of trees) {
+    if (roots.length > 500 || t.kind === 'cactus') continue;
+    const ta = trailAt(t.x, t.z); if (ta.i < 0) continue;
+    const R = routes[ta.r], w = R.halfW(ta.i); if (ta.d > w + 3.4) continue;
+    const ang = Math.atan2(R.x[ta.i] - t.x, R.z[ta.i] - t.z);
+    for (let q = 0; q < 3; q++) { const a = ang + (q - 1) * 0.5 + (r() - 0.5) * 0.3, len = Math.min(ta.d + 0.6, 1.8 + r() * 2.2); roots.push({ x: t.x, z: t.z, y: t.y, rot: a, len }); }
+  }
+  // stumps beside the trail, arrow boards on sharp turns, warning signs, flags at jumps, banners on straights
+  const stumps = [], arrows = [], warns = [], flags = [], banners = [];
+  for (const R of routes) {
+    const sidePt = (i, dd) => { const x = R.x[i] + R.tz[i] * dd, z = R.z[i] - R.tx[i] * dd; return { x, z, y: height(x, z), yaw: Math.atan2(R.tx[i], R.tz[i]) }; };
+    const free = p => { const ta = trailAt(p.x, p.z); return ta.i < 0 || ta.d > routes[ta.r].halfW(ta.i) + 0.6; };
+    let inTurn = false, lastBanner = 0;
+    for (let i = R.start + 30; i < R.finish - 10; i++) {
+      const c = R.curvS[i];
+      if (!inTurn && Math.abs(c) > 0.03) { inTurn = true; for (let q = 0; q < 3; q++) { const p = sidePt(Math.min(R.n - 1, i + 3 + q * 4), -(R.halfW(i) + 3.2) * Math.sign(c)); p.dir = Math.sign(c); if (free(p)) arrows.push(p); } }
+      if (inTurn && Math.abs(c) < 0.015) inTurn = false;
+      if (r() < 0.012) { const p = sidePt(i, (r() < 0.5 ? -1 : 1) * (R.halfW(i) + 1.6 + r() * 3)); p.s = 0.7 + r() * 0.7; if (free(p) && clearOf(p.x, p.z, 1)) stumps.push(p); }
+      if (Math.abs(c) < 0.006 && i - lastBanner > 170 && !R.feats.some(f => i > f.s - 6 && i < f.end + 6)) { const p = sidePt(i, (r() < 0.5 ? -1 : 1) * (R.halfW(i) + 2.6)); if (free(p)) { banners.push(p); lastBanner = i; } }
+    }
+    for (const f of R.feats) {
+      const i = Math.round(f.s);
+      if (['drop', 'tech', 'stairs', 'woodstep', 'stepdown', 'skinny'].includes(f.kind)) { const p = sidePt(Math.max(0, i - (f.kind === 'drop' ? 30 : 12)), R.halfW(i) + 1.1); if (free(p)) warns.push(p); }
+      if (f.kind === 'kicker' || f.kind === 'woodstep' || f.kind === 'stepup') for (const sd of [-1, 1]) { const p = sidePt(Math.min(R.n - 1, Math.round(f.s + f.lk)), sd * (R.halfW(i) + 0.9)); p.tint = f.wood ? 1 : f.over ? 2 : 0; if (free(p)) flags.push(p); }
+    }
+  }
+
   // tree + log lookup grid (8 m cells) for crashes
   const TG = 8, tgw = Math.ceil(W / TG) + 1, tgrid = new Map();
   const solid = trees.map(t => ({ x: t.x, z: t.z, y: t.y, rr: t.kind === 'cactus' ? 0.45 : 0.5 + 0.25 * t.s }));
@@ -482,7 +546,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
     checkpoints, finish, start, startZ, finishZ, hoops,
-    trees, rocks, plants, logs,
+    trees, rocks, plants, logs, pads, roots, stumps, arrows, warns, flags, banners,
   };
 }
 
