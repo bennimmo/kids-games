@@ -16,7 +16,8 @@ export const DRIVE_SPEED = 70;      // world units a second
 const FUEL_PER_UNIT = 0.4;          // 100 fuel = 250 units of driving
 const WIND_K = 7;
 const TANK_R = 18;
-const MID = 12;  // tank middle is this far above its bottom
+const MID = 12;
+const MUZZLE_GRACE = 75;   // shots ignore the ground this close to the shooter  // tank middle is this far above its bottom
 
 export const MAPS = {
   grass: { name: 'Grass', icon: '🌳', g: 300 },
@@ -272,6 +273,9 @@ export class World {
     if (id === 'boot') p.kind = 'flare';
     if (id === 'shrink') { p.grav = 0.5; }
     if (id === 'yoyo') { p.grav = 0; p.windK = 0; p.v0x = vx; p.v0y = vy; }
+    // Muzzle grace: the shot passes through ground near the tank, so a bit of
+    // hill sticking out in front of you doesn't blow you up.
+    p.sx = t.x; p.sy = t.y - MID * k; p.grace = MUZZLE_GRACE * k;
     this.projectiles.push(p);
     this.events.push({ type: 'fire', tank: t.i, w: id, x: p.x, y: p.y });
   }
@@ -538,7 +542,8 @@ export class World {
           if (this.impact(p, nx, ny, px, py, hitTank)) this.remove(p);
           break;
         }
-        if (!ghost && this.solidAt(nx, ny)) {
+        if (p.grace && len(nx - p.sx, ny - p.sy) >= p.grace) p.grace = 0;
+        if (!ghost && !p.grace && this.solidAt(nx, ny)) {
           if (this.impact(p, nx, ny, px, py, null)) this.remove(p);
           break;
         }
