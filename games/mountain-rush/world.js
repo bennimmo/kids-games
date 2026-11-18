@@ -162,6 +162,24 @@ export function buildWorld(mapId = 'pine-ridge') {
       const st = { kind: 'stairs', s: Math.round(i0 + (i1 - i0) * 0.62), n: 3, sp: 4.5, st: 0.45, ret: 170 }; st.D = st.n * st.st; st.end = st.s + st.n * st.sp; feats.push(st);
       for (let j = Math.max(0, i0 - 40); j < Math.min(N, i1 + 14); j++) taken[j] = 1;
     }
+    { const wallD = ri ? BtoA.nd : AtoB.nd;
+      // wall rides: a tall plank wall round the outside of a proper bend. Ride up it and carve back down
+    { let run = 0, lastW = -999, nW = 0;
+      for (let i = START + 40; i < FINISH - 40 && nW < 3; i++) {
+        if (Math.abs(ln.curvS[i]) > 0.024 && !taken[i]) { run++; continue; }
+        if (run >= 9 && i - run - lastW > 120) {
+          const len = Math.min(22, run + 6), s = Math.round(i - run / 2 - len / 2);
+          let ok = true; for (let j = s - 5; j < s + len + 5; j++) if (taken[clamp(j, 0, N - 1)] || wallD[clamp(j, 0, N - 1)] < 12) ok = false;
+          if (ok) {
+            const f = { kind: 'wallride', s, len, end: s + len, side: -Math.sign(ln.curvS[Math.round(s + len / 2)]), d0: 1.15 + ST.width * 0.5, wd: 3.8, sl: 0.42, filler: true };
+            feats.push(f); lastW = s; nW++;
+            for (let j = Math.max(0, s - 22); j < Math.min(N, f.end + 16); j++) taken[j] = 1;
+          }
+        }
+        run = 0;
+      }
+    }
+    }
     let s = 64, k = 0;
     while (s < FINISH - 70) {
       s = Math.round(s);                 // whole metres: the checks below index the route's points
@@ -334,6 +352,11 @@ export function buildWorld(mapId = 'pine-ridge') {
             hN += hh * (f.off ? nar(d, f.off, 2.0, 0.5) : f.fw ? nar(d, 0, f.fw + 0.4, f.edge) : nar(d));
           }
           if (f.wood && u > -0.2 && u < f.lk + back) wood = Math.max(wood, nar(d, 0, 1.85, 0.25));
+        } else if (f.kind === 'wallride') {
+          const dd = d * f.side, fade = smooth(0, 3, u) * (1 - smooth(f.len - 3, f.len, u));
+          const on = 1 - smooth(f.d0 + f.wd, f.d0 + f.wd + 0.3, dd);                       // sheer drop off the back
+          hN += clamp(dd - f.d0, 0, f.wd) * f.sl * fade * on;
+          if (fade > 0.25 && dd > f.d0 - 0.15 && dd < f.d0 + f.wd + 0.3) wood = 1;
         } else if (f.kind === 'ladder') {
           const fade = smooth(0, 2.2, u) * (1 - smooth(f.len - 2.2, f.len, u));
           const side = nar(d, 0, 1.05, 0.22);
@@ -603,6 +626,33 @@ export function buildWorld(mapId = 'pine-ridge') {
     const ang = Math.atan2(R.x[ta.i] - t.x, R.z[ta.i] - t.z);
     for (let q = 0; q < 3; q++) { const a = ang + (q - 1) * 0.5 + (r() - 0.5) * 0.3, len = Math.min(ta.d + 0.6, 1.8 + r() * 2.2); roots.push({ x: t.x, z: t.z, y: t.y, rot: a, len }); }
   }
+  // timber frames: legs, rails and cross-braces under the plank decks and behind the wall rides
+  const timbers = [];
+  for (const R of routes) {
+    const pt = (sc, dd) => { const i0 = clamp(Math.floor(sc), 0, R.n - 2), fr = sc - i0, x = lerp(R.x[i0], R.x[i0 + 1], fr) + R.tz[i0] * dd, z = lerp(R.z[i0], R.z[i0 + 1], fr) - R.tx[i0] * dd; return { x, z, y: height(x, z) }; };
+    // a row of legs along one side: the foot stands at dPost on the ground found at dGround, the head reaches the deck height found at dTop
+    const frame = (u0, u1, dPost, dTop, dGround, step, minH = 0.45) => {
+      let prev = null; const n = Math.max(1, Math.round((u1 - u0) / step));
+      for (let k = 0; k <= n; k++) {
+        const sc = u0 + (u1 - u0) * k / n, a = pt(sc, dPost), top = pt(sc, dTop).y - 0.06, bot = Math.min(pt(sc, dGround).y, a.y) - 0.25;
+        if (top - bot < minH + 0.25) { prev = null; continue; }
+        const cur = { x: a.x, z: a.z, top, bot };
+        timbers.push({ x0: a.x, y0: bot, z0: a.z, x1: a.x, y1: top, z1: a.z, t: 0.13 });
+        if (prev) {
+          timbers.push({ x0: prev.x, y0: prev.top - 0.08, z0: prev.z, x1: a.x, y1: top - 0.08, z1: a.z, t: 0.1 });
+          if (top - bot > 1.1 && prev.top - prev.bot > 1.1) timbers.push({ x0: prev.x, y0: prev.bot + 0.3, z0: prev.z, x1: a.x, y1: top - 0.25, z1: a.z, t: 0.07 });
+        }
+        prev = cur;
+      }
+    };
+    for (const f of R.feats) {
+      if (f.kind === 'woodstep') { const g0 = f.s + f.lk + f.gap; for (const sd of [-1, 1]) frame(g0, g0 + f.top, sd * 1.95, sd * 1.5, sd * 2.5, 2.25); }
+      else if (f.kind === 'rollin') for (const sd of [-1, 1]) frame(f.s + f.lk - 0.2, f.s + f.lk + f.top + f.down - 0.6, sd * 1.5, sd * 1.15, sd * 2.0, 1.9);
+      else if (f.kind === 'kicker' && f.wood) for (const sd of [-1, 1]) frame(f.s + 1.2, f.s + f.lk, sd * 1.8, sd * 1.4, sd * 2.4, 1.7);
+      else if (f.kind === 'skinny') for (const sd of [-1, 1]) frame(f.s + 2.5, f.s + f.len - 2.5, sd * 0.72, sd * 0.4, sd * 1.1, 3.2, 0.3);
+      else if (f.kind === 'wallride') { const dt2 = f.d0 + f.wd; frame(f.s + 2.5, f.end - 2.5, f.side * (dt2 + 0.45), f.side * (dt2 - 0.1), f.side * (dt2 + 1.0), 2.0); }
+    }
+  }
   // stumps beside the trail, arrow boards on sharp turns, warning signs, flags at jumps, banners on straights
   const stumps = [], arrows = [], warns = [], flags = [], banners = [];
   for (const R of routes) {
@@ -638,7 +688,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
     checkpoints, finish, start, startZ, finishZ, hoops,
-    trees, rocks, plants, logs, pads, roots, stumps, arrows, warns, flags, banners,
+    trees, rocks, plants, logs, pads, roots, stumps, timbers, arrows, warns, flags, banners,
   };
 }
 

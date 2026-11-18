@@ -169,7 +169,7 @@ function groundStep(b, world, inp, dt, popNow) {
   // sideways: grip, or slide (drift) when asking too much
   // on a bank the tyres dig in: the slope turns the bike down and round it (you ride up a berm and
   // carve back off it) rather than the whole bike slipping sideways
-  const dig = Math.abs(s.y) < 0.8 ? 0.85 * (1 - b.rough * 0.8) : 0;
+  const dig = Math.abs(s.y) < 0.84 ? 0.85 * (1 - b.rough * 0.8) : 0;
   // (gentle cross-slopes, like the dish of the trail, don't steer you)
   const gDig = Math.abs(vF) > 1.5 ? -G * Math.sign(s.y) * Math.max(0, Math.abs(s.y) - 0.13) * dig : 0;
   b.yaw = wrap(b.yaw + gDig / Math.max(3, Math.abs(vF)) * Math.sign(vF) * dt);
@@ -179,7 +179,7 @@ function groundStep(b, world, inp, dt, popNow) {
   const bankUp = s.y * Math.sign(vS || b.steer);              // > 0 when the ground rises on the side you're being pushed toward
   const berm = clamp(bankUp * 6, 0, 2.6);
   // a steep side-slope that isn't holding you up as a berm: the tyres let go and you slip straight down it
-  const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.78) * 8, 0, 1) : 0;
+  const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.83) * 10, 0, 1) : 0;
   const grip = tyre * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm) * (1 - steepSide);
   const dv = grip * dt;
   const old = vS;

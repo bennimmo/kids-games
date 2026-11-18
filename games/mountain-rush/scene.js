@@ -716,6 +716,11 @@ function makeProps(world, T) {
     for (const rt of world.roots) {
       const x1 = rt.x + Math.sin(rt.rot) * rt.len, z1 = rt.z + Math.cos(rt.rot) * rt.len, y1 = world.height(x1, z1);
       put(rootMat, rootG, rt.x, rt.y + 0.02, rt.z, rt.rot, 1.3, 1.3, rt.len, -Math.atan2(y1 - rt.y, rt.len)); } }
+  // timber legs, rails and braces under decks and behind wall rides
+  { const boxG = new THREE.BoxGeometry(1, 1, 1);
+    const timberMat = new THREE.MeshStandardMaterial({ color: 0x9a7448, roughness: 0.88 });
+    for (const b of world.timbers || []) { const dx = b.x1 - b.x0, dy = b.y1 - b.y0, dz = b.z1 - b.z0, hz = Math.hypot(dx, dz), len = Math.hypot(hz, dy);
+      put(timberMat, boxG, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2, hz > 0.001 ? Math.atan2(dx, dz) : 0, b.t, b.t, len, -Math.atan2(dy, hz)); } }
   // stumps
   { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
     const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);
