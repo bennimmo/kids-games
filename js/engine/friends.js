@@ -29,7 +29,7 @@ let lastEcho = voiceOpts().echo;
 onVoiceOpts(o => {
   soundsBack();
   if (o.echo !== lastEcho) { lastEcho = o.echo; if (mic) chooseMic(savedMic()); }
-  if (group) group.peers.forEach(p => { try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
+  if (group) group.peers.forEach(p => { p.relayOnly = false; try { p.pc.setConfiguration(iceConfig()); } catch (e) { /* */ } p.retry(); }); // relay switch
 });
 export const micTrack = () => (mic ? mic.getAudioTracks()[0] : null);
 
@@ -529,7 +529,19 @@ function makePeer(g, theirUid, theirSid) {
   pc.onicecandidate = e => { if (e.candidate) send({ c: e.candidate.toJSON() }); };
   // Not linked yet: try again every 15 s (new network paths, e.g. once the mic is allowed).
   peer.retry = () => { if (!closed && pc.signalingState !== 'closed') { try { pc.restartIce(); } catch (e) { /* */ } } };
-  const watchdog = setInterval(() => { if (closed) clearInterval(watchdog); else if (peer.status !== 'on') peer.retry(); }, 15000);
+  // Normal mode already tries direct first, then the relay. Still stuck after ~30 s? Force the
+  // relay for this friend (and flip back if that doesn't work either), so nobody needs the 🔧 switch.
+  let stuck = 0;
+  peer.relayOnly = false;
+  const watchdog = setInterval(() => {
+    if (closed) { clearInterval(watchdog); return; }
+    if (peer.status === 'on') { stuck = 0; return; }
+    if (++stuck % 2 === 0 && !voiceOpts().relay) {
+      peer.relayOnly = !peer.relayOnly;
+      try { pc.setConfiguration({ ...iceConfig(), iceTransportPolicy: peer.relayOnly ? 'relay' : 'all' }); } catch (e) { /* */ }
+    }
+    peer.retry();
+  }, 15000);
   pc.onconnectionstatechange = () => {
     const st = pc.connectionState;
     if (st === 'failed') pc.restartIce();
