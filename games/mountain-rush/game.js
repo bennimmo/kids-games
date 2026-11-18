@@ -731,7 +731,7 @@ export function mount(stage) {
       fovT += 6;
     } else {
       camera.up.set(0, 1, 0);
-      const dist = 4.4 + clamp(b.speed / 18, 0, 1) * 1.2, height = 1.9;
+      const dist = 5.0 + clamp(b.speed / 18, 0, 1) * 1.4, height = 2.05;
       const want = new THREE.Vector3(focus.x - Math.sin(cam.yaw) * dist, focus.y + height, focus.z - Math.cos(cam.yaw) * dist);
       // stay above the ground (and above the trail behind on steep bits)
       const gh = W.height(want.x, want.z) + 1.1;

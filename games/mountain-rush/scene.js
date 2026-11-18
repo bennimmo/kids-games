@@ -634,7 +634,11 @@ function makeProps(world, T) {
   arch(world.finish, 'FINISH', '#111111', '#ffffff');
 
   // trail marker posts with tape on the outside of berms and next to jumps
-  const tapeMat = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.6, side: THREE.DoubleSide });
+  // striped course tape (like race tape)
+  const tc = document.createElement('canvas'); tc.width = 64; tc.height = 8;
+  { const g = tc.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, 64, 8); g.fillStyle = world.B.snow ? '#d32f2f' : world.B.terrace ? '#1565c0' : '#d32f2f'; g.fillRect(0, 0, 32, 8); }
+  const tapeTex = new THREE.CanvasTexture(tc); tapeTex.wrapS = THREE.RepeatWrapping; tapeTex.colorSpace = THREE.SRGBColorSpace;
+  const tapeMat = new THREE.MeshStandardMaterial({ map: tapeTex, roughness: 0.6, side: THREE.DoubleSide });
   const postGeo = new THREE.CylinderGeometry(0.035, 0.04, 1.1, 6); postGeo.translate(0, 0.55, 0);
   const postMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d0, roughness: 0.8 });
   const posts = [], tapes = [];
@@ -649,7 +653,8 @@ function makeProps(world, T) {
     posts.push(p0, p1);
     // tape between them
     const dir = p1.clone().sub(p0), len = dir.length();
-    const tg = new THREE.PlaneGeometry(len, 0.07);
+    const tg = new THREE.PlaneGeometry(len, 0.08);
+    { const uva = tg.attributes.uv; for (let q = 0; q < uva.count; q++) uva.setX(q, uva.getX(q) * len / 0.8); }
     const tm = new THREE.Mesh(tg, tapeMat);
     tm.position.copy(p0).add(p1).multiplyScalar(0.5); tm.position.y += 0.9;
     tm.rotation.y = Math.atan2(-dir.z, dir.x);

@@ -275,8 +275,8 @@ export function createBike(T, env, look = {}, type = 'trek') {
     elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1, 14, 10), mats.sleeve)),
     cuff: [0, 1].map(() => add(new THREE.CylinderGeometry(0.042, 0.04, 0.07, 12), mats.glove)),
     hand: [0, 1].map(() => add(handGeo(), mats.glove)),
-    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.053, 16, 12), mats.sleeve)),
-    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.0575, 14, 10), mats.pants)),
+    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.0505, 16, 12), mats.sleeve)),
+    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.0555, 14, 10), mats.pants)),
     hipJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.08, 14, 10), mats.pants)),
   };
   // body: one smooth shape from hips to collar; shorts over the hips
@@ -286,27 +286,32 @@ export function createBike(T, env, look = {}, type = 'trek') {
   const neck = add(new THREE.CylinderGeometry(0.046, 0.052, 0.08, 12), mats.skin);
   const pack = add(roundBox(0.2, 0.26, 0.08, 0.035), mats.packM);
   const straps = [0, 1].map(() => add(new THREE.TorusGeometry(0.11, 0.012, 6, 16, Math.PI), mats.strap, false));
-  const head = new THREE.Group(); head.scale.setScalar(0.86); rider.add(head);
+  pack.visible = false; straps.forEach(st => { st.visible = false; });      // no backpack: the race number shows
+  // race number printed on the back
+  const numTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    g.font = '900 200px Nunito, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 16; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText('7', 128, 140); g.fillStyle = '#ffffff'; g.fillText('7', 128, 140);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+  const number = add(new THREE.PlaneGeometry(0.24, 0.24), new THREE.MeshStandardMaterial({ map: numTex, transparent: true, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }), false);
+  const numQ = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.PI);
+  const head = new THREE.Group(); head.scale.setScalar(0.82); rider.add(head);
   {
     const H = (g, m) => { const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; head.add(mesh); return mesh; };
     // face underneath (seen through the opening)
-    const face = H(new THREE.SphereGeometry(0.115, 18, 14), mats.skin); face.scale.set(0.92, 1.05, 1); face.position.set(0, -0.025, 0.035);
-    // helmet shell: a smooth dome, longer front to back
-    const shell = H(new THREE.SphereGeometry(0.162, 28, 20, 0, Math.PI * 2, 0, Math.PI * 0.58), mats.helmet); shell.scale.set(0.95, 1.02, 1.12); shell.position.y = 0.005;
-    const back = H(new THREE.SphereGeometry(0.158, 24, 12, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.55, Math.PI * 0.25), mats.helmet); back.scale.set(0.95, 1, 1.1);
-    const inner = H(new THREE.SphereGeometry(0.155, 20, 14), mats.helmetIn); inner.material.side = THREE.BackSide; inner.scale.set(0.94, 1, 1.1);
-    // chin bar (full face)
-    const chin = H(new THREE.TorusGeometry(0.13, 0.032, 10, 24, Math.PI), mats.helmet); chin.rotation.set(Math.PI / 2 + 0.25, 0, 0); chin.position.set(0, -0.085, 0.01); chin.scale.set(0.92, 1.2, 1.25);
-    const vent = H(new THREE.BoxGeometry(0.07, 0.02, 0.025), mats.dark); vent.position.set(0, -0.085, 0.165);
-    chin.visible = vent.visible = !look.open; head.userData.chin = chin; head.userData.vent = vent;
-    // peak
-    const peak = H(roundBox(0.2, 0.012, 0.11, 0.005), mats.helmet); peak.rotation.x = 0.1; peak.position.set(0, 0.075, 0.17);
-    // vents on top
-    for (const x of [-0.05, 0, 0.05]) { const v = H(new THREE.BoxGeometry(0.018, 0.012, 0.09), mats.dark); v.position.set(x, 0.158, 0.02); v.rotation.x = 0.15; }
-    // goggles: frame + shiny lens + strap round the helmet
-    const gframe = H(new THREE.CylinderGeometry(0.152, 0.152, 0.068, 24, 1, true, -1.05, 2.1), mats.goggleFrame); gframe.position.set(0, 0.012, 0.03); gframe.scale.set(1, 1, 1.08);
-    const lens = H(new THREE.CylinderGeometry(0.156, 0.156, 0.05, 24, 1, true, -0.9, 1.8), mats.goggle); lens.position.set(0, 0.012, 0.032); lens.scale.set(1, 1, 1.08);
-    const strap = H(new THREE.TorusGeometry(0.16, 0.013, 4, 32), mats.strap); strap.rotation.x = Math.PI / 2; strap.position.y = 0.012; strap.scale.set(0.95, 1.1, 1);
+    const face = H(new THREE.SphereGeometry(0.112, 18, 14), mats.skin); face.scale.set(0.88, 1.05, 0.98); face.position.set(0, -0.02, 0.02);
+    const inner = H(new THREE.SphereGeometry(0.146, 20, 14), mats.helmetIn); inner.material.side = THREE.BackSide; inner.scale.set(0.93, 1, 1.1);
+    // one smooth shell: full-face (chin guard part of the shell) and open-face versions
+    const full = H(helmetGeo(false), mats.helmet), open = H(helmetGeo(true), mats.helmet);
+    full.visible = !look.open; open.visible = !!look.open;
+    head.userData.full = full; head.userData.open = open;
+    // peak: thin, tipped slightly up, like a real MTB helmet
+    const peak = H(roundBox(0.19, 0.008, 0.12, 0.003), mats.helmet); peak.rotation.x = -0.1; peak.position.set(0, 0.098, 0.19);
+    for (const sx of [-1, 1]) { const st = H(roundBox(0.012, 0.03, 0.05, 0.004), mats.helmet); st.position.set(sx * 0.082, 0.085, 0.135); st.rotation.x = -0.5; }
+    // goggles: frame + shiny lens sitting in the opening, strap round the helmet
+    const gframe = H(new THREE.CylinderGeometry(0.139, 0.139, 0.088, 28, 1, true, -0.92, 1.84), mats.goggleFrame); gframe.position.set(0, 0.014, 0.012); gframe.scale.set(1, 1, 1.1);
+    const lens = H(new THREE.CylinderGeometry(0.1405, 0.1405, 0.072, 28, 1, true, -0.8, 1.6), mats.goggle); lens.position.set(0, 0.014, 0.013); lens.scale.set(1, 1, 1.1);
+    const sg = new THREE.TorusGeometry(0.153, 0.011, 4, 32, Math.PI * 2 - 1.9); sg.rotateZ(Math.PI / 2 + 0.95);      // round the back only, not over the lens
+    const strap = H(sg, mats.strap); strap.rotation.x = Math.PI / 2; strap.position.y = 0.014; strap.scale.set(0.93, 1.2, 1);
   }
 
   // --------------------------------------------------------------- posing
@@ -412,7 +417,7 @@ export function createBike(T, env, look = {}, type = 'trek') {
       const elbow = tmp.e.clone();
       between(P.upper[i], shoulders[i], elbow); between(P.fore[i], elbow, hand);
       const foreDir = hand.clone().sub(elbow).normalize();
-      P.elbow[i].position.copy(elbow); P.elbow[i].scale.setScalar(0.0435);
+      P.elbow[i].position.copy(elbow); P.elbow[i].scale.setScalar(0.0415);
       P.cuff[i].position.copy(hand).addScaledVector(foreDir, -0.06); P.cuff[i].quaternion.setFromUnitVectors(V(0, 1, 0), foreDir);
       P.hand[i].position.copy(hand); orient(P.hand[i], foreDir, V(0, 1, 0));
       P.shoulder[i].position.copy(shoulders[i]);
@@ -424,20 +429,57 @@ export function createBike(T, env, look = {}, type = 'trek') {
     const basis = new THREE.Matrix4().makeBasis(side, up, fwd);
     torso.quaternion.setFromRotationMatrix(basis); torso.position.copy(hip).addScaledVector(up, -0.06);
     torso.scale.set(1.18, tl * 1.08, 0.78);
-    shorts.quaternion.copy(torso.quaternion); shorts.position.copy(hip); shorts.scale.set(1.02, 1, 0.82);
+    shorts.quaternion.copy(torso.quaternion); shorts.position.copy(hip); shorts.scale.set(0.99, 1, 0.74);
     neck.position.copy(neckP).addScaledVector(up, 0.045); neck.quaternion.copy(torso.quaternion);
     pack.quaternion.copy(torso.quaternion); pack.position.copy(hip).addScaledVector(up, tl * 0.66).addScaledVector(fwd, -0.14);
     straps.forEach((st, i) => { st.quaternion.copy(torso.quaternion).multiply(strapQ); st.position.copy(hip).addScaledVector(up, tl * 0.78).addScaledVector(side, i ? -0.09 : 0.09).addScaledVector(fwd, -0.02); });
+    number.quaternion.copy(torso.quaternion).multiply(numQ); number.position.copy(hip).addScaledVector(up, tl * 0.6).addScaledVector(fwd, -0.128);
     // head: above the neck, looking ahead
     head.position.copy(neckP).addScaledVector(up, 0.155).addScaledVector(fwd, 0.05);
     head.rotation.set(-0.12 + s * 0.5, 0, 0);
   }
   pose({ steer: 0, crouch: 0, lean: 0, crank: 0, wheel: 0, superman: 0, nohand: 0, whip: 0, bar: 0, manual: 0 });
 
-  function setLook(look2) { applyLook(mats, look2); if (head.userData.chin) head.userData.chin.visible = head.userData.vent.visible = !look2.open; }
+  function setLook(look2) { applyLook(mats, look2); head.userData.full.visible = !look2.open; head.userData.open.visible = !!look2.open; }
   return { root, rider, pose, setLook, mats, head, headPos: () => head.position };
 }
 
+// helmet shell: a sphere reshaped into a helmet (longer at the back, snug chin guard) with the
+// eye port and neck hole cut out. openFace = no chin guard.
+function helmetGeo(openFace) {
+  const W = 96, Hh = 64;
+  const src = new THREE.SphereGeometry(0.15, W, Hh);
+  const pa = src.attributes.position, uv = src.attributes.uv, ix = src.index.array;
+  const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let i = 0; i < pa.count; i++) {
+    const d = new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)).normalize();
+    let r = 0.15;
+    const front = sm(0.0, 0.7, d.z);
+    const chin = front * sm(-0.12, -0.5, d.y);
+    r += 0.03 * chin;                                    // chin guard juts forward, part of the shell
+    r += 0.012 * front * sm(0.25, 0.6, d.y) * (1 - sm(0.75, 0.95, d.y));   // brow over the goggles
+    r -= 0.014 * sm(-0.3, -0.9, d.y) * (1 - chin);       // tucks in toward the neck
+    r -= 0.01 * sm(0.75, 1, d.y);                        // slightly flatter on top
+    const jaw = 1 - 0.14 * sm(-0.1, -0.7, d.y);          // narrower at the jaw
+    const lenZ = d.z < 0 ? 1.2 : 1.1;                    // longer front to back
+    pa.setXYZ(i, d.x * r * 0.92 * jaw, d.y * r * 0.98 + 0.004, d.z * r * lenZ);
+  }
+  // cut the eye port and neck hole, a whole grid square at a time (clean edges, no saw-teeth)
+  const keep = [];
+  const cellDir = (cu, cv) => { const phi = (cu + 0.5) / W * Math.PI * 2, th = (cv + 0.5) / Hh * Math.PI; return new THREE.Vector3(-Math.cos(phi) * Math.sin(th), Math.cos(th), Math.sin(phi) * Math.sin(th)); };
+  for (let i = 0; i < ix.length; i += 3) {
+    const u = (uv.getX(ix[i]) + uv.getX(ix[i + 1]) + uv.getX(ix[i + 2])) / 3, v = 1 - (uv.getY(ix[i]) + uv.getY(ix[i + 1]) + uv.getY(ix[i + 2])) / 3;
+    const c = cellDir(Math.min(W - 1, Math.floor(u * W)), Math.min(Hh - 1, Math.floor(v * Hh)));
+    if (c.y < -0.78) continue;                                                        // neck hole
+    const ang = Math.atan2(Math.abs(c.x), c.z);                                       // angle round from straight ahead
+    if (ang < 0.95 && c.y > -0.17 && c.y < 0.36) continue;                            // eye port
+    if (openFace && ((ang < 1.5 && c.y < 0.0) || c.y < -0.42)) continue;              // open face: no chin guard, shorter shell
+    keep.push(ix[i], ix[i + 1], ix[i + 2]);
+  }
+  src.setIndex(keep);
+  src.computeVertexNormals();
+  return src;
+}
 // a closed outline with rounded corners (points are [x, y])
 function roundedPath(path, pts, r) {
   const n = pts.length;
@@ -511,10 +553,9 @@ function cloth() {
     // darker side panels (u = 0.25 and 0.75 are the sides; u 0 front, 0.5 back)
     for (const cx of [0.25, 0.75]) { const gr = g.createLinearGradient((cx - 0.12) * w, 0, (cx + 0.12) * w, 0); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.3, 'rgba(0,0,0,.45)'); gr.addColorStop(0.7, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect((cx - 0.12) * w, 0, 0.24 * w, h); }
     // chest stripes
-    g.fillStyle = 'rgba(255,255,255,1)'; g.fillRect(0, h * 0.3, w, h * 0.05);
-    g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, h * 0.36, w, h * 0.03);
+    // (plain chest: stripes wrapped badly round the back)
     // number on the back
-    g.fillStyle = 'rgba(0,0,0,.7)'; g.font = '900 72px Nunito, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('7', w * 0.5, h * 0.42);
+    // (the race number is a separate print on the back)
     // collar
     g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, 0, w, h * 0.04);
   });
@@ -648,7 +689,7 @@ function makeMaterials(T, env, look, BK = {}) {
     helmetIn: std({ color: 0x15161a, roughness: 0.9 }),
     goggleFrame: std({ color: 0x18191d, roughness: 0.5 }),
     packM: phys({ color: 0x2b2f36, roughness: 0.7, sheen: 0.3, sheenColor: 0x999999 }),
-    helmet: phys({ color: 0xffffff, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, map: cloth().helmet }),
+    helmet: phys({ color: 0xffffff, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, map: cloth().helmet, side: THREE.DoubleSide }),
     goggle: phys({ color: 0xffb300, roughness: 0.05, metalness: 0.9, envMapIntensity: 1.6, side: THREE.DoubleSide }),
     strap: std({ color: 0x111111, roughness: 0.8 }),
   };
