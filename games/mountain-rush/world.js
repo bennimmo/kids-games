@@ -74,8 +74,31 @@ export function buildWorld(mapId = 'pine-ridge') {
   Bl.yc = blur(Float32Array.from(Bl.x, (x, i) => nat(x, Bl.z[i])), 30);
   pullB(Bl.yc);
   Bl.yc = gradeFix(Bl.yc, pullB);
-  A.busy = Float32Array.from(AtoB.nd, (d, i) => (A.z[i] > 150 && A.z[i] < L - 250 && d < 26 ? 1 : 0));   // A keeps features where the lines share
-  Bl.busy = Float32Array.from(BtoA.nd, d => (d < 26 ? 1 : 0));
+  A.busy = Float32Array.from(AtoB.nd, (d, i) => (A.z[i] > 150 && A.z[i] < L - 250 && d < 13 ? 1 : 0));   // A keeps features where the lines share
+  Bl.busy = Float32Array.from(BtoA.nd, d => (d < 13 ? 1 : 0));
+
+  // where the routes cross (at a decent angle): [{ i: [index on A, index on B], gap, jumper }]
+  const crossings = [];
+  {
+    let prev = 0, n = 0;
+    for (let j = 40; j < Bl.n - 40; j++) {
+      const i = BtoA.ni[j], side = Math.sign((Bl.x[j] - A.x[i]) * A.tz[i] - (Bl.z[j] - A.z[i]) * A.tx[i]);
+      if (prev && side && side !== prev && BtoA.nd[j] < 2.5 && A.z[i] > 190 && A.z[i] < L - 280) {
+        const ang = Math.abs(Math.asin(clamp(A.tx[i] * Bl.tz[j] - A.tz[i] * Bl.tx[j], -1, 1)));
+        // long enough that the take-off and landing mounds (about 2.6 m wide each side) stay off the other trail
+        const gap = 2 * (2.05 + ST.width + 0.5 + 2.0 * Math.cos(ang)) / Math.max(0.2, Math.sin(ang));
+        // the jumper needs a fairly straight, downhill run-in (for speed)
+        const straight = q => { let m = 0; const [ln2, c0] = q ? [Bl, j] : [A, i]; for (let t = c0 - 24; t < c0 + 26; t++) m = Math.max(m, Math.abs(ln2.curvS[clamp(t, 0, ln2.n - 1)])); return m < 0.022 && (ln2.yc[Math.max(0, c0 - 50)] - ln2.yc[Math.max(0, c0 - 8)]) / 42 > 0.11 && (ln2.yc[Math.max(0, c0 - 12)] - ln2.yc[Math.min(ln2.n - 1, c0 + 16)]) / 28 > 0.07; };
+        const last = crossings[crossings.length - 1];
+        if (ang > 0.62 && gap < 12 && (!last || j - last.i[1] > 90)) {
+          const pick = n % 2;                                   // take turns: A jumps, then B
+          const jumper = straight(pick) ? pick : straight(1 - pick) ? 1 - pick : -1;
+          if (jumper >= 0) { crossings.push({ i: [i, j], gap: Math.max(9, gap), jumper }); n++; }
+        }
+      }
+      if (side) prev = side;
+    }
+  }
 
   // ---------------------------------------------------------------- features
   // Every route gets a run of course features, picked in turn from the map's list (biomes.js):
@@ -89,19 +112,32 @@ export function buildWorld(mapId = 'pine-ridge') {
     const START = 12, FINISH = N - 15;
     const kinds = M.routes[ri].kinds;
     const STRAIGHT = new Set(['kicker', 'table', 'gap', 'double', 'triple', 'hip', 'stepdown', 'woodkicker', 'woodstep', 'drop', 'stepup', 'skinny']);
+    // cross-over jumps: where the two routes cross, one of them jumps clean over the other
+    const taken = new Float32Array(N);
+    for (const c of crossings) if (c.jumper === ri) {
+      const i0 = c.i[ri], half = c.gap / 2;
+      // a low, long take-off (keeps your speed) and a low landing (more hang time), so it clears at a normal pace
+      const f = { kind: 'kicker', s: i0 - half - 8, lk: 8, hk: 1.9, gap: c.gap, ll: 14, off: 0, flat: true, hoop: true, over: true, fw: 1.1, edge: 0.9 };
+      f.hl = f.hk * 0.35; f.face = 1.2; f.end = f.s + f.lk + f.gap + f.ll + f.face; feats.push(f);
+      for (let j = Math.max(0, Math.floor(f.s - 22)); j < Math.min(N, f.end + 16); j++) taken[j] = 1;
+    }
     let s = 64, k = 0;
     while (s < FINISH - 70) {
+      s = Math.round(s);                 // whole metres: the checks below index the route's points
       let maxC = 0, busy = 0;
-      for (let j = s - 4; j < s + 44 && j < N; j++) { if (j < 0) continue; maxC = Math.max(maxC, Math.abs(ln.curvS[j])); busy = Math.max(busy, ln.busy[j]); }
+      for (let j = s; j < s + 32 && j < N; j++) maxC = Math.max(maxC, Math.abs(ln.curvS[j]));
+      // the whole feature, its run-in and its landing run-out must be clear of the other route (and of cross-over jumps)
+      for (let j = Math.max(0, s - 14); j < s + 52 && j < N; j++) busy = Math.max(busy, ln.busy[j], taken[j]);
       if (busy) { s += 6; continue; }
       let kind = kinds[k % kinds.length];
-      if (STRAIGHT.has(kind) && maxC > 0.015) {
+      if (STRAIGHT.has(kind) && maxC > 0.026) {
         // too twisty here for a jump: something that works on a bend instead, or move on
-        if (maxC < 0.034 && r() < 0.6) kind = ['rocks', 'rollers', 'whoops'][Math.floor(r() * 3)]; else { s += 6; continue; }
+        // (the jump stays next in line for the next straight)
+        if (r() < 0.4) { kind = ['rocks', 'rollers', 'whoops', 'stairs', 'tech'][Math.floor(r() * 5)]; k--; } else { s += 5; continue; }
       }
       k++;
       const grade = (ln.yc[Math.max(0, s - 40)] - ln.yc[s]) / 40;
-      if ((kind === 'stepup' || kind === 'woodstep') && grade < 0.12) kind = 'table';     // these need speed coming in
+      if ((kind === 'stepup' || kind === 'woodstep') && grade < 0.09) kind = 'table';     // these need speed coming in
       const gapAfter = 17 + r() * 8;
       const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
       if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11, hoop: r() < 0.6 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + gapAfter;
@@ -135,7 +171,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     }
     // the trail gets wider at jumps so you can ride round them (and out of a gap if you come up short)
     let widen = new Float32Array(N);
-    for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.6 : 1.6;
+    for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.4 : 0.9;
     widen = blur(widen, 5);
     // plank berms: every other proper turn gets a taller wooden wall on the outside
     let woodBerm = new Float32Array(N);
@@ -145,7 +181,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
       woodBerm = blur(woodBerm, 3); }
     // sideways shape of a narrow feature: full height within `fw` of its centre line `c`, gone by fw + edge
-    const nar = (d, c = 0, fw = 1.5, edge = 1.5) => 1 - smooth(fw, fw + edge, Math.abs(d - c));
+    const nar = (d, c = 0, fw = 1.35, edge = 1.25) => 1 - smooth(fw, fw + edge, Math.abs(d - c));
     const featAt = (sc, d) => {
       let hN = 0, hW = 0, jump = 0, rough = 0, wood = 0;
       for (const f of feats) {
@@ -200,14 +236,14 @@ export function buildWorld(mapId = 'pine-ridge') {
           }
         } else if (f.kind === 'kicker') {
           jump = 1;
-          const back = 1.6, low = f.table ? f.hk * 0.8 : -0.3;
-          if (u < f.lk) { hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * (f.wood ? nar(d, 0, 1.55, 0.5) : nar(d)); }
+          const back = 1.6, low = f.table ? f.hk * 0.8 : f.flat ? 0 : -0.3;
+          if (u < f.lk) { hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * (f.wood ? nar(d, 0, 1.55, 0.5) : f.fw ? nar(d, 0, f.fw, f.edge) : nar(d)); }
           else if (u < f.lk + back) { const t = (u - f.lk) / back; hN += lerp(f.hk, low, 0.5 - 0.5 * Math.cos(t * Math.PI)) * (f.wood && !f.table ? nar(d, 0, 1.55, 0.5) : nar(d)); }
           else if (u < f.lk + f.gap) { hN += low * nar(d); }                                                    // gap (or table top)
           else {
             const v = u - f.lk - f.gap;
             const hh = v < f.face ? lerp(low, f.hl, smooth(0, f.face, v)) : f.hl * (1 - smooth(0, 1, clamp((v - f.face) / f.ll, 0, 1)));   // back face, then the long landing
-            hN += hh * (f.off ? nar(d, f.off, 1.9, 1.6) : nar(d));
+            hN += hh * (f.off ? nar(d, f.off, 1.9, 1.6) : f.fw ? nar(d, 0, f.fw + 0.4, f.edge) : nar(d));
           }
           if (f.wood && u > -0.2 && u < f.lk + back) wood = Math.max(wood, nar(d, 0, 1.85, 0.25));
         } else if (f.kind === 'skinny') {
@@ -225,7 +261,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
       return { hN, hW, jump, rough, wood };
     };
-    const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.7 + ST.width + Math.min(1.6, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 50) + lerp(widen[i0], widen[i1], f); };
+    const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.05 + ST.width + Math.min(1.2, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 45) + lerp(widen[i0], widen[i1], f); };
     return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm };
   });
 
@@ -249,9 +285,11 @@ export function buildWorld(mapId = 'pine-ridge') {
     const bank = clamp(-c * Math.sign(d) * 85, 0, 2.1) * (1 + 0.45 * wb) * Math.pow(clamp(ad / (w + 2), 0, 1.25), 1.5 - 0.3 * wb);
     const f = R.featAt(sc, d);
     const wide = 1 - smooth(w - 0.2, w + 2.4, ad);
+    // the whole trail tilts into the turn (like a banked track), so even the middle line holds you
+    const tilt = clamp(-c * 11, -0.32, 0.32) * clamp(d, -w - 1, w + 1) * wide;
     const dish = -0.12 * (1 - smooth(0, w, ad));
     const wood = Math.max(f.wood, outside ? wb * smooth(1.5, 2.3, ad) * (1 - smooth(w + 2.3, w + 3.0, ad)) : 0);
-    return { y: y + bank + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
+    return { y: y + bank + tilt + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, shaped: Math.min(1, Math.abs(f.hN) * 2), rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
   };
   const nearestOnLine = (R, x, z, i) => {
     let best = i, bd = 1e9;
@@ -282,21 +320,22 @@ export function buildWorld(mapId = 'pine-ridge') {
   const tmpT = [];
   const shape = (x, z, id, out, withSink) => {
     const n0 = nat(x, z);
-    let sum = 0, wsum = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0, wood = 0, tsc = 0, tdd = 0;
+    let sum = 0, wsum = 0, wmax = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0, wood = 0, tsc = 0, tdd = 0;
     for (let ri = 0; ri < NR; ri++) {
       const i = nearI[ri][id];
       if (i < 0) continue;
       const R = routes[ri], t = trailHeight(R, x, z, nearestOnLine(R, x, z, i));
       tmpT[ri] = t;
       const wt = 1 - smooth(t.w + 1.5, t.w + 16, t.ad);
-      sum += wt * (t.y - n0); wsum += wt;
+      const pr = wt * (0.02 + (1 - smooth(t.w - 0.5, t.w + 2.2, t.ad)) * (1 + 14 * t.shaped));     // priority: strongest on the trail itself, and on a built jump
+      sum += pr * (t.y - n0); wsum += pr; wmax = Math.max(wmax, wt);
       m = Math.max(m, maskOf(t, R)); rough = Math.max(rough, t.rough);
       if (withSink) sink = Math.max(sink, 0.5 * (1 - smooth(t.w + RIB - 1.4, t.w + RIB - 0.2, t.ad)));
       if (t.ad < t.w + RIB) inRib = true;
       if (t.wood > wood) wood = t.wood;
       if (t.ad - t.w < best) { best = t.ad - t.w; bestR = ri; bestI = i; tsc = t.sc; tdd = t.d; }
     }
-    out.h = n0 + (wsum > 0 ? sum / Math.max(1, wsum) : 0) - sink;
+    out.h = n0 + (wsum > 0 ? sum / wsum * wmax : 0) - sink;
     out.m = m; out.rough = rough; out.wood = wood; out.sc = tsc; out.dd = tdd; out.inRib = inRib; out.edge = best; out.r = bestR; out.i = bestI;
     return out;
   };

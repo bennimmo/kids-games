@@ -133,7 +133,7 @@ function groundStep(b, world, inp, dt, popNow) {
   const onDirt = world.trailMask(b.pos.x, b.pos.z) > 0.4;
   // rock gardens on the tech sections: fine slowly; too fast and they shake you off
   b.rough = world.roughAt(b.pos.x, b.pos.z);
-  const safe = 8.5 + (b.P.soak - 1.6) * 4;
+  const safe = 9.2 + (b.P.soak - 1.6) * 4;
   if (b.rough > 0.4 && speed > safe && !b.crashed) { b.rattle += (speed - safe) * dt * 0.55 * b.rough; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
   else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
@@ -160,11 +160,16 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // sideways: grip, or slide (drift) when asking too much
   vS += gS * dt;
-  const grip = (onDirt ? 9.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1);
+  // a berm holds you: when the ground banks up on the outside of your turn it pushes you round,
+  // so you can rail it flat out without sliding
+  const bankUp = s.y * Math.sign(vS || b.steer);              // > 0 when the ground rises on the side you're being pushed toward
+  const berm = clamp(bankUp * 6, 0, 2.6);
+  const grip = (onDirt ? 10.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm);
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
   b.slide = lerp(b.slide, Math.abs(old) > dv ? Math.min(1, Math.abs(old) / 4) : 0, 0.2);
+  b.vS = vS; b.bankUp = bankUp;
 
   b.vel.x = f.x * vF + s.x * vS; b.vel.y = f.y * vF + s.y * vS; b.vel.z = f.z * vF + s.z * vS;
 
@@ -181,7 +186,12 @@ function groundStep(b, world, inp, dt, popNow) {
   if (popNow && speed > 0.5 || popNow && b.charge > 0.2) {
     // a bunny hop is worth most on the flat. Off a jump lip you're already flying up, so a well-timed
     // pop only adds a little (like real pre-jumping), never a second jump's worth.
-    const pop = (1.9 + 1.6 * b.charge) * b.P.pop / (1 + Math.max(0, b.vel.y) * 0.9);
+    let pop = (1.9 + 1.6 * b.charge) * b.P.pop / (1 + Math.max(0, b.vel.y) * 0.9);
+    // right at a lip (the ground drops away just ahead) a hop adds very little, even on a steep downhill
+    if (speed > 3) {
+      const hv = Math.hypot(b.vel.x, b.vel.z) || 1, ahead = world.height(b.pos.x + b.vel.x / hv * 1.6, b.pos.z + b.vel.z / hv * 1.6);
+      if (b.pos.y + b.vel.y / hv * 1.6 - ahead > 0.3) pop *= 0.3;
+    }
     b.vel.x += n.x * pop; b.vel.y += n.y * pop; b.vel.z += n.z * pop;
     b.charge = 0;
     takeOff(b);
@@ -378,7 +388,7 @@ function land(b, world, h) {
   b.whip = 0; b.whipping = false; b.bar = 0; b.barring = false; for (const k of HOLDS) b[k] = 0; b.holdT = {};
   copy(b.up, n);
   // landing in the rocks too fast shakes you
-  const rgh = world.roughAt(b.pos.x, b.pos.z), safe = 8.5 + (b.P.soak - 1.6) * 4, hsp = Math.hypot(b.vel.x, b.vel.z);
+  const rgh = world.roughAt(b.pos.x, b.pos.z), safe = 9.2 + (b.P.soak - 1.6) * 4, hsp = Math.hypot(b.vel.x, b.vel.z);
   if (rgh > 0.4 && hsp > safe) { b.rattle += 0.35 + (hsp - safe) * 0.08; if (b.rattle > 1) { crash(b, 'rocks'); return; } }
   b.events.push({ type: 'land', v: into, air: b.air, perfect, cased: cased && err > 0.85 });
   if (list.length && pts > 0) b.events.push({ type: 'trick', list, pts, perfect });
