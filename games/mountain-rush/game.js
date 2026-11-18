@@ -618,6 +618,11 @@ export function mount(stage) {
     if (b.crashed && crashSim.bike) { drawCrash(dt); return; }
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
+    // when the tyres let go it's the back wheel that steps out: swing the bike round its front wheel
+    vis.skid = lerp(vis.skid || 0, b.ground ? clamp(-(b.vS || 0) * 0.3, -0.45, 0.45) : 0, 1 - Math.exp(-dt * 9));
+    const fx0 = fwd.x, fy0 = fwd.y, fz0 = fwd.z;
+    if (Math.abs(vis.skid) > 0.002) fwd.applyAxisAngle(up, vis.skid);
+    const skX = (fx0 - fwd.x) * 0.6, skY = (fy0 - fwd.y) * 0.6, skZ = (fz0 - fwd.z) * 0.6;
     // lean into turns
     // the faster you go the further you lean, and more again when a berm is holding you
     const inBerm = clamp((b.bankUp || 0) * 4, 0, 1) * clamp(b.speed / 12, 0, 1);
@@ -631,7 +636,7 @@ export function mount(stage) {
     const want = b.ground ? up : b.takeoffUp;
     vis.com.lerp(new THREE.Vector3(want.x * COM, want.y * COM, want.z * COM), dt > 0 ? 1 - Math.exp(-dt * 14) : 1);
     mA.makeTranslation(0, -COM, 0);
-    m4.setPosition(b.pos.x + vis.com.x, b.pos.y + vis.com.y, b.pos.z + vis.com.z).multiply(mA);
+    m4.setPosition(b.pos.x + vis.com.x + skX, b.pos.y + vis.com.y + skY, b.pos.z + vis.com.z + skZ).multiply(mA);
     if (vis.manual > 0.01) {
       mA.makeTranslation(0, 0, -0.62); mB.makeRotationX(-vis.manual);
       m4.multiply(mA).multiply(mB); mA.makeTranslation(0, 0, 0.62); m4.multiply(mA);

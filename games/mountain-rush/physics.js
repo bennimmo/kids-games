@@ -84,7 +84,7 @@ export function stepRider(b, world, inp, dt) {
   // smooth the controls a little so keyboards feel like a stick
   // (turning in eases on gently; letting go straightens up quicker)
   const turnIn = Math.abs(inp.steer) > Math.abs(b.steer) && inp.steer * b.steer >= 0;
-  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 5 : 8) : 14)));
+  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 6.5 : 8) : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
   // how hard you're carving right now: turning into a lip is what sets up a spin
   if (b.ground) b.carve = lerp(b.carve || 0, inp.steer, 1 - Math.exp(-dt * 5));
@@ -143,10 +143,10 @@ function groundStep(b, world, inp, dt, popNow) {
   else b.rattle = Math.max(0, b.rattle - dt * 0.8);
 
   // steering: tighter when slow
-  // (never asks the tyres for more than they can hold, so at speed the bike carves instead of sliding;
-  //  it only lets go under hard braking or on steep side-slopes)
+  // (you can ask for a bit more than the tyres hold: then the back steps out and you scrub speed,
+  //  while the front digs in and keeps pulling you round)
   const tyre = (onDirt ? 14 : 10) * world.B.grip * b.P.grip * n.y;
-  const rate = Math.min(lerp(2.4, 1.05, clamp(Math.abs(vF) / 16, 0, 1)), 0.96 * tyre / Math.max(1, Math.abs(vF))) * (b.manual > 0.3 ? 0.6 : 1);
+  const rate = Math.min(lerp(2.9, 1.45, clamp(Math.abs(vF) / 16, 0, 1)), 1.3 * tyre / Math.max(1, Math.abs(vF))) * (b.manual > 0.3 ? 0.6 : 1);
   b.yaw = wrap(b.yaw - b.steer * rate * dt * (Math.abs(vF) > 0.3 ? 1 : 0.3));
 
   // forces along the bike
@@ -184,7 +184,9 @@ function groundStep(b, world, inp, dt, popNow) {
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
-  b.slide = lerp(b.slide, Math.abs(old) > dv ? Math.min(1, Math.abs(old) / 4) : 0, 0.2);
+  // the front tyre digs in: a slide is pulled back into line quickly and costs speed (not on steep side-slopes)
+  if (vS !== 0 && steepSide < 0.5) { const bite = (b.brake > 0.5 ? 2.5 : 6) * world.B.grip; vF -= Math.sign(vF) * Math.min(Math.abs(vF), Math.abs(vS) * bite * 0.3 * dt); vS -= vS * Math.min(1, bite * dt); }
+  b.slide = lerp(b.slide, Math.abs(old) > dv ? Math.min(1, Math.abs(old) / 1.6) : 0, 0.2);
   b.vS = vS; b.bankUp = bankUp;
 
   b.vel.x = f.x * vF + s.x * vS; b.vel.y = f.y * vF + s.y * vS; b.vel.z = f.z * vF + s.z * vS;
