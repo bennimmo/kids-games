@@ -113,7 +113,7 @@ Then open http://localhost:8000
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
 - 8 themes (top bar): 🏙️ city, 🌳 countryside, 🏜️ desert, ❄️ snow (slippy, snowing), 🏖️ beach, 🌋 volcano, 🍭 candy, 🌙 moon (low gravity).
-- Drawn tracks are smoothed (wobbles from the finger/mouse removed) before the road is made.
+- Drawn tracks are smoothed (wobbles from the finger/mouse removed) and roads drawn too close side by side are pushed apart (`spreadTrack`, MIN_GAP), so there's room for a barrier. Real crossings are kept.
 - Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
 - Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
 - Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).

@@ -3,7 +3,7 @@
 //   'jump'   = ramp up, a gap over the other road, and a landing ramp
 //   'bridge' = a bridge with ramps either side
 // Pure data, no drawing.
-import { TRACK_W, SPACING, nearestLocal, nearestGlobal, trackFromJSON } from '../race-track/track.js';
+import { WORLD, TRACK_W, SPACING, nearestLocal, nearestGlobal, trackFromJSON } from '../race-track/track.js';
 
 export { TRACK_W, SPACING };
 export const BRIDGE_H = 42;
@@ -249,7 +249,11 @@ export function smoothTrack(track, passes = 4, win = 4) {
       return { x: x / (win * 2 + 1), y: y / (win * 2 + 1) };
     });
   }
-  // even spacing round the closed loop
+  return trackFromJSON(evenLoop(p));
+}
+
+// even spacing round a closed loop of {x, y} -> [[x, y], ...]
+function evenLoop(p) {
   const loop = [...p, p[0]];
   let total = 0;
   for (let i = 1; i < loop.length; i++) total += Math.hypot(loop[i].x - loop[i - 1].x, loop[i].y - loop[i - 1].y);
@@ -262,5 +266,49 @@ export function smoothTrack(track, passes = 4, win = 4) {
     const t = segLen ? (d - segStart) / segLen : 0, a = loop[seg - 1], b = loop[seg];
     out.push([Math.round((a.x + (b.x - a.x) * t) * 10) / 10, Math.round((a.y + (b.y - a.y) * t) * 10) / 10]);
   }
-  return trackFromJSON(out);
+  return out;
+}
+
+// Bits of road drawn too close side by side get pushed apart, so there's
+// always room for kerbs, grass and a barrier between them. Real crossings
+// (roads meeting at a good angle) are left alone: they become jumps/bridges.
+export const MIN_GAP = 150;
+export function spreadTrack(track, iters = 60) {
+  let p = track.pts.map(q => ({ x: q.x, y: q.y }));
+  const n = p.length;
+  if (n < 30) return track;
+  const win = Math.ceil((MIN_GAP * Math.PI / 2) / SPACING); // closer than this along the road = same bend
+  const M = 60;
+  for (let it = 0; it < iters; it++) {
+    const ang = p.map((_, i) => { const a = p[(i - 2 + n) % n], b = p[(i + 2) % n]; return Math.atan2(b.y - a.y, b.x - a.x); });
+    // real crossings: leave the area round them alone
+    const cr = findCrossings({ pts: p, n });
+    const keep = new Set();
+    for (const c of cr) {
+      const sn = Math.abs(Math.sin(ang[c.top] - ang[c.low]));
+      if (sn < 0.5) continue; // a sneaky shallow crossing: push it into a proper one
+      const R = Math.ceil(MIN_GAP / sn / SPACING) + 2;
+      for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) keep.add(((c.low + a + n) % n) * 100000 + ((c.top + b + n) % n));
+    }
+    const mv = p.map(() => ({ x: 0, y: 0 }));
+    let worst = 0;
+    for (let i = 0; i < n; i++) for (let j = i + win; j < n; j++) {
+      if (n - (j - i) < win) continue;
+      const dx = p[i].x - p[j].x, dy = p[i].y - p[j].y, d = Math.hypot(dx, dy);
+      if (d >= MIN_GAP) continue;
+      if (keep.has(i * 100000 + j) || keep.has(j * 100000 + i)) continue;
+      let ux = dx / (d || 1), uy = dy / (d || 1);
+      if (d < 1) { ux = -Math.sin(ang[i]); uy = Math.cos(ang[i]); }
+      const push = (MIN_GAP - d) * 0.25;
+      worst = Math.max(worst, MIN_GAP - d);
+      mv[i].x += ux * push; mv[i].y += uy * push;
+      mv[j].x -= ux * push; mv[j].y -= uy * push;
+    }
+    if (worst < 2) break;
+    // move (limited), smooth a little so the road stays round, stay in the world
+    p = p.map((q, i) => { const L = Math.hypot(mv[i].x, mv[i].y), k = L > 12 ? 12 / L : 1; return { x: q.x + mv[i].x * k, y: q.y + mv[i].y * k }; });
+    p = p.map((_, i) => { const a = p[(i - 1 + n) % n], b = p[i], c = p[(i + 1) % n]; return { x: (a.x + b.x * 2 + c.x) / 4, y: (a.y + b.y * 2 + c.y) / 4 }; });
+    p = p.map(q => ({ x: Math.max(M, Math.min(WORLD.w - M, q.x)), y: Math.max(M, Math.min(WORLD.h - M, q.y)) }));
+  }
+  return trackFromJSON(evenLoop(p));
 }
