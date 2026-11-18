@@ -12,7 +12,7 @@ import * as THREE from '../../js/vendor/three.module.min.js';
 import { audioCtx } from '../../js/engine/sound.js';
 import { buildWorld, MAPS } from './world.js';
 import { MAP_ORDER } from './biomes.js';
-import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.js';
+import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS, HANDLING } from './physics.js';
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
 import { makeTextures, loadPhotoTextures } from './textures.js';
@@ -150,6 +150,7 @@ export function mount(stage) {
     rider = newRider(W);
     rider.P = { ...BIKES[bikeType()].stats };
     rider.noCrash = !!prefs.noCrash;
+    rider.H = HANDLING[prefs.handling] || HANDLING.planted;
     resize();
     camera.far = Q.viewDist + 140; camera.updateProjectionMatrix();
     snapCamera();
@@ -374,6 +375,8 @@ export function mount(stage) {
         <div class="ui-row">${online.isHost() ? '<button class="ui-btn primary mr-race">🏁 Race!</button>' : '<span class="mr-best">Your friend can start a race</span>'}<button class="ui-btn ghost mr-leave">Leave friends</button></div>`
         : `<div class="ui-row">${togetherButton('Ride with friends')}</div>`}
       <div class="ui-seg mr-onl"><button data-o="1" class="${prefs.online ? 'on' : ''}">🌍 See everyone online</button><button data-o="0" class="${prefs.online ? '' : 'on'}">Just me</button></div>
+      <div class="ui-label">Handling (try each one)</div>
+      <div class="ui-seg mr-hd">${Object.entries(HANDLING).map(([k, h]) => `<button data-h="${k}" class="${(prefs.handling || 'planted') === k ? 'on' : ''}">${h.name}</button>`).join('')}</div>
       <div class="ui-seg mr-nc"><button data-n="0" class="${prefs.noCrash ? '' : 'on'}">💥 Crashes on</button><button data-n="1" class="${prefs.noCrash ? 'on' : ''}">🛟 No crashes (easy)</button></div>
       <div class="mr-note mr-best"></div>
       <div class="ui-label">Fastest on ${MAPS[S.map].name}</div><div class="mr-lb mr-best">Loading…</div>
@@ -395,6 +398,7 @@ export function mount(stage) {
     if (tb) click(tb, async () => { tb.disabled = true; try { const r = await online.hostRoom(S.map); if (r) menu(); else tb.disabled = false; } catch (e) { tb.disabled = false; showMenuNote('Could not go online'); } });
     click(ui.querySelector('.mr-race'), () => online.startRace());
     click(ui.querySelector('.mr-leave'), () => { online.leaveRoom(); menu(); });
+    ui.querySelectorAll('.mr-hd button').forEach(b => click(b, () => { prefs.handling = b.dataset.h; savePrefs(); rider.H = HANDLING[prefs.handling] || HANDLING.planted; ui.querySelectorAll('.mr-hd button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-nc button').forEach(b => click(b, () => { prefs.noCrash = b.dataset.n === '1'; savePrefs(); rider.noCrash = prefs.noCrash; ui.querySelectorAll('.mr-nc button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-onl button').forEach(b => click(b, () => { prefs.online = b.dataset.o === '1'; savePrefs(); ui.querySelectorAll('.mr-onl button').forEach(x => x.classList.toggle('on', x === b)); }));
     ui.querySelectorAll('.mr-q button').forEach(b => click(b, () => {
@@ -646,8 +650,8 @@ export function mount(stage) {
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
     // when the tyres let go it's the back wheel that steps out: swing the bike round its front wheel
-    { const sv = b.vS || 0, over = Math.max(0, Math.abs(sv) - 1.0);        // (a little slip is normal cornering; only a real slide swings the back out)
-      vis.skid = lerp(vis.skid || 0, b.ground ? clamp(-Math.sign(sv) * over * 0.3, -0.5, 0.5) : 0, 1 - Math.exp(-dt * 9)); }
+    // the back wheel stepping out: the bike swings round its planted front wheel
+    vis.skid = lerp(vis.skid || 0, b.ground ? clamp(b.drift || 0, -0.62, 0.62) : 0, 1 - Math.exp(-dt * 14));
     const fx0 = fwd.x, fy0 = fwd.y, fz0 = fwd.z;
     if (Math.abs(vis.skid) > 0.002) fwd.applyAxisAngle(up, vis.skid);
     const skX = (fx0 - fwd.x) * 0.6, skY = (fy0 - fwd.y) * 0.6, skZ = (fz0 - fwd.z) * 0.6;

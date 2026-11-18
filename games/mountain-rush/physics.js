@@ -32,6 +32,15 @@ export const TRICKS = {
   nofoot: { name: 'No footer', pts: 350 },
 };
 
+// Handling set-ups you can pick in the menu.
+//   grip: how hard the tyres hold      tip: how fast the bike leans in      rear: how much the back tyre holds
+//   (below 1 it steps out before the front lets go)      drift: how far and fast the back swings when it goes
+export const HANDLING = {
+  planted: { name: 'Planted', grip: 17.5, tip: 17, low: 3.2, rear: 1.0, drift: 1.0, hook: 6 },
+  loose: { name: 'Loose', grip: 16.5, tip: 17, low: 3.2, rear: 0.78, drift: 1.7, hook: 3.5 },
+  sharp: { name: 'Sharp', grip: 21, tip: 24, low: 3.8, rear: 0.92, drift: 1.2, hook: 7 },
+};
+
 export function newRider(world) {
   const b = {
     pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 },
@@ -49,6 +58,7 @@ export function newRider(world) {
     crashed: false, crashT: 0, finished: false, events: [],
     cp: 0, progress: 0, route: 0, onTrail: true, rough: 0, rattle: 0, noCrash: false,
     P: { pedal: 1, drag: 1, grip: 1, spin: 1, pop: 1, soak: 1.6 },     // bike stats (bike.js BIKES)
+    H: HANDLING.planted, drift: 0,
   };
   placeAt(b, world, world.start);
   return b;
@@ -60,7 +70,7 @@ export function placeAt(b, world, p) {
   b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
   b.whip = b.bar = 0; for (const k of HOLDS) b[k] = 0; b.holdT = {}; b.whipping = b.barring = false;
   b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = []; b.rattle = 0;
-  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0; b.carve = 0; b.spinSet = 0; b.roll = 0; b.rollV = 0; b.slip = 0;
+  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0; b.carve = 0; b.spinSet = 0; b.roll = 0; b.rollV = 0; b.slip = 0; b.drift = 0;
   world.normal(b.pos.x, b.pos.z, b.n); copy(b.up, b.n);
 }
 
@@ -153,19 +163,31 @@ function groundStep(b, world, inp, dt, popNow) {
   // ---- what the tyres are on, and how much grip that gives
   const sf = world.surfaceAt ? world.surfaceAt(b.pos.x, b.pos.z, tmpSurf) : tmpSurf;
   const mu = (onDirt ? 1 : 0.72) * world.B.grip * b.P.grip * (sf.wood > 0.5 ? 0.86 : 1) * (sf.stone > 0.5 ? 0.92 : 1) * (wet > 0.02 ? 0.72 : 1);
-  const tyre = 17.5 * mu * n.y;
+  const H = b.H || HANDLING.planted;
+  const tyre = H.grip * mu * n.y;
   // ---- lean to steer: the stick asks for a turn, the bike leans over to make it, and the lean is what turns you.
   // Slow: you turn the bars (quick, tight). Fast: you can only ask for what the tyres can hold, so the same
   // stick gives a wider, smoother arc, and it takes a moment to tip in and to stand back up.
   const v = Math.abs(vF), vv = Math.max(v, 0.6);
-  const yawCmd = b.steer * Math.min(3.2, 0.97 * tyre / vv) * (b.manual > 0.3 ? 0.6 : 1);
+  const yawCmd = b.steer * Math.min(H.low, 0.97 * tyre / vv) * (b.manual > 0.3 ? 0.6 : 1);
   const rollWant = Math.atan(yawCmd * vv / G);
-  const tipIn = Math.abs(rollWant) > Math.abs(b.roll) ? 17 : 19;
+  const tipIn = Math.abs(rollWant) > Math.abs(b.roll) ? H.tip : H.tip + 2;
   b.rollV += (tipIn * tipIn * (rollWant - b.roll) - 2 * tipIn * b.rollV) * dt;
   b.roll += b.rollV * dt;
   // (when the front tyre is pushing wide the bike turns less than its lean asks: understeer)
   const push = b.brake > 0.5 ? 0 : clamp(b.slip - 1, 0, 2);
-  b.yaw = wrap(b.yaw - G * Math.tan(b.roll) / vv / (1 + 0.45 * push) * dt * (v > 0.3 ? 1 : 0.3));
+  const yawRate = G * Math.tan(b.roll) / vv / (1 + 0.45 * push) * (1 + 0.5 * Math.abs(b.drift));      // (with the back stepped out the bike rotates quicker)
+  b.yaw = wrap(b.yaw - yawRate * dt * (v > 0.3 ? 1 : 0.3));
+  // ---- the back wheel. The front tyre carries the steering and digs in; it almost never slides. The back
+  // just follows, and it is the one that lets go: when the turn (or the brake) asks more than it can hold it
+  // swings out, the bike points further into the corner, and it costs you speed until it hooks up again.
+  { const rearGrip = tyre * H.rear * (b.brake > 0.5 ? 0.42 : 1) * (b.pedal > 0.5 && v < 7 ? 0.85 : 1);
+    const ask = Math.abs(yawRate) * v + Math.abs(b.rollV) * 2.2;          // cornering load, plus a flick of the bike
+    const turnDir = Math.sign(b.roll) || Math.sign(b.steer);
+    if (ask > rearGrip && v > 3) b.drift += -turnDir * Math.min(3.2, (ask - rearGrip) / Math.max(4, v) * 1.6 * H.drift) * dt;
+    else b.drift -= b.drift * Math.min(1, H.hook * dt);
+    b.drift = clamp(b.drift, -0.62, 0.62);
+    if (Math.abs(b.drift) > 0.03) vF -= Math.sign(vF) * Math.min(Math.abs(vF), Math.abs(b.drift) * 9 * dt); }
 
   // forces along the bike
   const gF = -G * f.y, gS = -G * s.y;
@@ -202,16 +224,15 @@ function groundStep(b, world, inp, dt, popNow) {
   // tyre grip curve: a little sideways slip gives more and more grip up to a peak; past the peak the tyre lets
   // go gradually and slides with less grip than it had, until you ease off and it hooks up again
   const vPeak = 1.0 + 0.035 * v, sl = Math.abs(vS) / vPeak;
-  const curve = sl < 1 ? sl * (2 - sl) : Math.max(0.66, 1 - 0.17 * (sl - 1));
+  const curve = sl < 1 ? sl * (2 - sl) : Math.max(0.85, 1 - 0.08 * (sl - 1));       // the front tyre keeps biting
   const dv = grip * curve * dt;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
   b.slip = sl;
   if (sl > 0.9 && steepSide < 0.5) {
     vF -= Math.sign(vF) * Math.min(Math.abs(vF), grip * 0.22 * Math.min(1.5, sl - 0.9) * dt);        // sliding scrubs speed
-    // braking in a turn locks the back wheel: the rear steps out and swings the bike into the turn
-    if (b.brake > 0.5 && v > 3) b.yaw = wrap(b.yaw - Math.sign(vS) * 0.6 * Math.min(1.5, sl - 0.9) * dt);
   }
-  b.slide = lerp(b.slide, clamp((sl - 0.85) / 1.1, 0, 1), 0.2);
+  if (steepSide < 0.5) vS -= vS * Math.min(1, 3 * dt);
+  b.slide = lerp(b.slide, clamp(Math.max((sl - 1.2) / 1.2, Math.abs(b.drift) / 0.3), 0, 1), 0.2);
   b.vS = vS; b.bankUp = bankUp;
 
   b.vel.x = f.x * vF + s.x * vS; b.vel.y = f.y * vF + s.y * vS; b.vel.z = f.z * vF + s.z * vS;
