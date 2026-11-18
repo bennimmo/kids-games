@@ -788,18 +788,61 @@ function makeProps(world, T) {
   { const waterMat = new THREE.MeshStandardMaterial({ color: world.B.snow ? 0x7fb4c9 : 0x2f5d6b, roughness: 0.06, metalness: 0.35, transparent: true, opacity: 0.82 });
     for (const w of world.waters || []) { const g = new THREE.PlaneGeometry(w.wid, w.len, 1, 1); g.rotateX(-Math.PI / 2);
       const m = new THREE.Mesh(g, waterMat); m.position.set(w.x, w.y, w.z); m.rotation.y = w.yaw; m.receiveShadow = true; group.add(m); } }
-  // wrecked cars to jump over
-  { const box = new THREE.BoxGeometry(1, 1, 1), wheelG = new THREE.CylinderGeometry(0.33, 0.33, 0.24, 12); wheelG.rotateZ(Math.PI / 2);
-    const glass = new THREE.MeshStandardMaterial({ color: 0x1c2428, roughness: 0.25, metalness: 0.4 }), tyre = new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 0.95 });
-    const paints = [0x8c3b24, 0x4f6a78, 0xb08a2e, 0x6d7a55].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.8, metalness: 0.25 }));
-    for (const c of world.cars || []) { const body = paints[Math.floor(c.tint * paints.length) % paints.length], s = Math.sin(c.yaw), co = Math.cos(c.yaw);
-      const at = (mat, geo, lx, ly, lz, sx, sy, sz) => put(mat, geo, c.x + lx * co + lz * s, c.y + ly, c.z - lx * s + lz * co, c.yaw, sx, sy, sz);
-      at(body, box, 0, 0.5, 0, 1.72, 0.52, 4.1);            // body
-      at(body, box, 0, 0.3, 2.0, 1.6, 0.2, 0.25); at(body, box, 0, 0.3, -2.0, 1.6, 0.2, 0.25);   // bumpers
-      at(glass, box, 0, 0.98, -0.25, 1.5, 0.44, 1.95);      // windows
-      at(body, box, 0, 1.24, -0.25, 1.56, 0.08, 2.0);       // roof
-      for (const px of [-0.74, 0.74]) for (const pz of [-0.25 - 0.95, -0.25 + 0.95]) at(body, box, px, 0.98, pz, 0.08, 0.46, 0.09);   // pillars
-      for (const px of [-0.8, 0.8]) for (const pz of [-1.3, 1.3]) at(tyre, wheelG, px, 0.28, pz, 1, 1, 1); } }
+  // things to jump over and funny bits beside the trail (lorry with logs, snowplough, snowmen, bus, wrecked car...)
+  { const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 12), ball = new THREE.SphereGeometry(1, 12, 9), cone = new THREE.ConeGeometry(1, 1, 10);
+    const M = (color, rough = 0.8, metal = 0.1) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    const glass = M(0x1c2428, 0.25, 0.4), tyre = M(0x17171a, 0.95, 0), steel = M(0x4a4e55, 0.6, 0.5), snowM = M(0xf4f8fb, 0.9, 0), coal = M(0x15151a, 0.9, 0), carrot = M(0xf07a1c, 0.7, 0);
+    const bark = M(0x6b4a2c, 0.95, 0), cut = M(0xd2ad6e, 0.9, 0), red = M(0xb3261e, 0.6, 0.25), orange = M(0xf08a1a, 0.6, 0.2), yellow = M(0xf2c318, 0.65, 0.15), white = M(0xf2f2f2, 0.7, 0), green = M(0x4f8a3a, 0.85, 0), bone = M(0xe9e2cf, 0.8, 0), straw = M(0xd8b655, 0.95, 0);
+    const paints = [0x8c3b24, 0x4f6a78, 0xb08a2e, 0x6d7a55].map(c => M(c, 0.8, 0.25));
+    const HP = Math.PI / 2;
+    for (const c of world.cars || []) {
+      const s = Math.sin(c.yaw), co = Math.cos(c.yaw);
+      // local frame: lx to the side, ly up, lz forward
+      const sl = c.slope || 0, bp = -Math.atan(sl);        // long vehicles sit along the slope of the ground
+      const at = (mat, geo, lx, ly, lz, sx, sy, sz, pitch = 0, yawOff = 0) => put(mat, geo, c.x + lx * co + lz * s, c.y + ly + sl * lz, c.z - lx * s + lz * co, c.yaw + yawOff, sx, sy, sz, pitch + (yawOff ? 0 : bp));
+      const wheel = (lx, lz, rad = 0.4) => at(tyre, cyl, lx, rad, lz, rad, 0.26, rad, HP, HP);
+      const logAlong = (lx, ly, lz, rad, len) => { at(bark, cyl, lx, ly, lz, rad, len, rad, HP); at(cut, cyl, lx, ly, lz + len / 2 + 0.01, rad * 0.9, 0.02, rad * 0.9, HP); at(cut, cyl, lx, ly, lz - len / 2 - 0.01, rad * 0.9, 0.02, rad * 0.9, HP); };
+      const logAcross = (ly, lz, rad, len) => { at(bark, cyl, 0, ly, lz, rad, len, rad, HP, HP); at(cut, cyl, len / 2 + 0.01, ly, lz, rad * 0.9, 0.02, rad * 0.9, HP, HP); at(cut, cyl, -len / 2 - 0.01, ly, lz, rad * 0.9, 0.02, rad * 0.9, HP, HP); };
+      const snowman = (lx, lz, k = 1, hat = false) => { at(snowM, ball, lx, 0.42 * k, lz, 0.5 * k, 0.46 * k, 0.5 * k); at(snowM, ball, lx, 1.0 * k, lz, 0.37 * k, 0.35 * k, 0.37 * k); at(snowM, ball, lx, 1.45 * k, lz, 0.26 * k, 0.26 * k, 0.26 * k);
+        at(carrot, cone, lx, 1.45 * k, lz - 0.34 * k, 0.05 * k, 0.26 * k, 0.05 * k, -HP); for (const e of [-0.09, 0.09]) at(coal, ball, lx + e * k, 1.53 * k, lz - 0.23 * k, 0.03 * k, 0.03 * k, 0.03 * k);
+        for (const b of [0.9, 1.05, 1.2]) at(coal, ball, lx, b * k, lz - 0.36 * k, 0.03 * k, 0.03 * k, 0.03 * k);
+        for (const sd of [-1, 1]) at(bark, box, lx + sd * 0.55 * k, 1.12 * k, lz, 0.5 * k, 0.03, 0.03, 0, 0);
+        if (hat) { at(coal, cyl, lx, 1.68 * k, lz, 0.3 * k, 0.03, 0.3 * k); at(coal, cyl, lx, 1.83 * k, lz, 0.19 * k, 0.28 * k, 0.19 * k); } };
+      const k = c.kind;
+      if (k === 'car') { const body = paints[Math.floor(c.tint * 4) % 4], q = HP;        // lies across the gap
+        const a2 = (mat, geo, lx, ly, lz, sx, sy, sz) => put(mat, geo, c.x + lz * co + lx * -s, c.y + ly, c.z - lz * s - lx * co, c.yaw + q, sx, sy, sz);
+        a2(body, box, 0, 0.5, 0, 1.72, 0.52, 4.1); a2(body, box, 0, 0.3, 2.0, 1.6, 0.2, 0.25); a2(body, box, 0, 0.3, -2.0, 1.6, 0.2, 0.25);
+        a2(glass, box, 0, 0.98, -0.25, 1.5, 0.44, 1.95); a2(body, box, 0, 1.24, -0.25, 1.56, 0.08, 2.0);
+        for (const px of [-0.8, 0.8]) for (const pz of [-1.3, 1.3]) put(tyre, cyl, c.x + pz * co - px * s, c.y + 0.3, c.z - pz * s - px * co, c.yaw + q + HP, 0.33, 0.24, 0.33, HP); }
+      else if (k === 'lorry') {                                   // a logging lorry, loaded
+        at(steel, box, 0, 0.62, 0, 2.0, 0.22, 6.9);
+        at(red, box, 0, 1.25, 2.55, 2.2, 1.15, 1.7); at(glass, box, 0, 1.5, 3.3, 1.9, 0.5, 0.25); at(red, box, 0, 0.75, 3.35, 2.2, 0.35, 0.2); at(steel, box, 0, 1.4, 1.62, 2.1, 1.3, 0.12);
+        for (const lz of [2.5, -1.5, -2.7]) for (const lx of [-0.95, 0.95]) wheel(lx, lz, 0.45);
+        for (const lx of [-0.62, 0, 0.62]) logAlong(lx, 1.02, -0.95, 0.29, 4.6);
+        for (const lx of [-0.31, 0.31]) logAlong(lx, 1.52, -0.9, 0.27, 4.5);
+        for (const lz of [1.2, -3.1]) for (const lx of [-1.0, 1.0]) at(steel, box, lx, 1.3, lz, 0.08, 1.2, 0.08); }
+      else if (k === 'plough') {                                  // a snowplough
+        at(steel, box, 0, 0.55, -0.3, 2.0, 0.25, 4.6); at(orange, box, 0, 1.15, -1.2, 2.3, 0.95, 2.9); at(snowM, box, 0, 1.68, -1.2, 2.1, 0.14, 2.7);
+        at(orange, box, 0, 1.25, 1.15, 2.2, 1.2, 1.5); at(glass, box, 0, 1.5, 1.92, 1.9, 0.5, 0.12); at(snowM, box, 0, 1.9, 1.15, 2.0, 0.1, 1.3); at(yellow, box, 0, 2.0, 1.15, 0.25, 0.14, 0.25);
+        at(yellow, box, 0, 0.6, 2.75, 3.1, 0.95, 0.16, -0.25, 0.3); at(steel, box, 0, 0.55, 2.3, 0.3, 0.2, 0.9);
+        for (const lz of [1.1, -1.7]) for (const lx of [-0.95, 0.95]) wheel(lx, lz, 0.48);
+        at(snowM, ball, 1.9, 0.25, 3.0, 0.9, 0.45, 0.8); }
+      else if (k === 'bus') {                                     // an old yellow bus
+        at(yellow, box, 0, 1.2, 0, 2.3, 1.45, 6.7); at(glass, box, 0, 1.45, 0, 2.34, 0.5, 6.1); at(yellow, box, 0, 1.93, 0, 2.2, 0.08, 6.5); at(coal, box, 0, 0.75, 0, 2.34, 0.1, 6.7);
+        for (const lz of [-2.6, -1.3, 0, 1.3, 2.6]) at(yellow, box, 0, 1.45, lz, 2.36, 0.5, 0.12);
+        at(glass, box, 0, 1.4, 3.36, 2.0, 0.6, 0.06); for (const lz of [2.2, -2.2]) for (const lx of [-1.0, 1.0]) wheel(lx, lz, 0.45); }
+      else if (k === 'snowmen') { snowman(-1.5, 0, 1); snowman(0, 0, 1.08, true); snowman(1.5, 0, 0.95); }
+      else if (k === 'cacti') for (const lx of [-1.5, 0, 1.5]) { at(green, cyl, lx, 0.8, 0, 0.26, 1.6, 0.26); at(green, ball, lx, 1.6, 0, 0.26, 0.26, 0.26); at(green, cyl, lx + 0.4, 0.95, 0, 0.12, 0.5, 0.12); at(green, cyl, lx + 0.26, 0.75, 0, 0.12, 0.4, 0.12, 0, 0); }
+      else if (k === 'logpile') { for (const lz of [-0.6, 0, 0.6]) logAcross(0.3, lz, 0.3, c.side ? 2.6 : 3.8); for (const lz of [-0.3, 0.3]) logAcross(0.82, lz, 0.29, c.side ? 2.6 : 3.8); if (!c.side) logAcross(1.0, 0, 0.2, 3.6); }
+      else if (k === 'log') logAcross(0.02, 0, 0.3, c.len);
+      else if (k === 'snowman') snowman(0, 0, 0.9 + c.tint * 0.3, c.tint > 0.5);
+      else if (k === 'tyres') { for (let q = 0; q < 3; q++) at(tyre, cyl, 0, 0.13 + q * 0.26, 0, 0.42, 0.25, 0.42); at(tyre, cyl, 0.75, 0.4, 0.2, 0.42, 0.25, 0.42, HP, 0.4); }
+      else if (k === 'cones') for (const [lx, lz] of [[0, 0], [0.7, 0.5], [-0.5, 0.8]]) { at(orange, cone, lx, 0.36, lz, 0.2, 0.7, 0.2); at(white, cyl, lx, 0.4, lz, 0.115, 0.1, 0.115); at(orange, box, lx, 0.02, lz, 0.5, 0.04, 0.5); }
+      else if (k === 'haybale') { at(straw, cyl, 0, 0.6, 0, 0.6, 1.2, 0.6, HP, HP); at(straw, box, 1.0, 0.25, 0.6, 1.0, 0.5, 0.5, 0, 0.5); }
+      else if (k === 'sled') { at(red, box, 0, 0.22, 0, 0.5, 0.05, 1.2); for (const lx of [-0.22, 0.22]) at(steel, box, lx, 0.07, 0, 0.04, 0.04, 1.35); at(snowM, ball, 0.9, 0.2, 0.3, 0.45, 0.3, 0.45); }
+      else if (k === 'cactusbig') { at(green, cyl, 0, 1.3, 0, 0.3, 2.6, 0.3); at(green, ball, 0, 2.6, 0, 0.3, 0.3, 0.3); for (const sd of [-1, 1]) { at(green, cyl, sd * 0.45, 1.3 + sd * 0.2, 0, 0.14, 0.14, 0.5, 0, 0); at(green, cyl, sd * 0.68, 1.75 + sd * 0.2, 0, 0.14, 0.9, 0.14); at(green, ball, sd * 0.68, 2.2 + sd * 0.2, 0, 0.14, 0.14, 0.14); } }
+      else if (k === 'skull') { at(bone, ball, 0, 0.2, 0, 0.26, 0.2, 0.34); for (const sd of [-1, 1]) { at(bone, cone, sd * 0.38, 0.32, -0.05, 0.05, 0.5, 0.05, 0, 0); at(coal, ball, sd * 0.1, 0.24, -0.26, 0.05, 0.05, 0.05); } }
+    } }
   // stumps
   { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
     const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);
