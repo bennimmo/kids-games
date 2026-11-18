@@ -322,3 +322,21 @@ button.tg-ready.tg-ready { font-family: var(--font); font-weight: 900; border-ra
 .fmsg-row { display: flex; gap: 10px; align-items: center; }
 .fmsg-row .fmsg-input { flex: 1; min-width: 0; font-size: 20px; }
 .fmsg-row .fmsg-send { flex: none; }
+
+/* ---------- Who's playing? (together.js) ---------- */
+.ui-overlay.tg-pick { position: fixed; z-index: 60; }
+.tg-pick .ui-panel { text-align: center; }
+.tg-pick-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 18px 0 22px; }
+.tg-pick-f {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 110px; padding: 14px 8px 12px;
+  border-radius: 22px; border: 2px solid var(--ui-line); background: var(--ui-card); color: var(--ui-text);
+  font: inherit; cursor: pointer; transition: transform .1s, opacity .2s, filter .2s, border-color .2s;
+  opacity: .45; filter: grayscale(1);
+}
+.tg-pick-f:active { transform: scale(.95); }
+.tg-pick-f .tg-face { width: 60px; height: 60px; font-size: 36px; display: grid; place-items: center; border-radius: 50%; background: rgba(255,255,255,.12); }
+.tg-pick-f b { font-size: 17px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tg-pick-f i { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: rgba(255,255,255,.15); color: transparent; }
+.tg-pick-f.on { opacity: 1; filter: none; border-color: var(--accent, #22c55e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #22c55e) 35%, transparent); }
+.tg-pick-f.on i { background: #22c55e; color: #fff; }
+.tg-pick .ui-row { justify-content: center; gap: 12px; }

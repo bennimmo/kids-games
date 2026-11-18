@@ -455,7 +455,9 @@ async function joinGroup(id) {
       p.face = cleanFace(m.face);
       p.game = typeof m.game === 'string' ? m.game.slice(0, 30) : '';
       p.cam = m.cam === true;
-      if (p.name !== '?') saveFriend(u, p.name, p.face);
+      // Only keep friends' names fresh. Someone else in the call (a friend's friend) is NOT added
+      // as my friend: they show while we're in the call, then go.
+      if (p.name !== '?' && contacts.some(c => c.uid === u)) saveFriend(u, p.name, p.face);
     }
     for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
     // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
@@ -649,10 +651,12 @@ function makePeer(g, theirUid, theirSid) {
 
 // ------------------------------------------------------------ invites ("come and play my game")
 
-// Tell every friend who's on: come and join my room in this game (on my home, they all watch it).
+// Tell friends: come and join my room in this game (on my home, they all watch it).
+// to = the uids picked (null = everyone who's on).
 let myInvite = null;
-export function sendInvite(game, roomCode) {
+export function sendInvite(game, roomCode, to = null) {
   myInvite = { game, code: roomCode, at: fb ? fb.now() : Date.now() };
+  if (to && to.length) myInvite.to = Object.fromEntries(to.map(u => [u, true]));
   if (home && fb) fb.D.update(ref(`${home.id}/meta`), { invite: myInvite }).catch(() => {});
   return true;
 }
@@ -666,7 +670,7 @@ function liveInvites() {
   for (const c of contacts) {
     const pr = presence.get(c.uid);
     const v = pr && pr.on && pr.invite;
-    if (v && v.game && v.code && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
+    if (v && v.game && v.code && (!v.to || v.to[fb.uid] === true) && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
   }
   return out.sort((x, y) => y.at - x.at);
 }

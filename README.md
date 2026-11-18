@@ -63,6 +63,8 @@ Then open http://localhost:8000
 - **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
+   - "Play with friends" first asks **Who's playing?** (everyone ticked; tap to leave someone out). Only picked friends get the invite (`meta.invite.to`).
+   - People in a call who aren't your friends show while you're in the call, but are never saved as friends.
 2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
 3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games. ✖ shows "not this time" on the host's strip.
 4. Lobby strip shows everyone: host "building the track…", friends "getting ready…" / "✔ Ready!", friends not in yet "on the way…".
