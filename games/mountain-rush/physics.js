@@ -1,6 +1,9 @@
 // Mountain Rush: bike physics, tricks and crashes. Pure maths, no 3D.
 //
-// The bike is a point on the ground (where the wheels touch) with a heading (yaw).
+// The bike is tracked at the point midway between its wheels, with a heading (yaw) and a lean angle (roll).
+// It steers like a real bike: the stick leans it over, and the lean is what turns it. The tyres grip on a
+// curve: a little slip gives the most grip, push past that and they let go gradually and slide.
+// Its pitch comes from where the front and rear wheels touch the ground.
 // On the ground its speed follows the slope; it leaves the ground when the ground drops away
 // faster than it can follow (jump lips, drops, crests). In the air you flip and spin;
 // land with the bike pointing where you're going or you crash.
@@ -33,7 +36,7 @@ export function newRider(world) {
   const b = {
     pos: { x: 0, y: 0, z: 0 }, vel: { x: 0, y: 0, z: 0 },
     yaw: 0, ground: true, n: { x: 0, y: 1, z: 0 }, up: { x: 0, y: 1, z: 0 },
-    steer: 0, lean: 0, crouch: 0, charge: 0, jumpHeld: false,
+    steer: 0, lean: 0, crouch: 0, charge: 0, jumpHeld: false, roll: 0, rollV: 0, slip: 0,
     // air
     air: 0, flip: 0, flipV: 0, spin: 0, spinV: 0, basePitch: 0, takeoffUp: { x: 0, y: 1, z: 0 },
     whip: 0, whipping: false, bar: 0, barring: false, superman: 0, nohand: 0, table: 0, cancan: 0, nofoot: 0, holdT: {},
@@ -57,7 +60,7 @@ export function placeAt(b, world, p) {
   b.ground = true; b.air = 0; b.flip = b.spin = b.flipV = b.spinV = 0;
   b.whip = b.bar = 0; for (const k of HOLDS) b[k] = 0; b.holdT = {}; b.whipping = b.barring = false;
   b.manual = 0; b.crashed = false; b.crashT = 0; b.airTricks = []; b.rattle = 0;
-  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0; b.carve = 0; b.spinSet = 0;
+  b.steer = 0; b.lean = 0; b.crouch = 0; b.charge = 0; b.slide = 0; b.carve = 0; b.spinSet = 0; b.roll = 0; b.rollV = 0; b.slip = 0;
   world.normal(b.pos.x, b.pos.z, b.n); copy(b.up, b.n);
 }
 
@@ -74,7 +77,7 @@ export function bikeForward(yaw, pitch, o = {}) {
   o.x = Math.sin(yaw) * c; o.y = Math.sin(pitch); o.z = Math.cos(yaw) * c; return o;
 }
 
-const tmpF = {}, tmpS = {}, tmpN = {}, tmpT = {}, tmpB = {};
+const tmpF = {}, tmpS = {}, tmpN = {}, tmpT = {}, tmpB = {}, tmpSurf = { wood: 0, stone: 0, rough: 0 };
 
 export function stepRider(b, world, inp, dt) {
   b.events.length = 0;
@@ -85,7 +88,7 @@ export function stepRider(b, world, inp, dt) {
   // smooth the controls a little so keyboards feel like a stick
   // (turning in eases on gently; letting go straightens up quicker)
   const turnIn = Math.abs(inp.steer) > Math.abs(b.steer) && inp.steer * b.steer >= 0;
-  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 6.5 : 8) : 14)));
+  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 11 : 13) : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
   // how hard you're carving right now: turning into a lip is what sets up a spin
   if (b.ground) b.carve = lerp(b.carve || 0, inp.steer, 1 - Math.exp(-dt * 5));
@@ -147,12 +150,22 @@ function groundStep(b, world, inp, dt, popNow) {
   const wet = world.waterAt ? world.waterAt(b.pos.x, b.pos.z, b.pos.y) : 0;
   b.wet = wet;
   if (wet > 0.02) { b.splashT = (b.splashT || 0) - dt; if (speed > 2 && b.splashT <= 0) { b.splashT = 0.05; b.events.push({ type: 'splash', v: speed, deep: wet }); } }
-  // steering: tighter when slow
-  // (you can ask for a bit more than the tyres hold: then the back steps out and you scrub speed,
-  //  while the front digs in and keeps pulling you round)
-  const tyre = (onDirt ? 14 : 10) * world.B.grip * b.P.grip * n.y;
-  const rate = Math.min(lerp(2.9, 1.45, clamp(Math.abs(vF) / 16, 0, 1)), 1.3 * tyre / Math.max(1, Math.abs(vF))) * (b.manual > 0.3 ? 0.6 : 1);
-  b.yaw = wrap(b.yaw - b.steer * rate * dt * (Math.abs(vF) > 0.3 ? 1 : 0.3));
+  // ---- what the tyres are on, and how much grip that gives
+  const sf = world.surfaceAt ? world.surfaceAt(b.pos.x, b.pos.z, tmpSurf) : tmpSurf;
+  const mu = (onDirt ? 1 : 0.72) * world.B.grip * b.P.grip * (sf.wood > 0.5 ? 0.86 : 1) * (sf.stone > 0.5 ? 0.92 : 1) * (wet > 0.02 ? 0.72 : 1);
+  const tyre = 17.5 * mu * n.y;
+  // ---- lean to steer: the stick asks for a turn, the bike leans over to make it, and the lean is what turns you.
+  // Slow: you turn the bars (quick, tight). Fast: you can only ask for what the tyres can hold, so the same
+  // stick gives a wider, smoother arc, and it takes a moment to tip in and to stand back up.
+  const v = Math.abs(vF), vv = Math.max(v, 0.6);
+  const yawCmd = b.steer * Math.min(3.2, 0.97 * tyre / vv) * (b.manual > 0.3 ? 0.6 : 1);
+  const rollWant = Math.atan(yawCmd * vv / G);
+  const tipIn = Math.abs(rollWant) > Math.abs(b.roll) ? 17 : 19;
+  b.rollV += (tipIn * tipIn * (rollWant - b.roll) - 2 * tipIn * b.rollV) * dt;
+  b.roll += b.rollV * dt;
+  // (when the front tyre is pushing wide the bike turns less than its lean asks: understeer)
+  const push = b.brake > 0.5 ? 0 : clamp(b.slip - 1, 0, 2);
+  b.yaw = wrap(b.yaw - G * Math.tan(b.roll) / vv / (1 + 0.45 * push) * dt * (v > 0.3 ? 1 : 0.3));
 
   // forces along the bike
   const gF = -G * f.y, gS = -G * s.y;
@@ -185,13 +198,20 @@ function groundStep(b, world, inp, dt, popNow) {
   const berm = clamp(bankUp * 6, 0, 2.6);
   // a steep side-slope that isn't holding you up as a berm: the tyres let go and you slip straight down it
   const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.83) * 10, 0, 1) : 0;
-  const grip = tyre * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm) * (1 - steepSide);
-  const dv = grip * dt;
-  const old = vS;
+  const grip = tyre * (b.brake > 0.5 ? 0.72 : 1) * (1 + berm) * (1 - steepSide);
+  // tyre grip curve: a little sideways slip gives more and more grip up to a peak; past the peak the tyre lets
+  // go gradually and slides with less grip than it had, until you ease off and it hooks up again
+  const vPeak = 1.0 + 0.035 * v, sl = Math.abs(vS) / vPeak;
+  const curve = sl < 1 ? sl * (2 - sl) : Math.max(0.66, 1 - 0.17 * (sl - 1));
+  const dv = grip * curve * dt;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
-  // the front tyre digs in: a slide is pulled back into line quickly and costs speed (not on steep side-slopes)
-  if (vS !== 0 && steepSide < 0.5) { const bite = (b.brake > 0.5 ? 2.5 : 6) * world.B.grip; vF -= Math.sign(vF) * Math.min(Math.abs(vF), Math.abs(vS) * bite * 0.3 * dt); vS -= vS * Math.min(1, bite * dt); }
-  b.slide = lerp(b.slide, Math.abs(old) > dv ? Math.min(1, Math.abs(old) / 1.6) : 0, 0.2);
+  b.slip = sl;
+  if (sl > 0.9 && steepSide < 0.5) {
+    vF -= Math.sign(vF) * Math.min(Math.abs(vF), grip * 0.22 * Math.min(1.5, sl - 0.9) * dt);        // sliding scrubs speed
+    // braking in a turn locks the back wheel: the rear steps out and swings the bike into the turn
+    if (b.brake > 0.5 && v > 3) b.yaw = wrap(b.yaw - Math.sign(vS) * 0.6 * Math.min(1.5, sl - 0.9) * dt);
+  }
+  b.slide = lerp(b.slide, clamp((sl - 0.85) / 1.1, 0, 1), 0.2);
   b.vS = vS; b.bankUp = bankUp;
 
   b.vel.x = f.x * vF + s.x * vS; b.vel.y = f.y * vF + s.y * vS; b.vel.z = f.z * vF + s.z * vS;
@@ -252,7 +272,13 @@ function groundStep(b, world, inp, dt, popNow) {
   }
   // over rocks the wheels and suspension do the work: the frame and rider stay steady, not see-sawing
   const follow = b.rough > 0.2 ? 0.035 : 0.3;
-  b.up.x = lerp(b.up.x, n2.x, follow); b.up.y = lerp(b.up.y, n2.y, follow); b.up.z = lerp(b.up.z, n2.z, follow); norm(b.up);
+  // two wheels: the bike's pitch comes from where its front and rear tyres touch (0.58 m ahead and behind),
+  // so the front rises onto a ramp first and drops off an edge first, like the real thing
+  { const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), WB = 0.58;
+    const hF = clamp(world.height(b.pos.x + fx * WB, b.pos.z + fz * WB) - h, -0.7, 0.7), hR = clamp(world.height(b.pos.x - fx * WB, b.pos.z - fz * WB) - h, -0.7, 0.7);
+    const tl = Math.hypot(2 * WB, hF - hR), tx = fx * 2 * WB / tl, ty = (hF - hR) / tl, tz = fz * 2 * WB / tl;      // along the bike, wheel to wheel
+    const d2 = n2.x * tx + n2.y * ty + n2.z * tz; let ux = n2.x - tx * d2, uy = n2.y - ty * d2, uz = n2.z - tz * d2; const ul = Math.hypot(ux, uy, uz) || 1; ux /= ul; uy /= ul; uz /= ul;
+    b.up.x = lerp(b.up.x, ux, follow); b.up.y = lerp(b.up.y, uy, follow); b.up.z = lerp(b.up.z, uz, follow); norm(b.up); }
   // pedal crank + wheels
   b.wheel += vF * dt / 0.36;
   if (b.pedal > 0) b.crank += dt * (4 + vF * 0.5);

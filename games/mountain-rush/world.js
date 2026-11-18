@@ -582,6 +582,8 @@ export function buildWorld(mapId = 'pine-ridge') {
     return out;
   };
   // how rocky the ground is here (tech sections): 0..1
+  // what the tyres are on: plank decks and bare rock have their own grip
+  const surfaceAt = (x, z, out = {}) => { const id = cellId(x, z); if (nearRib(id)) { shape(x, z, id, ex, false); out.wood = ex.wood; out.stone = ex.stone; out.rough = ex.rough; } else { out.wood = out.stone = out.rough = 0; } return out; };
   const roughAt = (x, z) => { const id = cellId(x, z); return nearRib(id) ? shape(x, z, id, ex, false).rough : 0; };
   const trailMask = (x, z) => {
     const id = cellId(x, z);
@@ -813,7 +815,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
     checkpoints, finish, start, startZ, finishZ, hoops,
-    trees, rocks, plants, logs, pads, roots, stumps, timbers, decks, waters, cars, bridges, setRef, waterAt, visualH, arrows, warns, flags, banners,
+    trees, rocks, plants, logs, pads, roots, stumps, timbers, decks, waters, cars, bridges, setRef, waterAt, visualH, surfaceAt, arrows, warns, flags, banners,
   };
 }
 

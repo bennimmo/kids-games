@@ -646,15 +646,17 @@ export function mount(stage) {
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
     // when the tyres let go it's the back wheel that steps out: swing the bike round its front wheel
-    vis.skid = lerp(vis.skid || 0, b.ground ? clamp(-(b.vS || 0) * 0.3, -0.45, 0.45) : 0, 1 - Math.exp(-dt * 9));
+    { const sv = b.vS || 0, over = Math.max(0, Math.abs(sv) - 1.0);        // (a little slip is normal cornering; only a real slide swings the back out)
+      vis.skid = lerp(vis.skid || 0, b.ground ? clamp(-Math.sign(sv) * over * 0.3, -0.5, 0.5) : 0, 1 - Math.exp(-dt * 9)); }
     const fx0 = fwd.x, fy0 = fwd.y, fz0 = fwd.z;
     if (Math.abs(vis.skid) > 0.002) fwd.applyAxisAngle(up, vis.skid);
     const skX = (fx0 - fwd.x) * 0.6, skY = (fy0 - fwd.y) * 0.6, skZ = (fz0 - fwd.z) * 0.6;
     // lean into turns
     // the faster you go the further you lean, and more again when a berm is holding you
     const inBerm = clamp((b.bankUp || 0) * 4, 0, 1) * clamp(b.speed / 12, 0, 1);
-    const targetRoll = b.ground ? clamp(b.steer * (0.12 + 0.62 * clamp(b.speed / 15, 0, 1) + 0.22 * inBerm), -0.95, 0.95) : vis.roll * 0.95;
-    vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 6));
+    // the lean you see is the lean the physics is using to turn the bike (plus a little show in a berm)
+    const targetRoll = b.ground ? clamp((b.roll || 0) * 0.6 + b.steer * (0.03 + 0.14 * inBerm), -0.8, 0.8) : vis.roll * 0.95;
+    vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 14));
     up.applyAxisAngle(fwd, vis.roll);
     vis.manual = lerp(vis.manual, b.manual ? 0.42 + b.manualBal * 0.12 : 0, 1 - Math.exp(-dt * 10));
     xAxis.crossVectors(up, fwd).normalize();
