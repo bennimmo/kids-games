@@ -179,7 +179,9 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // pop off the ground
   if (popNow && speed > 0.5 || popNow && b.charge > 0.2) {
-    const pop = (2.4 + 2.4 * b.charge) * b.P.pop;
+    // a bunny hop is worth most on the flat. Off a jump lip you're already flying up, so a well-timed
+    // pop only adds a little (like real pre-jumping), never a second jump's worth.
+    const pop = (1.9 + 1.6 * b.charge) * b.P.pop / (1 + Math.max(0, b.vel.y) * 0.9);
     b.vel.x += n.x * pop; b.vel.y += n.y * pop; b.vel.z += n.z * pop;
     b.charge = 0;
     takeOff(b);
