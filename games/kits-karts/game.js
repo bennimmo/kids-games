@@ -11,7 +11,7 @@ import { createKeys } from '../../js/engine/keys.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
 import { WORLD, buildTrack, snapItem, resnapItems, trackFromJSON, trackToJSON } from '../race-track/track.js';
-import { makeCourse, smoothTrack } from './course.js';
+import { makeCourse, smoothTrack, spreadTrack } from './course.js';
 import { createRace, stepRace, standings, ITEMS, ITEM_LIST, zapAhead, boomAt } from './sim.js';
 import { createRoom, joinRoom, codeToPics, CODE_PICS, CODE_LEN } from '../../js/engine/net.js';
 import { aiInput } from './ai.js';
@@ -219,7 +219,7 @@ export function mount(stage) {
       else { x = cx + Math.sin(t) * 640 + Math.sin(t * 3) * 60; y = cy + Math.sin(2 * t) * 320 + Math.cos(t * 3) * 40; } // wavy 8
       raw.push({ x, y });
     }
-    const t0 = buildTrack(raw), t = t0 && smoothTrack(t0);
+    const t0 = buildTrack(raw), t = t0 && smoothTrack(spreadTrack(smoothTrack(t0)), 3, 2);
     if (!t) return;
     S.track = t; S.modes = [];
     S.items = [];
@@ -1033,7 +1033,7 @@ export function mount(stage) {
   const onUp = e => {
     if (S.phase !== 'build') return;
     if (S.stroke) {
-      const t0 = buildTrack(S.stroke), t = t0 && smoothTrack(t0);
+      const t0 = buildTrack(S.stroke), t = t0 && smoothTrack(spreadTrack(smoothTrack(t0)), 3, 2);
       S.stroke = null;
       if (t) { S.track = t; S.modes = []; setCourse(); sound.win(); render(); } else sound.bump();
     }
