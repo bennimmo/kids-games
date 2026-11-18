@@ -78,106 +78,155 @@ export function buildWorld(mapId = 'pine-ridge') {
   Bl.busy = Float32Array.from(BtoA.nd, d => (d < 26 ? 1 : 0));
 
   // ---------------------------------------------------------------- features
+  // Every route gets a run of course features, picked in turn from the map's list (biomes.js):
+  //   dirt jumps:  kicker, table, gap, double, triple, hip (landing off to one side), stepdown (landing far below)
+  //   wood:        woodkicker (steep plank ramp), woodstep (jump up onto a plank deck, ride it, drop off the end),
+  //                skinny (a raised plank to balance along), plus plank berms on some turns
+  //   ground:      drop, stepup, rollers, whoops, rocks
+  //   steep+tricky: tech (rocky pitch), stairs (rock steps down a pitch)
   const routes = lines.map((ln, ri) => {
     const N = ln.n, feats = [];
     const START = 12, FINISH = N - 15;
     const kinds = M.routes[ri].kinds;
-    let s = 70, k = 0;
+    const STRAIGHT = new Set(['kicker', 'table', 'gap', 'double', 'triple', 'hip', 'stepdown', 'woodkicker', 'woodstep', 'drop', 'stepup', 'skinny']);
+    let s = 64, k = 0;
     while (s < FINISH - 70) {
       let maxC = 0, busy = 0;
-      for (let j = s - 4; j < s + 46 && j < N; j++) { if (j < 0) continue; maxC = Math.max(maxC, Math.abs(ln.curvS[j])); busy = Math.max(busy, ln.busy[j]); }
+      for (let j = s - 4; j < s + 44 && j < N; j++) { if (j < 0) continue; maxC = Math.max(maxC, Math.abs(ln.curvS[j])); busy = Math.max(busy, ln.busy[j]); }
       if (busy) { s += 6; continue; }
       let kind = kinds[k % kinds.length];
-      const needsStraight = !['tech', 'rocks', 'rollers'].includes(kind);
-      if (needsStraight && maxC > 0.014) {
-        // too twisty here for a jump: put a rock garden or rollers instead, or move on
-        if (maxC < 0.03 && r() < 0.5) kind = r() < 0.5 ? 'rocks' : 'rollers'; else { s += 6; continue; }
+      if (STRAIGHT.has(kind) && maxC > 0.015) {
+        // too twisty here for a jump: something that works on a bend instead, or move on
+        if (maxC < 0.034 && r() < 0.6) kind = ['rocks', 'rollers', 'whoops'][Math.floor(r() * 3)]; else { s += 6; continue; }
       }
       k++;
-      // step-ups need speed: only where the trail is steep enough coming in
-      if (kind === 'stepup' && (ln.yc[Math.max(0, s - 40)] - ln.yc[s]) / 40 < 0.12) kind = 'table';
-      const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.end = s0 + f.lk + f.gap + f.ll + (f.table ? 0 : 1.8 * (f.hl + 0.3)); feats.push(f); return f; };
-      if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + 30;
-      else if (kind === 'table') s = kick(s, { lk: 6.5, hk: 1.8, gap: 8, table: true }).end + 30;
-      else if (kind === 'gap') s = kick(s, { lk: 8, hk: 2.6, gap: 12.5, ll: 15 }).end + 32;
-      else if (kind === 'double') { const f = kick(s, { lk: 6.5, hk: 1.9, gap: 9 }); s = kick(f.end + 4, { lk: 6, hk: 1.6, gap: 8, table: true }).end + 30; }
-      else if (kind === 'drop') { const f = { kind, s, d: ((ri ? 1.9 : 1.5) + r() * 0.8) * ST.drop, run: 26, land: 9 * Math.sqrt(ST.drop) }; f.end = s + f.land; feats.push(f); s = f.end + 35; }
+      const grade = (ln.yc[Math.max(0, s - 40)] - ln.yc[s]) / 40;
+      if ((kind === 'stepup' || kind === 'woodstep') && grade < 0.12) kind = 'table';     // these need speed coming in
+      const gapAfter = 17 + r() * 8;
+      const kick = (s0, o) => { const f = { kind: 'kicker', s: s0, ll: 14, off: 0, ...o }; f.hl = f.table ? f.hk * 0.8 : f.hk * 0.95; f.face = f.table ? 0.01 : 1.8 * (f.hl + 0.3); f.end = s0 + f.lk + f.gap + f.ll + f.face; feats.push(f); return f; };
+      if (kind === 'kicker') s = kick(s, r() < 0.5 ? { lk: 7.5, hk: 2.3, gap: 11, hoop: r() < 0.6 } : { lk: 6, hk: 1.6, gap: 7, table: true }).end + gapAfter;
+      else if (kind === 'table') s = kick(s, { lk: 6.5, hk: 1.8, gap: 8, table: true }).end + gapAfter;
+      else if (kind === 'gap') s = kick(s, { lk: 8, hk: 2.6, gap: 12.5, ll: 15, hoop: true }).end + gapAfter;
+      else if (kind === 'double') { const f = kick(s, { lk: 6.5, hk: 1.9, gap: 9 }); s = kick(f.end + 4, { lk: 6, hk: 1.6, gap: 8, table: true }).end + gapAfter; }
+      else if (kind === 'triple') { let e = s; for (let q = 0; q < 3; q++) e = kick(e, { lk: 4.5, hk: 1.15, gap: 4.5, ll: 7, table: true }).end + 1.5; s = e + gapAfter; }
+      else if (kind === 'hip') s = kick(s, { lk: 6.5, hk: 1.9, gap: 8, off: (r() < 0.5 ? -1 : 1) * 2.7 }).end + gapAfter;
+      else if (kind === 'woodkicker') s = kick(s, { lk: 4.6, hk: 2.1, gap: 9.5, ll: 15, wood: true, hoop: r() < 0.4 }).end + gapAfter;
+      else if (kind === 'stepdown') { const f = { kind, s, lk: 6, hk: 1.4, gap: 8, ll: 14, D: 2.4, ret: 170 }; f.end = s + f.lk + f.gap + f.ll; feats.push(f); s = f.end + gapAfter + 6; }
+      else if (kind === 'woodstep') {
+        const f = { kind, s, lk: 4.5, hk: 1.3, gap: 1.6, top: 9 };
+        const a0 = Math.min(N - 1, Math.floor(s + f.lk)), a1 = Math.min(N - 1, Math.floor(s + f.lk + f.gap));
+        f.hp = f.hk - 0.25 + (ln.yc[a0] - ln.yc[a1]);            // deck sits just below the lip, so it's easy to land on
+        f.end = s + f.lk + f.gap + f.top + 0.5; feats.push(f); s = f.end + gapAfter + 8;
+      }
+      else if (kind === 'drop') { const f = { kind, s, d: ((ri ? 1.9 : 1.5) + r() * 0.8) * ST.drop, run: 26, land: 9 * Math.sqrt(ST.drop) }; f.end = s + f.land; feats.push(f); s = f.end + gapAfter + 8; }
       else if (kind === 'stepup') {
-        // kicker up onto a raised platform, ride along the top, roll off the end
-        const f = { kind, s, lk: 5, hk: 1.6, gap: 3, face: 1, top: 10, down: 9 };   // face is set below
+        const f = { kind, s, lk: 5, hk: 1.6, gap: 3, face: 1, top: 10, down: 9 };
         const a0 = Math.min(N - 1, Math.floor(s + f.lk)), a1 = Math.min(N - 1, Math.floor(s + f.lk + f.gap + f.face));
-        f.hp = f.hk + 0.15 + (ln.yc[a0] - ln.yc[a1]);          // the top is level with (a bit above) the lip
-        f.face = 2.4 * (f.hp - 0.2);                           // a rideable face, so coming up short isn't a trap
-        f.end = s + f.lk + f.gap + f.face + f.top + f.down; feats.push(f); s = f.end + 30;
+        f.hp = f.hk + 0.15 + (ln.yc[a0] - ln.yc[a1]);
+        f.face = 2.4 * (f.hp - 0.2);                             // a rideable face, so coming up short isn't a trap
+        f.end = s + f.lk + f.gap + f.face + f.top + f.down; feats.push(f); s = f.end + gapAfter;
       }
-      else if (kind === 'tech') {
-        // a steep, rocky pitch: fine slowly, too fast and the rocks throw you off
-        const f = { kind, s, len: 26, D: 3.2, ret: 70 }; f.end = s + f.len; feats.push(f); s = f.end + 28;
-      }
-      else if (kind === 'rollers') { const f = { kind, s, n: 4, wl: 9, a: 0.45 }; f.end = s + f.n * f.wl; feats.push(f); s = f.end + 25; }
-      else { const f = { kind: 'rocks', s, len: 22 }; f.end = s + f.len; feats.push(f); s = f.end + 25; }
+      else if (kind === 'tech') { const f = { kind, s, len: 26, D: 2.8, ret: 170 }; f.end = s + f.len; feats.push(f); s = f.end + gapAfter + 4; }
+      else if (kind === 'stairs') { const f = { kind, s, n: 4, sp: 4.5, st: 0.5, ret: 170 }; f.D = f.n * f.st; f.end = s + f.n * f.sp; feats.push(f); s = f.end + gapAfter + 4; }
+      else if (kind === 'skinny') { const f = { kind, s, len: 18 }; f.end = s + f.len; feats.push(f); s = f.end + gapAfter; }
+      else if (kind === 'whoops') { const f = { kind: 'rollers', s, n: 6, wl: 3.6, a: 0.36 }; f.end = s + f.n * f.wl; feats.push(f); s = f.end + gapAfter; }
+      else if (kind === 'rollers') { const f = { kind, s, n: 4, wl: 9, a: 0.45 }; f.end = s + f.n * f.wl; feats.push(f); s = f.end + gapAfter; }
+      else { const f = { kind: 'rocks', s, len: 22 }; f.end = s + f.len; feats.push(f); s = f.end + gapAfter; }
     }
     // the trail gets wider at jumps so you can ride round them (and out of a gap if you come up short)
     let widen = new Float32Array(N);
-    for (const f of feats) if (f.kind === 'kicker') for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = 1.6;
+    for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.6 : 1.6;
     widen = blur(widen, 5);
+    // plank berms: every other proper turn gets a taller wooden wall on the outside
+    let woodBerm = new Float32Array(N);
+    { let run = 0, count = 0;
+      for (let i = START + 30; i < FINISH - 10; i++) {
+        if (Math.abs(ln.curvS[i]) > 0.021) run++; else { if (run >= 12) { if (count++ % 2 === 0) for (let j = i - run; j < i; j++) woodBerm[j] = 1; } run = 0; }
+      }
+      woodBerm = blur(woodBerm, 3); }
+    // sideways shape of a narrow feature: full height within `fw` of its centre line `c`, gone by fw + edge
+    const nar = (d, c = 0, fw = 1.5, edge = 1.5) => 1 - smooth(fw, fw + edge, Math.abs(d - c));
     const featAt = (sc, d) => {
-      let h = 0, jump = 0, narrow = 0, rough = 0;
+      let hN = 0, hW = 0, jump = 0, rough = 0, wood = 0;
       for (const f of feats) {
+        const u = sc - f.s;
         if (f.kind === 'tech') {
-          if (sc > f.s && sc < f.end + f.ret) h += -f.D * smooth(f.s, f.end, sc) + f.D * smooth(f.end, f.end + f.ret, sc);
+          if (sc > f.s && sc < f.end + f.ret) hW += -f.D * smooth(f.s, f.end, sc) + f.D * smooth(f.end, f.end + f.ret, sc);
           if (sc > f.s - 1 && sc < f.end + 2) {
             const fade = smooth(f.s - 1, f.s + 2, sc) * (1 - smooth(f.end - 1, f.end + 2, sc));
-            const v = nz.n2(sc / 1.7, d / 1.3 + 13 + ri * 7);
-            h += fade * Math.max(0, v) * 0.42;
+            hW += fade * Math.max(0, nz.n2(sc / 1.7, d / 1.3 + 13 + ri * 7)) * 0.42;
             rough = Math.max(rough, fade);
           }
-          continue;
-        }
-        if (f.kind === 'stepup') {
-          if (sc < f.s - 1 || sc > f.end + 1) continue;
-          jump = 1; narrow = 1;
-          const u = sc - f.s, g0 = f.lk + f.gap, g1 = g0 + f.face, g2 = g1 + f.top;
-          if (u < f.lk) h += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9);
-          else if (u < f.lk + 1.2) h += lerp(f.hk, 0.2, smooth(f.lk, f.lk + 1.2, u));
-          else if (u < g0) h += 0.2;
-          else if (u < g1) h += lerp(0.2, f.hp, smooth(g0, g1, u));
-          else if (u < g2) h += f.hp;
-          else h += f.hp * (1 - smooth(g2, f.end - f.s, u));
-          continue;
-        }
-        if (f.kind === 'drop') {
-          if (sc > f.s - f.run && sc < f.s) h += f.d * smooth(f.s - f.run, f.s - f.run * 0.35, sc);
-          else if (sc >= f.s && sc < f.end) { h += f.d * 0.45 * Math.pow(1 - (sc - f.s) / (f.end - f.s), 1.8); jump = 1; }
+        } else if (f.kind === 'stairs') {
+          if (sc > f.s - 1 && sc < f.end + f.ret) {
+            let dn = 0; for (let q = 0; q < f.n; q++) dn += f.st * smooth(f.s + q * f.sp + 2, f.s + q * f.sp + 2.45, sc);
+            hW += -dn + f.D * smooth(f.end, f.end + f.ret, sc);
+            if (sc < f.end + 1) { const fade = smooth(f.s - 1, f.s + 1, sc) * (1 - smooth(f.end - 1, f.end + 1, sc)); rough = Math.max(rough, fade * 0.7); jump = 1; hW += fade * Math.max(0, nz.n2(sc / 2.2 + 5, d / 1.6)) * 0.12; }
+          }
+        } else if (f.kind === 'stepdown') {
+          if (sc > f.s - 1 && sc < f.end + f.ret) {
+            if (u < f.lk) hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * nar(d);
+            else if (u < f.lk + 1.5) hN += f.hk * (1 - smooth(f.lk, f.lk + 1.5, u)) * nar(d);
+            hW += -f.D * smooth(f.s + f.lk + 1, f.end, sc) + f.D * smooth(f.end, f.end + f.ret, sc);
+            if (sc < f.end) jump = 1;
+          }
+        } else if (f.kind === 'drop') {
+          if (sc > f.s - f.run && sc < f.s) hW += f.d * smooth(f.s - f.run, f.s - f.run * 0.35, sc);
+          else if (sc >= f.s && sc < f.end) { hW += f.d * 0.45 * Math.pow(1 - (sc - f.s) / (f.end - f.s), 1.8); jump = 1; }
           if (sc > f.s - 3 && sc < f.s) jump = 1;
-          continue;
-        }
-        if (sc < f.s - 1 || sc > f.end + 1) continue;
-        const u = sc - f.s;
-        if (f.kind === 'kicker') {
-          jump = 1; narrow = 1;
-          const back = 1.6, low = f.table ? f.hk * 0.8 : -0.3, face = f.table ? 0.01 : 1.8 * (f.hl + 0.3);
-          if (u < f.lk) { const t = clamp(u / f.lk, 0, 1); h += f.hk * Math.pow(t, 1.9); }
-          else if (u < f.lk + back) { const t = (u - f.lk) / back; h += lerp(f.hk, low, 0.5 - 0.5 * Math.cos(t * Math.PI)); }
-          else if (u < f.lk + f.gap) { h += low; }                                                             // gap (or table top)
+        } else if (sc < f.s - 1 || sc > f.end + 1) {
+          // not near this one
+        } else if (f.kind === 'stepup') {
+          jump = 1;
+          const g0 = f.lk + f.gap, g1 = g0 + f.face, g2 = g1 + f.top;
+          let h;
+          if (u < f.lk) h = f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9);
+          else if (u < f.lk + 1.2) h = lerp(f.hk, 0.2, smooth(f.lk, f.lk + 1.2, u));
+          else if (u < g0) h = 0.2;
+          else if (u < g1) h = lerp(0.2, f.hp, smooth(g0, g1, u));
+          else if (u < g2) h = f.hp;
+          else h = f.hp * (1 - smooth(g2, f.end - f.s, u));
+          hN += h * nar(d);
+        } else if (f.kind === 'woodstep') {
+          jump = 1;
+          const g0 = f.lk + f.gap, g2 = g0 + f.top;
+          if (u < f.lk) hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * nar(d);                    // dirt kicker
+          else if (u < f.lk + 0.8) hN += lerp(f.hk, 0.1, smooth(f.lk, f.lk + 0.8, u)) * nar(d);
+          else if (u < g0 - 0.15) hN += 0.1 * nar(d);
+          else {                                                                                       // the plank deck: square sides, drop off the end
+            const deck = smooth(g0 - 0.15, g0 + 0.1, u) * (1 - smooth(g2, g2 + 0.3, u));
+            hN += f.hp * deck * nar(d, 0, 1.7, 0.5);
+            wood = Math.max(wood, (u < g2 + 0.35 ? 1 : 0) * nar(d, 0, 2.0, 0.25));
+          }
+        } else if (f.kind === 'kicker') {
+          jump = 1;
+          const back = 1.6, low = f.table ? f.hk * 0.8 : -0.3;
+          if (u < f.lk) { hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * (f.wood ? nar(d, 0, 1.55, 0.5) : nar(d)); }
+          else if (u < f.lk + back) { const t = (u - f.lk) / back; hN += lerp(f.hk, low, 0.5 - 0.5 * Math.cos(t * Math.PI)) * (f.wood && !f.table ? nar(d, 0, 1.55, 0.5) : nar(d)); }
+          else if (u < f.lk + f.gap) { hN += low * nar(d); }                                                    // gap (or table top)
           else {
             const v = u - f.lk - f.gap;
-            if (v < face) { const t = v / face; h += lerp(low, f.hl, t * t * (3 - 2 * t)); }                  // back face up to the knuckle (rideable)
-            else { const t = clamp((v - face) / f.ll, 0, 1); h += f.hl * (1 - smooth(0, 1, t)); }            // long landing down
+            const hh = v < f.face ? lerp(low, f.hl, smooth(0, f.face, v)) : f.hl * (1 - smooth(0, 1, clamp((v - f.face) / f.ll, 0, 1)));   // back face, then the long landing
+            hN += hh * (f.off ? nar(d, f.off, 1.9, 1.6) : nar(d));
           }
+          if (f.wood && u > -0.2 && u < f.lk + back) wood = Math.max(wood, nar(d, 0, 1.85, 0.25));
+        } else if (f.kind === 'skinny') {
+          const fade = smooth(0, 2.5, u) * (1 - smooth(f.len - 2.5, f.len, u));
+          hW += -0.75 * fade * smooth(0.5, 0.95, Math.abs(d));       // the ground drops away each side of the plank
+          wood = Math.max(wood, fade * (1 - smooth(0.55, 0.7, Math.abs(d))));
+          jump = 1;
         } else if (f.kind === 'rollers') {
           const t = u / f.wl;
-          if (t > 0 && t < f.n) h += f.a * (1 - Math.cos(t * 2 * Math.PI)) * 0.5;
+          if (t > 0 && t < f.n) hW += f.a * (1 - Math.cos(t * 2 * Math.PI)) * 0.5;
         } else if (f.kind === 'rocks') {
           const fade = smooth(0, 3, u) * (1 - smooth(f.len - 3, f.len, u));
-          const v = nz.n2(sc / 1.7, d / 1.5 + 77 + ri * 31);
-          h += fade * Math.max(0, v) * 0.45;
+          hW += fade * Math.max(0, nz.n2(sc / 1.7, d / 1.5 + 77 + ri * 31)) * 0.45;
         }
       }
-      return { h, jump, narrow, rough };
+      return { hN, hW, jump, rough, wood };
     };
     const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.7 + ST.width + Math.min(1.6, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 50) + lerp(widen[i0], widen[i1], f); };
-    return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW };
+    return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm };
   });
 
   // ---------------------------------------------------------------- ground shape near a route
@@ -195,11 +244,14 @@ export function buildWorld(mapId = 'pine-ridge') {
     const w = R.halfW(sc);
     const ad = Math.abs(d);
     const c = lerp(R.curvS[i0], R.curvS[i1], fr);
-    const bank = clamp(-c * Math.sign(d) * 85, 0, 2.1) * Math.pow(clamp(ad / (w + 2), 0, 1.25), 1.5);   // berm: outside of the turn rises
+    // berm: the outside of the turn rises. Plank berms are taller and steeper.
+    const wb = lerp(R.woodBerm[i0], R.woodBerm[i1], fr), outside = -c * Math.sign(d) > 0;
+    const bank = clamp(-c * Math.sign(d) * 85, 0, 2.1) * (1 + 0.45 * wb) * Math.pow(clamp(ad / (w + 2), 0, 1.25), 1.5 - 0.3 * wb);
     const f = R.featAt(sc, d);
-    const shoulder = f.narrow ? 1 - smooth(1.5, 3.0, ad) : 1 - smooth(w - 0.2, w + 2.4, ad);         // jumps sit in the middle with a ride-round each side
+    const wide = 1 - smooth(w - 0.2, w + 2.4, ad);
     const dish = -0.12 * (1 - smooth(0, w, ad));
-    return { y: y + bank + f.h * shoulder + dish, d, ad, w, sc, jump: f.jump, rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
+    const wood = Math.max(f.wood, outside ? wb * smooth(1.5, 2.3, ad) * (1 - smooth(w + 2.3, w + 3.0, ad)) : 0);
+    return { y: y + bank + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
   };
   const nearestOnLine = (R, x, z, i) => {
     let best = i, bd = 1e9;
@@ -230,7 +282,7 @@ export function buildWorld(mapId = 'pine-ridge') {
   const tmpT = [];
   const shape = (x, z, id, out, withSink) => {
     const n0 = nat(x, z);
-    let sum = 0, wsum = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0;
+    let sum = 0, wsum = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0, wood = 0, tsc = 0, tdd = 0;
     for (let ri = 0; ri < NR; ri++) {
       const i = nearI[ri][id];
       if (i < 0) continue;
@@ -241,10 +293,11 @@ export function buildWorld(mapId = 'pine-ridge') {
       m = Math.max(m, maskOf(t, R)); rough = Math.max(rough, t.rough);
       if (withSink) sink = Math.max(sink, 0.5 * (1 - smooth(t.w + RIB - 1.4, t.w + RIB - 0.2, t.ad)));
       if (t.ad < t.w + RIB) inRib = true;
-      if (t.ad - t.w < best) { best = t.ad - t.w; bestR = ri; bestI = i; }
+      if (t.wood > wood) wood = t.wood;
+      if (t.ad - t.w < best) { best = t.ad - t.w; bestR = ri; bestI = i; tsc = t.sc; tdd = t.d; }
     }
     out.h = n0 + (wsum > 0 ? sum / Math.max(1, wsum) : 0) - sink;
-    out.m = m; out.rough = rough; out.inRib = inRib; out.edge = best; out.r = bestR; out.i = bestI;
+    out.m = m; out.rough = rough; out.wood = wood; out.sc = tsc; out.dd = tdd; out.inRib = inRib; out.edge = best; out.r = bestR; out.i = bestI;
     return out;
   };
 
@@ -312,6 +365,12 @@ export function buildWorld(mapId = 'pine-ridge') {
     checkpoints.push({ k, z, gates: g });
   }
   const finish = pathPoint(routes[0].finish, 0);
+  // hoops to fly through over some of the jumps (bonus points)
+  const hoops = [];
+  for (const R of routes) for (const f of R.feats) if (f.hoop) {
+    const p = pathPoint(f.s + f.lk + f.gap * 0.42, R.id), base = R.yc[Math.min(R.n - 1, Math.round(f.s + f.lk))];
+    hoops.push({ x: p.x, z: p.z, y: base + f.hk + 1.35, yaw: p.yaw, r: 1.75, ground: height(p.x, p.z) });
+  }
 
   // ---------------------------------------------------------------- trees, plants, logs, rocks
   const trees = [], rocks = [], plants = [], logs = [];
@@ -383,7 +442,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     id: mapId, name: M.name, biome: M.biome, B, W, L, NX, NZ, HALF, H, mask, RIB,
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
-    checkpoints, finish, start, startZ, finishZ,
+    checkpoints, finish, start, startZ, finishZ, hoops,
     trees, rocks, plants, logs,
   };
 }

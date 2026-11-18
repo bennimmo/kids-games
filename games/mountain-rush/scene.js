@@ -59,13 +59,16 @@ export function createScene(world, T, Q) {
   const terrainMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, metalness: 0 });
   terrainMat.customProgramCacheKey = () => 'mr-terrain';
   terrainMat.onBeforeCompile = sh => {
-    Object.assign(sh.uniforms, { tGrass: { value: T.grass }, tFloor: { value: T.floor }, tDirt: { value: T.dirt }, tRock: { value: T.rock }, tBump: { value: T.dirtBump } });
+    Object.assign(sh.uniforms, { tGrass: { value: T.grass }, tFloor: { value: T.floor }, tDirt: { value: T.dirt }, tRock: { value: T.rock }, tBump: { value: T.dirtBump }, tPlank: { value: T.planks } });
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aTrail; varying float vTrail; varying vec3 vWPos; varying vec3 vWNrm;')
-      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTrail = aTrail; vWPos = (modelMatrix * vec4(transformed,1.)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);');
+      .replace('#include <common>', '#include <common>\nattribute float aTrail; varying float vTrail; varying vec3 vWPos; varying vec3 vWNrm;\n#ifdef RIBBON\nattribute float aWood; attribute vec2 aTuv; varying float vWood; varying vec2 vTuv;\n#endif')
+      .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvTrail = aTrail; vWPos = (modelMatrix * vec4(transformed,1.)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);\n#ifdef RIBBON\nvWood = aWood; vTuv = aTuv;\n#endif');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-        uniform sampler2D tGrass, tFloor, tDirt, tRock, tBump; varying float vTrail; varying vec3 vWPos; varying vec3 vWNrm;
+        uniform sampler2D tGrass, tFloor, tDirt, tRock, tBump, tPlank; varying float vTrail; varying vec3 vWPos; varying vec3 vWNrm;
+        #ifdef RIBBON
+        varying float vWood; varying vec2 vTuv;
+        #endif
         float gRockW, gDirtW;
         vec3 perturbN(vec3 surf_pos, vec3 surf_norm, vec2 dHdxy, float fd){
           vec3 sx = normalize(dFdx(surf_pos)), sy = normalize(dFdy(surf_pos)), n = surf_norm;
@@ -96,6 +99,14 @@ export function createScene(world, T, Q) {
         col = mix(col, dirt, gDirtW);
         gRockW *= 1. - gDirtW;
         col = mix(col, rock, gRockW);
+        #ifdef RIBBON
+        {
+          // wooden planks laid across the trail (decks, ramps, plank berms)
+          float wd = smoothstep(0.35, 0.6, vWood);
+          vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.9)).rgb;
+          col = mix(col, plank, wd); gRockW *= 1. - wd; gDirtW *= 1. - wd;
+        }
+        #endif
         diffuseColor.rgb *= col;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(0.97, 0.88, gDirtW); roughnessFactor = mix(roughnessFactor, 0.72, gRockW);`)
@@ -149,13 +160,14 @@ export function createScene(world, T, Q) {
     const ribMat = terrainMat.clone();
     ribMat.onBeforeCompile = terrainMat.onBeforeCompile;
     ribMat.polygonOffset = true; ribMat.polygonOffsetFactor = -1 - path.id; ribMat.polygonOffsetUnits = -2 - path.id * 2;
-    ribMat.customProgramCacheKey = () => 'mr-terrain';
-    const STEP_S = 0.5, COLS = 30, ex = {};
+    ribMat.defines = { ...(ribMat.defines || {}), RIBBON: 1 };
+    ribMat.customProgramCacheKey = () => 'mr-ribbon';
+    const STEP_S = 0.5, COLS = 44, ex = {};
     const segLen = 80;     // metres per mesh (so far-away bits can be culled)
     for (let s0 = 0; s0 < path.n - 1; s0 += segLen) {
       const s1 = Math.min(path.n - 1, s0 + segLen);
       const rows = Math.round((s1 - s0) / STEP_S) + 1;
-      const pos = new Float32Array(rows * (COLS + 1) * 3), tr = new Float32Array(rows * (COLS + 1));
+      const pos = new Float32Array(rows * (COLS + 1) * 3), tr = new Float32Array(rows * (COLS + 1)), wd = new Float32Array(rows * (COLS + 1)), tuv = new Float32Array(rows * (COLS + 1) * 2);
       let k = 0;
       for (let r = 0; r < rows; r++) {
         const sc = Math.min(s1, s0 + r * STEP_S), i0 = Math.floor(sc), i1 = Math.min(path.n - 1, i0 + 1), f = sc - i0;
@@ -168,7 +180,7 @@ export function createScene(world, T, Q) {
           const x = cx + ttz * d, z = cz - ttx * d;
           world.exact(x, z, ex);
           pos[k * 3] = x; pos[k * 3 + 1] = ex.h; pos[k * 3 + 2] = z;
-          tr[k] = ex.m;
+          tr[k] = ex.m; wd[k] = ex.wood; tuv[k * 2] = sc; tuv[k * 2 + 1] = d;
         }
       }
       const idx = [];
@@ -179,6 +191,8 @@ export function createScene(world, T, Q) {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       g.setAttribute('aTrail', new THREE.BufferAttribute(tr, 1));
+      g.setAttribute('aWood', new THREE.BufferAttribute(wd, 1));
+      g.setAttribute('aTuv', new THREE.BufferAttribute(tuv, 2));
       g.setIndex(idx);
       g.computeVertexNormals();
       // make sure normals point up (row order may flip winding)
@@ -642,23 +656,32 @@ function makeProps(world, T) {
   const postGeo = new THREE.CylinderGeometry(0.035, 0.04, 1.1, 6); postGeo.translate(0, 0.55, 0);
   const postMat = new THREE.MeshStandardMaterial({ color: 0xe8e2d0, roughness: 0.8 });
   const posts = [], tapes = [];
-  for (const path of world.routes) for (let i = path.start + 15; i < path.finish - 5; i += 6) {
-    const a = Math.atan2(path.tx[i + 6] || 0, path.tz[i + 6] || 1) - Math.atan2(path.tx[i], path.tz[i]);
-    const turn = Math.abs(a) > 0.08;
-    if (!turn) continue;
-    const side = a > 0 ? -1 : 1;           // outside of the turn
-    const w = path.halfW(i) + 1.6;
-    const mk = j => { const x = path.x[j] + path.tz[j] * w * side, z = path.z[j] - path.tx[j] * w * side; return new THREE.Vector3(x, world.height(x, z), z); };
-    const p0 = mk(i), p1 = mk(i + 6);
+  const tapeGeos = [];
+  const offTrail = (x, z) => { const t = world.trailAt(x, z); return t.i < 0 || t.d > world.routes[t.r].halfW(t.i) + 2.6; };
+  for (const path of world.routes) for (let i = path.start + 15; i < path.finish - 6; i += 4) {
+    const a = Math.atan2(path.tx[i + 4] || 0, path.tz[i + 4] || 1) - Math.atan2(path.tx[i], path.tz[i]);
+    if (Math.abs(a) < 0.05) continue;
+    const side = a > 0 ? -1 : 1;           // outside of the turn, beyond the top of the berm
+    const mk = j => { const w = path.halfW(j) + 3.9; const x = path.x[j] + path.tz[j] * w * side, z = path.z[j] - path.tx[j] * w * side; return new THREE.Vector3(x, world.height(x, z), z); };
+    const p0 = mk(i), p1 = mk(i + 4), pm = p0.clone().add(p1).multiplyScalar(0.5);
+    if (!offTrail(p0.x, p0.z) || !offTrail(p1.x, p1.z) || !offTrail(pm.x, pm.z)) continue;   // never across a trail (e.g. where the routes cross)
     posts.push(p0, p1);
-    // tape between them
     const dir = p1.clone().sub(p0), len = dir.length();
     const tg = new THREE.PlaneGeometry(len, 0.08);
     { const uva = tg.attributes.uv; for (let q = 0; q < uva.count; q++) uva.setX(q, uva.getX(q) * len / 0.8); }
-    const tm = new THREE.Mesh(tg, tapeMat);
-    tm.position.copy(p0).add(p1).multiplyScalar(0.5); tm.position.y += 0.9;
-    tm.rotation.y = Math.atan2(-dir.z, dir.x);
-    group.add(tm); tapes.push(tm);
+    const xa = dir.clone().normalize(), za = new THREE.Vector3().crossVectors(xa, new THREE.Vector3(0, 1, 0)).normalize(), ya = new THREE.Vector3().crossVectors(za, xa);
+    tg.applyMatrix4(new THREE.Matrix4().makeBasis(xa, ya, za).setPosition(pm.x, pm.y + 0.9, pm.z));
+    tapeGeos.push(tg);
+  }
+  if (tapeGeos.length) { const tm = new THREE.Mesh(mergeGeos(tapeGeos), tapeMat); group.add(tm); tapes.push(tm); }
+  // hoops to fly through
+  const hoopMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, emissive: 0xff5a00, emissiveIntensity: 0.9, roughness: 0.4 });
+  for (const h of world.hoops) {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(h.r, 0.09, 8, 36), hoopMat); ring.castShadow = true; g.add(ring);
+    for (const sx of [-1, 1]) { const ph = h.y - h.ground + 0.3; const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, ph, 8), pole); pl.position.set(sx * (h.r + 0.05), -ph / 2, 0); pl.castShadow = true; g.add(pl); }
+    g.position.set(h.x, h.y, h.z); g.rotation.y = h.yaw;
+    group.add(g);
   }
   if (posts.length) {
     const im = new THREE.InstancedMesh(postGeo, postMat, posts.length);

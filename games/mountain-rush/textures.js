@@ -197,6 +197,21 @@ export function makeTextures(size = 512, B) {
     for (let i = 0; i < 5; i++) twig(128 + (r() - 0.5) * 30, 250, -Math.PI / 2 + (r() - 0.5) * 1.2, 50 + r() * 20, 0);
   });
 
+  // ---- wooden planks (decks, ramps, plank berms): boards running across, gaps, grain, nails
+  {
+    const S2 = 512, c = canvas(S2), g = c.getContext('2d'), r = rng(91);
+    const boards = 6, bh = S2 / boards;
+    for (let b = 0; b < boards; b++) {
+      const tone = 0.82 + r() * 0.3;
+      g.fillStyle = `rgb(${Math.round(150 * tone)},${Math.round(112 * tone)},${Math.round(72 * tone)})`; g.fillRect(0, b * bh, S2, bh);
+      for (let k = 0; k < 26; k++) { g.strokeStyle = `rgba(70,45,25,${0.08 + r() * 0.14})`; g.lineWidth = 1 + r() * 1.5; const y = b * bh + 4 + r() * (bh - 8); g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(S2 * 0.3, y + (r() - 0.5) * 8, S2 * 0.7, y + (r() - 0.5) * 8, S2, y); g.stroke(); }
+      g.fillStyle = 'rgba(30,20,12,.85)'; g.fillRect(0, b * bh, S2, 4);                    // gap between boards
+      g.fillStyle = 'rgba(255,240,210,.12)'; g.fillRect(0, b * bh + 4, S2, 3);
+      g.fillStyle = 'rgba(40,40,45,.8)'; for (const x of [30, S2 - 30, S2 / 2]) { g.beginPath(); g.arc(x + (r() - 0.5) * 6, b * bh + bh / 2, 3.5, 0, 7); g.fill(); }
+    }
+    T.planks = toTex(c);
+  }
+
   // ---- soft round puff (dust)
   {
     const c = canvas(64), g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);

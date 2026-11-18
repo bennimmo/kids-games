@@ -62,7 +62,7 @@ export function mount(stage) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // ---------------------------------------------------------------- state
-  const S = { phase: 'loading', paused: false, map: MAPS[prefs.map] ? prefs.map : 'pine-ridge', time: 0, timing: false, score: 0, cp: 0, gate: null, finished: false, crashT: 0, msgT: 0, combo: null, hideUI: false, route: 0 };
+  const S = { phase: 'loading', paused: false, map: MAPS[prefs.map] ? prefs.map : 'pine-ridge', time: 0, timing: false, score: 0, cp: 0, gate: null, finished: false, crashT: 0, msgT: 0, combo: null, hideUI: false, route: 0, hoopsDone: new Set() };
   let alive = true, raf = 0, W = null, scene = null, bike = null, rider = null, Q = QUALITY[prefs.quality] || QUALITY.high;
   const camera = new THREE.PerspectiveCamera(70, 1, 0.08, 600);
   let inviteCode = takeJoinCode('mountain-rush');
@@ -457,7 +457,7 @@ export function mount(stage) {
   function restartRun(keepRace) {
     if (!keepRace) { S.racing = false; S.raceT = 0; }
     placeAt(rider, W, W.start);
-    S.time = 0; S.timing = false; S.score = 0; S.cp = 0; S.gate = null; S.finished = false; S.crashT = 0; S.combo = null; S.route = 0;
+    S.hoopsDone = new Set(); S.time = 0; S.timing = false; S.score = 0; S.cp = 0; S.gate = null; S.finished = false; S.crashT = 0; S.combo = null; S.route = 0;
     snapCamera();
     if (H.score) { H.score.textContent = '0'; H.cp.textContent = `CP 0/${W.checkpoints.length - 1}`; }
     if (S.phase === 'ride' || S.phase === 'done') { S.phase = 'ride'; if (ui.querySelector('.ui-overlay')) buildHUD(), hudRefs(); }
@@ -785,6 +785,13 @@ export function mount(stage) {
       }
       if (!S.finished && !rider.crashed && rider.progress >= W.routes[rider.route].finish) { bankCombo(); finishRun(); showMsg(`Finish! ${fmt(S.time)}`, 3); }
       if (rider.route !== S.route && rider.onTrail) { S.route = rider.route; if (H.route) { H.route.textContent = W.routes[S.route].name; H.route.classList.add('show'); routeHide = 2; } }
+      // hoops: fly through one for a bonus
+      for (let hi = 0; hi < W.hoops.length; hi++) {
+        if (S.hoopsDone.has(hi) || rider.crashed) continue;
+        const h = W.hoops[hi], rx = rider.pos.x - h.x, ry = rider.pos.y + 0.9 - h.y, rz = rider.pos.z - h.z;
+        const along = rx * Math.sin(h.yaw) + rz * Math.cos(h.yaw), side = rx * Math.cos(h.yaw) - rz * Math.sin(h.yaw);
+        if (Math.abs(along) < 0.9 && Math.hypot(side, ry) < h.r) { S.hoopsDone.add(hi); addCombo(['Hoop!'], 500); showTrick(['🔥 Through the hoop!'], 500, ''); snd('combo'); }
+      }
       // combo timer runs while you're riding on the ground (manuals keep it going)
       if (S.combo && rider.ground && !rider.crashed && !rider.manual) { S.combo.t -= dt; if (S.combo.t <= 0) bankCombo(); }
       emitDust(dt);

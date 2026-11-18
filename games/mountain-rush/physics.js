@@ -150,7 +150,12 @@ function groundStep(b, world, inp, dt, popNow) {
   const pumpA = inp.pump && f.y < -0.03 ? clamp(-f.y * 6, 0, 1) * 1.6 : 0;
   let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1);
   vF += a * dt;
-  if (b.brake > 0) { const bd = b.brake * 8 * dt; vF = Math.abs(vF) <= bd ? 0 : vF - Math.sign(vF) * bd; }
+  if (b.brake > 0) {
+    const bd = b.brake * 8 * dt;
+    if (vF > bd) vF -= bd;
+    else if (vF > -0.05 && b.brake > 0.5) vF = Math.max(vF - 2.5 * dt, -2);     // stopped and still braking: roll backwards (to get off a wall)
+    else if (vF < -2) vF = Math.min(-2, vF + bd);
+  }
   if (Math.abs(vF) < 0.05 && b.pedal === 0 && Math.abs(gF) < 0.6) vF = 0;   // stop on gentle bits
 
   // sideways: grip, or slide (drift) when asking too much
