@@ -9,3 +9,8 @@ colour-graded for the game.
 - Wood and metal: wood_planks, pine_bark, rusty_metal_02
 - Fir bough: twig texture from the fir_tree_01 model
 - Skies: kloofendal_48d_partly_cloudy_puresky, kloofendal_43d_clear_puresky, snow_field_puresky
+
+Scanned models (Poly Haven, CC0), reduced to a few hundred triangles each: rock_07, rock_moss_set_01,
+namaqualand_boulder_02, tree_stump_01, fern_02, old_tyre, covered_car.
+
+Loaders and screen effects in `js/vendor/three-addons` are from the three.js examples (MIT).

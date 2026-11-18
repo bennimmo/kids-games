@@ -314,8 +314,15 @@ export function createScene(world, T, Q) {
       groups.push({ meshes, ...centre(k), far: 40 });
     }
   }
-  for (const [k, list] of bucket(world.rocks, () => 'rock')) {
-    const meshes = instance([{ geo: rockGeo, mat: rockMat, shadow: true }], list, r => { e.set(r.tilt * 0.5, r.rot, r.tilt * 0.3); q.setFromEuler(e); sc.set(r.s * 1.2, r.s * 0.75, r.s); p.set(r.x, r.y - r.s * 0.25, r.z); });
+  // scanned rocks on mid/high (a few different ones per map), the built-in lump otherwise
+  const MD = T.models || {};
+  const rockVars = (B.terrace ? [...(MD.rocksRed || []), ...(MD.rocksRed || []), ...(MD.rocks || [])] : B.snow ? [...(MD.rocks || [])] : [...(MD.rocksMoss || []), ...(MD.rocks || [])]);
+  if (B.snow) for (const v of rockVars) { v.mat = v.mat.clone(); v.mat.color.set(0xdfe6ee); }
+  for (const [k, list] of bucket(world.rocks, r => 'rock' + (rockVars.length && r.s > 0.26 ? Math.floor(r.rot * 7.31) % rockVars.length : 'p'))) {       // (pebbles stay as the simple lump)
+    const V = rockVars.length ? rockVars[+k.split('|')[0].slice(4)] : null;
+    const meshes = V
+      ? instance([{ geo: V.geo, mat: V.mat, shadow: true }], list, r => { e.set(r.tilt * 0.25, r.rot, r.tilt * 0.15); q.setFromEuler(e); sc.set(r.s * 1.2, r.s * 1.05, r.s * 1.2); p.set(r.x, r.y, r.z); })
+      : instance([{ geo: rockGeo, mat: rockMat, shadow: true }], list, r => { e.set(r.tilt * 0.5, r.rot, r.tilt * 0.3); q.setFromEuler(e); sc.set(r.s * 1.2, r.s * 0.75, r.s); p.set(r.x, r.y - r.s * 0.25, r.z); });
     groups.push({ meshes, ...centre(k), far: 90 });
   }
 
@@ -537,7 +544,8 @@ function makePlantKinds(T, B) {
   if (need.has('fern')) {
     const cards = [];
     for (let i = 0; i < 6; i++) { const pg = new THREE.PlaneGeometry(0.5, 1.1); pg.translate(0, 0.55, 0); pg.rotateX(-0.75 - r() * 0.3); pg.rotateY(i / 6 * 6.28 + r() * 0.4); cards.push(pg); }
-    K.fern = [{ geo: puffNormals(mergeGeos(cards), 0), mat: cardMaterial(T.fern), shadow: false, tint: true }];
+    const FM = T.models && T.models.fern && T.models.fern[0];
+    K.fern = FM ? [{ geo: FM.geo.clone().scale(0.8, 0.8, 0.8), mat: FM.mat, shadow: false, tint: false }] : [{ geo: puffNormals(mergeGeos(cards), 0), mat: cardMaterial(T.fern), shadow: false, tint: true }];
   }
   if (need.has('bush')) K.bush = [{ geo: puffNormals(mergeGeos(cardBall(0.5, 9, 0, 0.45, 0, 0.9, r)), 0.4), mat: cardMaterial(T.leaves), shadow: false, tint: true }];
   if (need.has('snowbush')) K.snowbush = [{ geo: puffNormals(mergeGeos(cardBall(0.5, 9, 0, 0.4, 0, 0.9, r)), 0.4), mat: cardMaterial(T.branchSnow), shadow: false }];
@@ -811,8 +819,11 @@ function makeProps(world, T) {
   { const box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 12), ball = new THREE.SphereGeometry(1, 12, 9), cone = new THREE.ConeGeometry(1, 1, 10);
     const M = (color, rough = 0.8, metal = 0.1) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
     const glass = M(0x1c2428, 0.25, 0.4), tyre = M(0x17171a, 0.95, 0), steel = M(0x4a4e55, 0.6, 0.5), snowM = M(0xf4f8fb, 0.9, 0), coal = M(0x15151a, 0.9, 0), carrot = M(0xf07a1c, 0.7, 0);
-    const bark = M(0x6b4a2c, 0.95, 0), cut = M(0xd2ad6e, 0.9, 0), red = M(0xb3261e, 0.6, 0.25), orange = M(0xf08a1a, 0.6, 0.2), yellow = M(0xf2c318, 0.65, 0.15), white = M(0xf2f2f2, 0.7, 0), green = M(0x4f8a3a, 0.85, 0), bone = M(0xe9e2cf, 0.8, 0), straw = M(0xd8b655, 0.95, 0);
-    const paints = [0x8c3b24, 0x4f6a78, 0xb08a2e, 0x6d7a55].map(c => M(c, 0.8, 0.25));
+    const bark = T.photo ? new THREE.MeshStandardMaterial({ map: T.bark, color: 0xc9b8a4, roughness: 0.95 }) : M(0x6b4a2c, 0.95, 0), cut = M(0xd2ad6e, 0.9, 0);
+    // vehicle paint: glossy with a clear coat on mid/high, and old rusty panels for the wrecks
+    const paint = c => T.photo ? new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.45, metalness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.3 }) : M(c, 0.6, 0.2);
+    const red = paint(0xb3261e), orange = paint(0xf08a1a), yellow = T.photo && T.rust ? new THREE.MeshStandardMaterial({ map: T.rust, color: 0xf2c84a, roughness: 0.75, metalness: 0.2 }) : paint(0xf2c318), white = M(0xf2f2f2, 0.7, 0), green = M(0x4f8a3a, 0.85, 0), bone = M(0xe9e2cf, 0.8, 0), straw = M(0xd8b655, 0.95, 0);
+    const paints = [0x8c3b24, 0x4f6a78, 0xb08a2e, 0x6d7a55].map(c => T.photo && T.rust ? new THREE.MeshStandardMaterial({ map: T.rust, color: c, roughness: 0.8, metalness: 0.25 }) : M(c, 0.8, 0.25));
     const HP = Math.PI / 2;
     for (const c of world.cars || []) {
       const s = Math.sin(c.yaw), co = Math.cos(c.yaw);
@@ -828,7 +839,9 @@ function makeProps(world, T) {
         for (const sd of [-1, 1]) at(bark, box, lx + sd * 0.55 * k, 1.12 * k, lz, 0.5 * k, 0.03, 0.03, 0, 0);
         if (hat) { at(coal, cyl, lx, 1.68 * k, lz, 0.3 * k, 0.03, 0.3 * k); at(coal, cyl, lx, 1.83 * k, lz, 0.19 * k, 0.28 * k, 0.19 * k); } };
       const k = c.kind;
-      if (k === 'car') { const body = paints[Math.floor(c.tint * 4) % 4], q = HP;        // lies across the gap
+      const CM = T.models && T.models.car && T.models.car[0], TM = T.models && T.models.tyre && T.models.tyre[0];
+      if (k === 'car' && CM) at(CM.mat, CM.geo, 0, 0, 0, 4.4, 4.4, 4.4, 0, HP);        // a car under a tarpaulin (scanned)
+      else if (k === 'car') { const body = paints[Math.floor(c.tint * 4) % 4], q = HP;        // lies across the gap
         const a2 = (mat, geo, lx, ly, lz, sx, sy, sz) => put(mat, geo, c.x + lz * co + lx * -s, c.y + ly, c.z - lz * s - lx * co, c.yaw + q, sx, sy, sz);
         a2(body, box, 0, 0.5, 0, 1.72, 0.52, 4.1); a2(body, box, 0, 0.3, 2.0, 1.6, 0.2, 0.25); a2(body, box, 0, 0.3, -2.0, 1.6, 0.2, 0.25);
         a2(glass, box, 0, 0.98, -0.25, 1.5, 0.44, 1.95); a2(body, box, 0, 1.24, -0.25, 1.56, 0.08, 2.0);
@@ -855,6 +868,7 @@ function makeProps(world, T) {
       else if (k === 'logpile') { for (const lz of [-0.6, 0, 0.6]) logAcross(0.3, lz, 0.3, c.side ? 2.6 : 3.8); for (const lz of [-0.3, 0.3]) logAcross(0.82, lz, 0.29, c.side ? 2.6 : 3.8); if (!c.side) logAcross(1.0, 0, 0.2, 3.6); }
       else if (k === 'log') logAcross(0.02, 0, 0.3, c.len);
       else if (k === 'snowman') snowman(0, 0, 0.9 + c.tint * 0.3, c.tint > 0.5);
+      else if (k === 'tyres' && TM) { for (let q = 0; q < 3; q++) at(TM.mat, TM.geo, (q % 2) * 0.04, q * TM.h * 0.4, 0, 0.4, 0.4, 0.4, 0, q * 0.7); at(TM.mat, TM.geo, 0.85, 0, 0.25, 0.4, 0.4, 0.4, 0, 1.1); }
       else if (k === 'tyres') { for (let q = 0; q < 3; q++) at(tyre, cyl, 0, 0.13 + q * 0.26, 0, 0.42, 0.25, 0.42); at(tyre, cyl, 0.75, 0.4, 0.2, 0.42, 0.25, 0.42, HP, 0.4); }
       else if (k === 'cones') for (const [lx, lz] of [[0, 0], [0.7, 0.5], [-0.5, 0.8]]) { at(orange, cone, lx, 0.36, lz, 0.2, 0.7, 0.2); at(white, cyl, lx, 0.4, lz, 0.115, 0.1, 0.115); at(orange, box, lx, 0.02, lz, 0.5, 0.04, 0.5); }
       else if (k === 'haybale') { at(straw, cyl, 0, 0.6, 0, 0.6, 1.2, 0.6, HP, HP); at(straw, box, 1.0, 0.25, 0.6, 1.0, 0.5, 0.5, 0, 0.5); }
@@ -866,7 +880,8 @@ function makeProps(world, T) {
   { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
     const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);
     const topMat = new THREE.MeshStandardMaterial({ color: 0xc9a66b, roughness: 0.85 });
-    for (const st of world.stumps) { put(wood, g1, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); put(topMat, g2, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); } }
+    const SM = T.models && T.models.stump && T.models.stump[0];
+    for (const st of world.stumps) { if (SM) put(SM.mat, SM.geo, st.x, st.y, st.z, st.x, st.s * 0.46, st.s * 0.46, st.s * 0.46); else { put(wood, g1, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); put(topMat, g2, st.x, st.y - 0.05, st.z, st.x, st.s, st.s, st.s); } } }
   // arrow boards on sharp turns, warning signs before the tricky bits
   { const arrow = dir => signTex(g => { g.fillStyle = '#ffd400'; g.fillRect(0, 0, 128, 128); g.fillStyle = '#111'; g.lineWidth = 6; g.strokeStyle = '#111'; g.strokeRect(3, 3, 122, 122);
       g.translate(64, 64); g.scale(dir, 1); for (const o of [-26, 14]) { g.beginPath(); g.moveTo(o + 22, -40); g.lineTo(o - 14, 0); g.lineTo(o + 22, 40); g.lineTo(o + 4, 40); g.lineTo(o - 32, 0); g.lineTo(o + 4, -40); g.fill(); } });

@@ -16,6 +16,28 @@ import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
 import { makeTextures, loadPhotoTextures } from './textures.js';
+import { loadModels } from './models.js';
+import { EffectComposer } from '../../js/vendor/three-addons/EffectComposer.js';
+import { RenderPass } from '../../js/vendor/three-addons/RenderPass.js';
+import { ShaderPass } from '../../js/vendor/three-addons/ShaderPass.js';
+import { UnrealBloomPass } from '../../js/vendor/three-addons/UnrealBloomPass.js';
+import { OutputPass } from '../../js/vendor/three-addons/OutputPass.js';
+
+// the final "camera" look on mid/high: a little contrast and colour, warm lights / cool shadows, darker corners
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uVig: { value: 0.32 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig; varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, 1.12);                                             // a touch more colour
+      c *= mix(vec3(0.94, 0.98, 1.06), vec3(1.05, 1.0, 0.94), smoothstep(0.0, 0.7, l));   // cool shadows, warm lights
+      c = mix(c, c * c * (3.0 - 2.0 * c) , 0.18 * step(l, 1.0));              // gentle contrast (only on the normal range)
+      vec2 q = vUv - 0.5; c *= 1.0 - uVig * smoothstep(0.25, 0.95, dot(q, q) * 2.2);
+      gl_FragColor = vec4(max(c, 0.0), 1.0);
+    }`,
+};
 import { createOnline } from './online.js';
 import { togetherButton, takeJoinCode } from '../../js/engine/together.js';
 import { clamp, lerp } from '../sky-pilot/noise.js';
@@ -111,12 +133,13 @@ export function mount(stage) {
     W = buildWorld(S.map);
     loadingUI('Painting the ground', 0.3); await tick();
     const tKey = W.biome + (Q.name === 'low' ? ':painted' : ':photo');
-    if (!T || tBiome !== tKey) { if (T) Object.values(T).forEach(t => t && t.dispose && t.dispose()); T = makeTextures(TOUCH ? 512 : 1024, W.B); if (Q.name !== 'low') await loadPhotoTextures(T, W.biome, W.B); tBiome = tKey; envTex = null; }
+    if (!T || tBiome !== tKey) { if (T) Object.values(T).forEach(t => t && t.isTexture && t.dispose()); T = makeTextures(TOUCH ? 512 : 1024, W.B); if (Q.name !== 'low') { await loadPhotoTextures(T, W.biome, W.B); T.models = await loadModels(); } tBiome = tKey; envTex = null; }
     if (!alive) return;
     loadingUI('Growing the forest', 0.5); await tick();
     if (scene) disposeScene(scene.scene);
     renderer.shadowMap.enabled = Q.shadows > 0;
     scene = createScene(W, T, Q);
+    setupPost();
     envTex = makeEnv();
     scene.scene.environment = scene.photoSky ? envTex : null;      // the photo sky lights the whole world softly
     if (bike) bike.dispose && bike.dispose();
@@ -842,7 +865,7 @@ export function mount(stage) {
     scene.update(dt, camera, rider.pos);
     updateHUD(dt);
     updateAudio(dt);
-    renderer.render(scene.scene, camera);
+    if (composer) composer.render(); else renderer.render(scene.scene, camera);
   }
   function handleEvents() {
     for (const e of rider.events) {
@@ -897,10 +920,24 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- size
+  // mid/high draw through a short chain of screen effects; low draws straight to the screen
+  let composer = null;
+  function setupPost() {
+    if (composer) { composer.dispose(); composer = null; }
+    if (Q.name === 'low' || !renderer.capabilities.isWebGL2) return;
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const rt = new THREE.WebGLRenderTarget(Math.max(4, size.x), Math.max(4, size.y), { type: THREE.HalfFloatType, samples: Q.name === 'high' ? 4 : 2 });
+    composer = new EffectComposer(renderer, rt);
+    composer.addPass(new RenderPass(scene.scene, camera));
+    if (Q.name === 'high') composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.16, 0.6, 0.92));     // sun glow on bright things
+    composer.addPass(new ShaderPass(GradeShader));
+    composer.addPass(new OutputPass());
+  }
   function resize() {
     const w = root.clientWidth || innerWidth, h = root.clientHeight || innerHeight;
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, Q.dpr));
     renderer.setSize(w, h, false);
+    if (composer) { composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); }
     camera.aspect = w / h; camera.updateProjectionMatrix();
     if (scene) scene.dust.setScale(h * renderer.getPixelRatio() * 0.6);
   }
@@ -916,7 +953,7 @@ export function mount(stage) {
 
   // testing hook
   if (PARAMS.has('mrtest')) window.__mr = {
-    S, get rider() { return rider; }, get W() { return W; }, get scene() { return scene; }, startRide, keys, camera, online, menu,
+    S, get rider() { return rider; }, get W() { return W; }, get T() { return T; }, get scene() { return scene; }, startRide, keys, camera, online, menu,
     // run the game for `sec` seconds with fixed inputs, without waiting for frames (for tests)
     sim(sec, inp = {}, stopWhen) {
       const full = { steer: 0, throttle: 0, jump: false, ...inp };
