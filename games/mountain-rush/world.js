@@ -89,7 +89,7 @@ export function buildWorld(mapId = 'pine-ridge') {
   pullB(Bl.yc);
   Bl.yc = gradeFix(Bl.yc, pullB);
   Bl.yc = blur(Bl.yc, 4);        // no sudden steps where the nearest point on A jumps
-  A.busy = Float32Array.from(AtoB.nd, (d, i) => (A.z[i] > 150 && A.z[i] < L - 250 && d < 13 ? 1 : 0));   // A keeps features where the lines share
+  A.busy = Float32Array.from(AtoB.nd, (d, i) => (d < 13 && ((A.z[i] > 150 && A.z[i] < L - 250) || d > 1.0) ? 1 : 0));   // A keeps features where the lines share
   Bl.busy = Float32Array.from(BtoA.nd, d => (d < 13 ? 1 : 0));
 
   // where the routes cross (at a decent angle): [{ i: [index on A, index on B], gap, jumper }]
@@ -259,9 +259,13 @@ export function buildWorld(mapId = 'pine-ridge') {
       for (const f of feats) for (let j = Math.max(0, Math.floor(f.s - 9)); j < Math.min(N, f.end + 11); j++) used[j] = 1;
       // where the two routes run together as one trail, route A owns the features; where they cross, nobody builds
       const oth = ri ? A : Bl, oi = ri ? BtoA.ni : AtoB.ni;
+      // (where they run side by side a few metres apart, only gentle full-width shapes: a raised deck on one
+      //  would be a wall or a surprise launch ramp for the rider on the other)
+      const braid = new Uint8Array(N);
       for (let j = 0; j < N; j++) {
         const par = Math.abs(ln.tx[j] * oth.tz[oi[j]] - ln.tz[j] * oth.tx[oi[j]]) < 0.2;
         if (taken[j] || (otherD[j] < 9 && (ri === 1 || !par || otherD[j] > 4.5))) used[j] = 1;
+        if (otherD[j] < 11) braid[j] = 1;
       }
       let fk = ri;
       for (let s0 = START + 28; s0 < FINISH - 50; s0++) {
@@ -273,6 +277,10 @@ export function buildWorld(mapId = 'pine-ridge') {
           const s = Math.round(s0 + pitch * q + (pitch - 20) / 2);
           let c = 0; for (let j = s; j < s + 20; j++) c = Math.max(c, Math.abs(ln.curvS[j]));
           let kind = ['ladder', 'rockroll', 'creek', 'rollin'][fk++ % 4];
+          let near2 = 0; for (let j = Math.max(0, s - 14); j < Math.min(N, s + 34); j++) near2 |= braid[j];
+          if (near2) kind = fk % 3 === 1 ? 'creek' : 'rollers';
+          // on a steep pitch any bump is a launch ramp: only a dip there
+          if ((ln.yc[Math.max(0, s - 12)] - ln.yc[Math.min(N - 1, s + 20)]) / 32 > 0.2) { if (fk % 2) continue; kind = 'creek'; }
           if (c > 0.03 && kind !== 'rockroll' && kind !== 'creek') kind = c > 0.05 ? 'rollers' : 'rockroll';
           let f;
           if (kind === 'ladder') f = { kind, s, len: 16 };
@@ -426,7 +434,10 @@ export function buildWorld(mapId = 'pine-ridge') {
       return { hN, hW, jump, rough, wood, stone, deck };
     };
     const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.05 + ST.width + Math.min(1.2, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 45) + lerp(widen[i0], widen[i1], f); };
-    return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm, zones: ln.zones, zoneIdx };
+    // where the other route comes alongside or merges in, no berm walls or banking: they'd be a launch ramp for it
+    const mergeD = ri ? BtoA.nd : AtoB.nd;
+    const merge = blur(Float32Array.from(mergeD, d => (d > 0.8 && d < 13 ? 1 : 0)), 7);
+    return { merge, id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm, zones: ln.zones, zoneIdx };
   });
 
   // ---------------------------------------------------------------- ground shape near a route
@@ -446,11 +457,12 @@ export function buildWorld(mapId = 'pine-ridge') {
     const c = lerp(R.curvS[i0], R.curvS[i1], fr);
     // berm: the outside of the turn rises. Plank berms are taller and steeper.
     const wb = lerp(R.woodBerm[i0], R.woodBerm[i1], fr), outside = -c * Math.sign(d) > 0;
-    const bank = clamp(-c * Math.sign(d) * 85, 0, 2.1) * (1 + 0.45 * wb) * Math.pow(clamp(ad / (w + 2), 0, 1.25), 1.5 - 0.3 * wb);
+    const calm = 1 - 0.6 * clamp(lerp(R.merge[i0], R.merge[i1], fr) * 1.5, 0, 1);
+    const bank = calm * clamp(-c * Math.sign(d) * 85, 0, 2.1) * (1 + 0.45 * wb) * Math.pow(clamp(ad / (w + 2), 0, 1.25), 1.5 - 0.3 * wb);
     const f = R.featAt(sc, d);
     const wide = 1 - smooth(w - 0.2, w + 2.4, ad);
     // the whole trail tilts into the turn (like a banked track), so even the middle line holds you
-    const tilt = clamp(-c * 11, -0.32, 0.32) * clamp(d, -w - 1, w + 1) * wide;
+    const tilt = calm * clamp(-c * 11, -0.32, 0.32) * clamp(d, -w - 1, w + 1) * wide;
     const dish = -0.12 * (1 - smooth(0, w, ad));
     const wood = Math.max(f.wood, outside ? wb * smooth(1.5, 2.3, ad) * (1 - smooth(w + 2.3, w + 3.0, ad)) : 0);
     return { y: y + bank + tilt + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, deck: f.deck, stone: f.stone * (1 - smooth(w + 0.6, w + 1.6, ad)), shaped: Math.min(1, Math.abs(f.hN) * 2), rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
@@ -599,6 +611,12 @@ export function buildWorld(mapId = 'pine-ridge') {
 
   // ---------------------------------------------------------------- trees, plants, logs, rocks
   const trees = [], rocks = [], plants = [], logs = [];
+  // loose stones kicked to the edges of the trail, all the way down
+  for (const R of routes) for (let i = R.start + 6; i < R.finish - 4; i += 1 + Math.floor(r() * 3)) {
+    const w = R.halfW(i), d = (r() < 0.5 ? -1 : 1) * (w - 0.35 + r() * 1.1), x = R.x[i] + R.tz[i] * d, z = R.z[i] - R.tx[i] * d;
+    const sh = shape(x, z, cellId(x, z), {}, false); if (sh.wood > 0.2 || Math.abs(sh.h - sh.hv) > 0.05) continue;
+    rocks.push({ x, z, y: sh.h, s: 0.07 + r() * r() * 0.3, rot: r() * 6.3, tilt: r() });
+  }
   const clearOf = (x, z, extra) => {
     const t = trailAt(x, z);
     if (t.i < 0) return true;

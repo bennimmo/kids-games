@@ -91,25 +91,39 @@ export function createScene(world, T, Q) {
         vec3 rock = texture2D(tRock, vWPos.xz * 0.09).rgb * an.y + texture2D(tRock, vWPos.xy * 0.09).rgb * an.z + texture2D(tRock, vWPos.zy * 0.09).rgb * an.x;
         float slope = 1. - vWNrm.y;
         gRockW = smoothstep(0.33, 0.55, slope);
-        gDirtW = smoothstep(0.12, 0.7, vTrail);
+        gDirtW = smoothstep(0.12, 0.7, vTrail + (texture2D(tGrass, wp * 0.33).r - 0.5) * 0.5 * smoothstep(0.02, 0.3, vTrail) * (1.0 - smoothstep(0.75, 1.0, vTrail)));     // ragged edges: grass creeps in, dirt spills out
         // darker worn line in the middle of the trail
         dirt *= mix(1.0, 0.82, smoothstep(0.85, 1.0, vTrail));
-        // the trail changes as you go: damp dark patches, pale dusty hardpack, leaf litter, gravelly bits
+        // the trail changes as you go: damp dark patches, pale dusty hardpack, leaf litter, gravel, stones set in the dirt
         {
           float v1 = texture2D(tFloor, wp * 0.0131 + 0.21).r, v2 = texture2D(tGrass, wp * 0.0093 + 0.6).g, v3 = texture2D(tRock, wp * 0.017).r;
-          dirt *= mix(1.0, 0.66, smoothstep(0.52, 0.7, v1));                                  // damp
-          vec3 dusty = vec3(dot(dirt, vec3(0.34))) * vec3(1.12, 1.04, 0.92) * 1.25;
-          dirt = mix(dirt, dusty, smoothstep(0.5, 0.72, v2) * 0.6);                           // dry hardpack
-          dirt = mix(dirt, forest * 0.9, smoothstep(0.56, 0.7, v3) * smoothstep(0.45, 0.62, texture2D(tFloor, wp * 0.31).g) * 0.75);   // litter
+          float fine = texture2D(tDirt, wp * 0.9).g;
+          dirt *= 0.86 + 0.3 * fine;                                                          // fine grain close up
+          dirt *= mix(1.0, 0.56, smoothstep(0.5, 0.66, v1));                                  // damp
+          vec3 dusty = vec3(dot(dirt, vec3(0.34))) * vec3(1.14, 1.04, 0.9) * 1.3;
+          dirt = mix(dirt, dusty, smoothstep(0.48, 0.66, v2) * 0.85);                         // dry hardpack
+          dirt = mix(dirt, forest * 0.9, smoothstep(0.52, 0.66, v3) * smoothstep(0.4, 0.6, texture2D(tFloor, wp * 0.31).g) * 0.9);   // litter
           float peb = texture2D(tRock, wp * 0.83).r * texture2D(tRock, wp * 0.37 + 0.5).g;
-          dirt = mix(dirt, vec3(0.62, 0.6, 0.57) * (0.7 + peb), smoothstep(0.3, 0.42, peb) * smoothstep(0.42, 0.6, 1.0 - v1) * 0.7);    // gravel
+          dirt = mix(dirt, vec3(0.62, 0.6, 0.57) * (0.7 + peb), smoothstep(0.3, 0.42, peb) * smoothstep(0.42, 0.6, 1.0 - v1) * 0.8);    // gravel
+          // stones set in the trail: pebbles everywhere, a bigger one now and then
+          for (int k = 0; k < 2; k++) {
+            float sc2 = k == 0 ? 3.1 : 0.85; vec2 gp = wp * sc2 + float(k) * 17.3, id = floor(gp), fr = fract(gp);
+            float h1 = fract(sin(dot(id, vec2(127.1, 311.7))) * 43758.5453), h2 = fract(sin(dot(id, vec2(269.5, 183.3))) * 43758.5453), h3 = fract(h1 * 91.7 + h2 * 37.3);
+            float rad = (k == 0 ? 0.07 : 0.12) + 0.13 * h1, dd = length(fr - vec2(0.3 + 0.4 * h1, 0.3 + 0.4 * h2)) / rad;
+            float patchy = smoothstep(0.3, 0.5, texture2D(tRock, wp * 0.047 + float(k) * 0.3).r);        // stones come in patches, not everywhere
+            float has = step(k == 0 ? 0.5 : 0.84, h3) * patchy, on = has * (1.0 - smoothstep(0.7, 1.0, dd));
+            vec3 stone = mix(dirt * 1.2, mix(vec3(0.42, 0.41, 0.39), vec3(0.6, 0.58, 0.54), h1), 0.6) * (1.1 - 0.4 * dd * dd) * (0.8 + 0.4 * fine);
+            dirt = mix(dirt * (1.0 - 0.25 * has * (1.0 - smoothstep(1.0, 1.3, dd))), stone, on);
+          }
         }
         #ifdef RIBBON
         {
           // tyre lines wandering down the trail, and a rain rut here and there
           float wob = sin(vTuv.x * 0.21) * 0.45 + sin(vTuv.x * 0.057 + 1.3) * 0.5;
           float line1 = exp(-pow((vTuv.y - wob) / 0.2, 2.0)), line2 = exp(-pow((vTuv.y - wob * 0.4 + 0.9) / 0.16, 2.0));
-          dirt *= 1.0 - 0.2 * line1 - 0.13 * line2;
+          dirt *= 1.0 - 0.3 * line1 - 0.2 * line2;
+          // braking bumps and little cross ripples here and there
+          dirt *= 1.0 - 0.14 * smoothstep(0.2, 1.0, sin(vTuv.x * 5.2 + sin(vTuv.y * 1.3))) * smoothstep(0.5, 0.9, sin(vTuv.x * 0.071 + 0.7));
           float rut = exp(-pow((vTuv.y + 1.1 - sin(vTuv.x * 0.13) * 0.5) / 0.07, 2.0)) * smoothstep(0.3, 0.8, sin(vTuv.x * 0.043 + 2.0));
           dirt *= 1.0 - 0.38 * rut;
         }
