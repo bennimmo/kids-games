@@ -165,7 +165,9 @@ function groundStep(b, world, inp, dt, popNow) {
   // so you can rail it flat out without sliding
   const bankUp = s.y * Math.sign(vS || b.steer);              // > 0 when the ground rises on the side you're being pushed toward
   const berm = clamp(bankUp * 6, 0, 2.6);
-  const grip = (onDirt ? 10.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm);
+  // a steep side-slope that isn't holding you up as a berm: the tyres let go and you slip straight down it
+  const steepSide = berm < 0.5 ? clamp((Math.abs(s.y) - 0.42) * 5, 0, 1) : 0;
+  const grip = (onDirt ? 10.5 : 7.5) * world.B.grip * b.P.grip * n.y * (b.brake > 0.5 ? 0.75 : 1) * (1 + berm) * (1 - steepSide);
   const dv = grip * dt;
   const old = vS;
   vS = Math.abs(vS) <= dv ? 0 : vS - Math.sign(vS) * dv;
@@ -206,7 +208,8 @@ function groundStep(b, world, inp, dt, popNow) {
   b.pos.x += b.vel.x * dt; b.pos.y += b.vel.y * dt; b.pos.z += b.vel.z * dt;
   let h = world.height(b.pos.x, b.pos.z);
   // ran into a wall (the side of a jump, a step-up face): stop against it, don't pop up on top
-  if (h - b.pos.y > 0.35) { if (hitWall(b, world, ox, oy, oz)) return; h = world.height(b.pos.x, b.pos.z); }
+  // (a face steeper than about 63 degrees is a wall at any speed - no creeping up it)
+  if (h - b.pos.y > 0.35 || (h > oy + 0.015 && world.normal(b.pos.x, b.pos.z, tmpB).y < 0.45)) { if (hitWall(b, world, ox, oy, oz)) return; h = world.height(b.pos.x, b.pos.z); }
   const n2 = world.normal(b.pos.x, b.pos.z, tmpT);
   const into = dot(b.vel, n2);
   if (b.pos.y > h + 0.03 || (into > 0.3 && b.pos.y > h - 0.05)) {
@@ -320,7 +323,8 @@ function airStep(b, world, inp, dt) {
   // landing?
   let h = world.height(b.pos.x, b.pos.z);
   // flew into the side of something much higher than you: bump off it
-  if (h - b.pos.y > 0.5) { const px = b.pos.x - b.vel.x * dt, pz = b.pos.z - b.vel.z * dt; if (hitWall(b, world, px, b.pos.y, pz)) return; h = world.height(b.pos.x, b.pos.z); }
+  // (or came down onto a near-vertical face: you can't land on that, you bump off and keep falling)
+  if (h - b.pos.y > 0.5 || (b.pos.y <= h && b.air > 0.15 && world.normal(b.pos.x, b.pos.z, tmpB).y < 0.45)) { const px = b.pos.x - b.vel.x * dt, pz = b.pos.z - b.vel.z * dt, py = b.pos.y; if (hitWall(b, world, px, py, pz)) return; b.pos.y = Math.max(py, world.height(b.pos.x, b.pos.z)); h = world.height(b.pos.x, b.pos.z); }
   if (b.pos.y <= h) {
     // just left a lip and only brushing it: keep flying, don't count a landing
     const nn = world.normal(b.pos.x, b.pos.z, tmpT), hitV = -dot(b.vel, nn);

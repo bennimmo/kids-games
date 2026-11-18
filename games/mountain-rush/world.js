@@ -131,7 +131,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (const c of crossings) if (c.jumper === ri) {
       const i0 = c.i[ri], half = c.gap / 2;
       // a low, long take-off (keeps your speed) and a low landing (more hang time), so it clears at a normal pace
-      const f = { kind: 'kicker', s: i0 - half - 8, lk: 8, hk: 1.9, gap: c.gap, ll: 14, off: 0, flat: true, hoop: true, over: true, fw: 1.1, edge: 0.9 };
+      const f = { kind: 'kicker', s: i0 - half - 8, lk: 8, hk: 1.9, gap: c.gap, ll: 14, off: 0, flat: true, hoop: true, over: true, fw: 1.2, edge: 0.4 };
       f.hl = f.hk * 0.35; f.face = 1.2; f.end = f.s + f.lk + f.gap + f.ll + f.face; feats.push(f);
       for (let j = Math.max(0, Math.floor(f.s - 22)); j < Math.min(N, f.end + 16); j++) taken[j] = 1;
     }
@@ -207,7 +207,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
       woodBerm = blur(woodBerm, 3); }
     // sideways shape of a narrow feature: full height within `fw` of its centre line `c`, gone by fw + edge
-    const nar = (d, c = 0, fw = 1.35, edge = 1.25) => 1 - smooth(fw, fw + edge, Math.abs(d - c));
+    const nar = (d, c = 0, fw = 1.45, edge = 0.4) => 1 - smooth(fw, fw + edge, Math.abs(d - c));      // steep sides: off the edge = drop off, not a ramp to slide on
     const featAt = (sc, d) => {
       let hN = 0, hW = 0, jump = 0, rough = 0, wood = 0;
       for (const f of feats) {
@@ -269,7 +269,7 @@ export function buildWorld(mapId = 'pine-ridge') {
           else {
             const v = u - f.lk - f.gap;
             const hh = v < f.face ? lerp(low, f.hl, smooth(0, f.face, v)) : f.hl * (1 - smooth(0, 1, clamp((v - f.face) / f.ll, 0, 1)));   // back face, then the long landing
-            hN += hh * (f.off ? nar(d, f.off, 1.9, 1.6) : f.fw ? nar(d, 0, f.fw + 0.4, f.edge) : nar(d));
+            hN += hh * (f.off ? nar(d, f.off, 2.0, 0.5) : f.fw ? nar(d, 0, f.fw + 0.4, f.edge) : nar(d));
           }
           if (f.wood && u > -0.2 && u < f.lk + back) wood = Math.max(wood, nar(d, 0, 1.85, 0.25));
         } else if (f.kind === 'skinny') {
@@ -394,7 +394,11 @@ export function buildWorld(mapId = 'pine-ridge') {
   const exact = (x, z, out = {}) => shape(x, z, cellId(x, z), out, false);
   const normal = (x, z, out = {}) => {
     const e = 0.3;
-    const hx = height(x + e, z) - height(x - e, z), hz = height(x, z + e) - height(x, z - e);
+    // at a sharp edge (foot of a jump's side, lip of a drop) don't smear the slope across it:
+    // use the gentler side, which is the ground the wheels are really on
+    const h0 = height(x, z);
+    const crease = (a, b) => { const sa = a - h0, sb = h0 - b; return Math.abs(sa - sb) > 0.24 ? 2 * (Math.abs(sa) < Math.abs(sb) ? sa : sb) : a - b; };
+    const hx = crease(height(x + e, z), height(x - e, z)), hz = crease(height(x, z + e), height(x, z - e));
     const nx = -hx, ny = 2 * e, nzz = -hz, l = Math.hypot(nx, ny, nzz);
     out.x = nx / l; out.y = ny / l; out.z = nzz / l;
     return out;
