@@ -40,7 +40,8 @@ const KEEP_KEY = 'kg-group';
 const FRIENDS_KEY = 'kg-friends';
 const REJOIN_MS = 15 * 60 * 1000;   // reload/wake within this -> back in the group
 const KNOCK_WAIT_MS = 60 * 1000;    // stop asking after this
-const ALONE_MS = 45 * 1000;         // left on your own this long -> call over
+const ALONE_MS = 45 * 1000;
+const MEMBER_BEAT_MS = 10000, MEMBER_STALE_MS = 30000; // in a call: check in / gone after         // left on your own this long -> call over
 // STUN finds a direct path. TURN = relay for when devices can't link directly.
 // Our own free Metered account (20 GB a month). These details are meant to sit in the page;
 // if someone uses up the allowance, make new ones in the Metered dashboard and swap them here.
@@ -107,7 +108,7 @@ const state = () => ({
     const pr = presence.get(c.uid) || {};
     const peer = group && group.peers.get(c.uid);
     return {
-      uid: c.uid, name: c.name, face: c.face, online: !!pr.on || !!peer, game: peer ? (peer.game || '') : (pr.game || ''),
+      uid: c.uid, name: c.name, face: c.face, online: prOn(pr) || !!peer, game: peer ? (peer.game || '') : (pr.game || ''),
       inCall: !!peer, calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking'),
       said: outgoing && outgoing.code === homeId(c.uid) ? outgoing.status : '',
     };
@@ -426,7 +427,7 @@ async function joinGroup(id) {
     if (group !== g) return;
     D.onDisconnect(meR).remove();
     D.onDisconnect(liveR).remove();
-    D.set(meR, { name: myName(), face: myFace(), sid, game: where, cam: !!cam }).catch(() => {});
+    D.set(meR, { name: myName(), face: myFace(), sid, game: where, cam: !!cam, at: D.serverTimestamp() }).catch(() => {});
   };
   g.writeMe = writeMe;
   await D.remove(liveR).catch(() => {}); // old messages from before a reload
@@ -434,6 +435,13 @@ async function joinGroup(id) {
   writeMe();
   keep();
   g.timer = setInterval(keep, 20000);
+  // Check in every 10 s; anyone who stops checking in AND whose link is down has gone (tablet shut,
+  // wifi dropped) — their bubble goes in ~30 s instead of waiting for the server to notice.
+  g.beat = setInterval(() => {
+    if (group !== g) return;
+    if (online) D.update(meR, { at: D.serverTimestamp() }).catch(() => {});
+    if (g.sync) g.sync();
+  }, MEMBER_BEAT_MS);
   emit();
   startMic().then(() => { if (wantCam && group === g) { wantCam = false; startCam(); } });
 
@@ -444,14 +452,19 @@ async function joinGroup(id) {
     if (first) { first = false; return; }
     writeMe();
   }));
-  g.unsubs.push(D.onValue(ref(`${id}/players`), s => {
+  g.unsubs.push(D.onValue(ref(`${id}/players`), s => { g.lastV = s.val() || {}; if (g.sync) g.sync(); }));
+  g.sync = () => {
     if (group !== g) return;
-    const v = s.val() || {};
+    const v = g.lastV || {};
     if (online && !first && !v[`${uid}_m`]) writeMe();
     const seen = new Set();
     // Who I link up with: saved friends, plus their friends while one of my friends is in the call
     // (so a stranger can't sit in a call on their own), and never more than the call can hold.
-    const ids = Object.keys(v).map(pid => uidOf(pid, '_m')).filter(u => u && u !== uid && v[u + '_m'] && v[u + '_m'].sid);
+    const here = u => { // still checking in, or our link to them still works
+      const m = v[u + '_m'], p = g.peers.get(u);
+      return typeof m.at !== 'number' || fb.now() - m.at < MEMBER_STALE_MS || (p && p.status === 'on' && p.sid === m.sid);
+    };
+    const ids = Object.keys(v).map(pid => uidOf(pid, '_m')).filter(u => u && u !== uid && v[u + '_m'] && v[u + '_m'].sid && here(u));
     const friendHere = ids.some(isFriend);
     const allowed = new Set(ids.filter(u => isFriend(u) || friendHere).sort((a, b) => isFriend(b) - isFriend(a)).slice(0, MAX_FRIENDS));
     for (const [pid, m] of Object.entries(v)) {
@@ -470,13 +483,18 @@ async function joinGroup(id) {
       // as my friend: they show while we're in the call, then go.
       if (p.name !== '?' && contacts.some(c => c.uid === u)) saveFriend(u, p.name, p.face);
     }
-    for (const [u, p] of g.peers) if (!seen.has(u)) { p.close(); g.peers.delete(u); }
+    for (const [u, p] of g.peers) if (!seen.has(u)) {
+      p.close(); g.peers.delete(u);
+      // dropped for going silent: don't show them as online either, until they check in again
+      const pr = presence.get(u);
+      if (v[u + '_m'] && pr) pr.gone = pr.at;
+    }
     // Everyone else gone (and not back after a reload): leave too, so a refresh doesn't put you back in.
     if (!g.peers.size && !g.aloneTimer) g.aloneTimer = setTimeout(() => { if (group === g && !g.peers.size) leaveGroup(); }, ALONE_MS);
     if (g.peers.size && g.aloneTimer) { clearTimeout(g.aloneTimer); g.aloneTimer = null; }
     readSignals(g);
     emit();
-  }));
+  };
   g.unsubs.push(D.onValue(ref(`${id}/live`), s => {
     if (group !== g) return;
     g.live = s.val() || {};
@@ -490,6 +508,7 @@ export async function leaveGroup() {
   group = null;
   forget();
   clearInterval(g.timer);
+  clearInterval(g.beat);
   clearTimeout(g.aloneTimer);
   g.unsubs.forEach(u => u());
   g.peers.forEach(p => p.close());
@@ -680,7 +699,7 @@ function liveInvites() {
   const out = [];
   for (const c of contacts) {
     const pr = presence.get(c.uid);
-    const v = pr && pr.on && pr.invite;
+    const v = prOn(pr) && pr.invite;
     if (v && v.game && v.code && (!v.to || v.to[fb.uid] === true) && fb.now() - (v.at || 0) < INVITE_MS) out.push({ uid: c.uid, name: c.name, face: c.face, game: String(v.game), code: String(v.code), at: v.at });
   }
   return out.sort((x, y) => y.at - x.at);
@@ -724,7 +743,7 @@ function buddies() {
   for (const c of contacts) {
     const pr = presence.get(c.uid) || {};
     const p = group && group.peers.get(c.uid);
-    if (!pr.on && !p) continue;
+    if (!prOn(pr) && !p) continue;
     out.push({ uid: c.uid, name: p ? p.name : c.name, face: p ? (p.face || '') : c.face, game: p ? (p.game || '') : (pr.game || ''),
       inCall: !!p, status: p ? p.status : 'idle', stream: p ? p.stream : null, cam: !!(p && p.cam), stuck: !!p && isStuck(p), weak: !!(p && p.weak),
       calling: !!(outgoing && outgoing.code === homeId(c.uid) && outgoing.status === 'asking') });
@@ -760,6 +779,9 @@ export function removeFriend(uid) {
   storeFriends(); watchPresence(); emit();
 }
 const homeId = uid => 'h' + uid;
+// Online = says so AND has checked in lately (a device that just vanishes can't say goodbye).
+const HOME_BEAT_MS = 30000, HOME_STALE_MS = 95000;
+const prOn = pr => !!(pr && pr.on && (pr.at == null || !fb || fb.now() - pr.at < HOME_STALE_MS) && !(pr.gone != null && pr.at === pr.gone));
 
 // Who's on, and what they're playing (read from each saved friend's home).
 function watchPresence() {
@@ -770,7 +792,7 @@ function watchPresence() {
     if (presenceUnsubs.has(u)) continue;
     presenceUnsubs.set(u, fb.D.onValue(ref(`${homeId(u)}/meta`), s => {
       const m = s.val() || {};
-      presence.set(u, { on: m.on === true, game: typeof m.game === 'string' ? m.game.slice(0, 30) : '', invite: m.invite && typeof m.invite === 'object' ? m.invite : null });
+      presence.set(u, { on: m.on === true, at: typeof m.at === 'number' ? m.at : null, game: typeof m.game === 'string' ? m.game.slice(0, 30) : '', invite: m.invite && typeof m.invite === 'object' ? m.invite : null });
       const c = contacts.find(x => x.uid === u);
       if (c && m.name && (cleanName(m.name) !== c.name || cleanFace(m.face) !== c.face)) { // they changed name/picture
         c.name = cleanName(m.name) || c.name; c.face = cleanFace(m.face); storeFriends();
@@ -825,6 +847,8 @@ async function openHome() {
     if (s.val() !== true && !leaving) setTimeout(() => { if (!leaving) put().catch(() => {}); }, 1500);
   }));
   watchPresence();
+  // Check in every 30 s (and re-check who's still around).
+  home.beat = setInterval(() => { if (!leaving) D.update(ref(`${id}/meta`), { at: D.serverTimestamp() }).catch(() => {}); emit(); }, HOME_BEAT_MS);
   window.addEventListener('pagehide', () => { leaving = true; D.update(ref(`${id}/meta`), { on: false }).catch(() => {}); });
   window.addEventListener('pageshow', () => { if (leaving) { leaving = false; put().catch(() => {}); } });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') put().catch(() => {}); });
