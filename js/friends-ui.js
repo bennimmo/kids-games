@@ -130,7 +130,7 @@ function renderBubbles(s) {
     // Video only gets the stream while their camera is on (iPad: two players on one voice can sound wrong).
     const vts = f.stream ? f.stream.getVideoTracks().filter(t => t.readyState === 'live') : [];
     const vt = vts.find(t => !t.muted) || vts[vts.length - 1]; // 'muted' isn't always right, so it's only a preference
-    const showVid = !!(f.inCall && f.cam && vt);
+    const showVid = !!(f.inCall && f.cam && vt && f.status === 'on'); // link down: no frozen picture
     if (vt && (!el._vs || el._vs.getVideoTracks()[0] !== vt)) el._vs = new MediaStream([vt]); // video only: voice plays from <audio>
     const vs = showVid ? el._vs : null;
     if (v.srcObject !== vs) { v.srcObject = vs; if (vs) v.play().catch(() => {}); }

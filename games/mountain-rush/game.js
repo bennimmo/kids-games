@@ -12,7 +12,7 @@ import * as THREE from '../../js/vendor/three.module.min.js';
 import { audioCtx } from '../../js/engine/sound.js';
 import { buildWorld, MAPS } from './world.js';
 import { MAP_ORDER } from './biomes.js';
-import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS } from './physics.js';
+import { newRider, placeAt, stepRider, bikeFrame, COM, TRICKS, HANDLING } from './physics.js';
 import { createScene, SUN_DIR } from './scene.js';
 import { createBike, COLORS, BIKES, BIKE_ORDER, OUTFIT, GOLD, GOLD_HEX } from './bike.js';
 import { makeTextures, loadPhotoTextures } from './textures.js';
@@ -150,6 +150,7 @@ export function mount(stage) {
     rider = newRider(W);
     rider.P = { ...BIKES[bikeType()].stats };
     rider.noCrash = !!prefs.noCrash;
+    rider.H = HANDLING.sharp;
     resize();
     camera.far = Q.viewDist + 140; camera.updateProjectionMatrix();
     snapCamera();
@@ -646,8 +647,8 @@ export function mount(stage) {
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
     // when the tyres let go it's the back wheel that steps out: swing the bike round its front wheel
-    { const sv = b.vS || 0, over = Math.max(0, Math.abs(sv) - 1.0);        // (a little slip is normal cornering; only a real slide swings the back out)
-      vis.skid = lerp(vis.skid || 0, b.ground ? clamp(-Math.sign(sv) * over * 0.3, -0.5, 0.5) : 0, 1 - Math.exp(-dt * 9)); }
+    // the back wheel stepping out: the bike swings round its planted front wheel
+    vis.skid = lerp(vis.skid || 0, b.ground ? clamp(b.drift || 0, -0.62, 0.62) : 0, 1 - Math.exp(-dt * 14));
     const fx0 = fwd.x, fy0 = fwd.y, fz0 = fwd.z;
     if (Math.abs(vis.skid) > 0.002) fwd.applyAxisAngle(up, vis.skid);
     const skX = (fx0 - fwd.x) * 0.6, skY = (fy0 - fwd.y) * 0.6, skZ = (fz0 - fwd.z) * 0.6;
