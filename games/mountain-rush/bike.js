@@ -272,11 +272,11 @@ export function createBike(T, env, look = {}, type = 'trek') {
     sole: [0, 1].map(() => add(new THREE.BoxGeometry(0.1, 0.022, 0.27), mats.sole, false)),
     upper: [0, 1].map(() => add(limbGeo(0.052, 0.043, 0.006, 0.35), mats.sleeve)),
     fore: [0, 1].map(() => add(limbGeo(0.043, 0.033, 0.005, 0.25), mats.sleeve)),
-    elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1, 14, 10), mats.pad)),
+    elbow: [0, 1].map(() => add(new THREE.SphereGeometry(1, 14, 10), mats.sleeve)),
     cuff: [0, 1].map(() => add(new THREE.CylinderGeometry(0.042, 0.04, 0.07, 12), mats.glove)),
     hand: [0, 1].map(() => add(handGeo(), mats.glove)),
-    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.062, 16, 12), mats.sleeve)),
-    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.06, 14, 10), mats.pants)),
+    shoulder: [0, 1].map(() => add(new THREE.SphereGeometry(0.053, 16, 12), mats.sleeve)),
+    kneeJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.0575, 14, 10), mats.pants)),
     hipJ: [0, 1].map(() => add(new THREE.SphereGeometry(0.08, 14, 10), mats.pants)),
   };
   // body: one smooth shape from hips to collar; shorts over the hips
@@ -403,7 +403,7 @@ export function createBike(T, env, look = {}, type = 'trek') {
       const kneeFwd = V(0, 0, 1).sub(shinDir.clone().multiplyScalar(shinDir.z)).normalize();
       orient(P.knee[i], shinDir.clone().negate().lerp(kneeFwd, 0.75).normalize(), shinDir);
       P.knee[i].position.copy(knee).addScaledVector(kneeFwd, 0.035).addScaledVector(shinDir, 0.05);
-      P.knee[i].scale.set(0.056, 0.085, 0.045);
+      P.knee[i].visible = false;      // joints sit flush with the limbs (no bobbles)
       P.kneeJ[i].position.copy(knee); P.hipJ[i].position.copy(hips[i]);
       P.shoe[i].position.copy(foot).add(V(0, -0.015, 0.035)); P.shoe[i].rotation.set(0.05, 0, 0);
       P.sole[i].position.copy(foot).add(V(0, -0.05, 0.035)); P.sole[i].rotation.set(0.05, 0, 0);
@@ -412,7 +412,7 @@ export function createBike(T, env, look = {}, type = 'trek') {
       const elbow = tmp.e.clone();
       between(P.upper[i], shoulders[i], elbow); between(P.fore[i], elbow, hand);
       const foreDir = hand.clone().sub(elbow).normalize();
-      P.elbow[i].position.copy(elbow).add(V(sx * 0.008, 0, -0.022)); P.elbow[i].scale.set(0.045, 0.06, 0.04);
+      P.elbow[i].position.copy(elbow); P.elbow[i].scale.setScalar(0.0435);
       P.cuff[i].position.copy(hand).addScaledVector(foreDir, -0.06); P.cuff[i].quaternion.setFromUnitVectors(V(0, 1, 0), foreDir);
       P.hand[i].position.copy(hand); orient(P.hand[i], foreDir, V(0, 1, 0));
       P.shoulder[i].position.copy(shoulders[i]);
