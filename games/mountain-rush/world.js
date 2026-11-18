@@ -397,7 +397,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     // at a sharp edge (foot of a jump's side, lip of a drop) don't smear the slope across it:
     // use the gentler side, which is the ground the wheels are really on
     const h0 = height(x, z);
-    const crease = (a, b) => { const sa = a - h0, sb = h0 - b; return Math.abs(sa - sb) > 0.24 ? 2 * (Math.abs(sa) < Math.abs(sb) ? sa : sb) : a - b; };
+    const crease = (a, b) => { const sa = a - h0, sb = h0 - b; return Math.abs(sa - sb) > 0.08 ? 2 * (Math.abs(sa) < Math.abs(sb) ? sa : sb) : a - b; };
     const hx = crease(height(x + e, z), height(x - e, z)), hz = crease(height(x, z + e), height(x, z - e));
     const nx = -hx, ny = 2 * e, nzz = -hz, l = Math.hypot(nx, ny, nzz);
     out.x = nx / l; out.y = ny / l; out.z = nzz / l;

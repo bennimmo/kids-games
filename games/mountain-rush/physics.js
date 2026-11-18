@@ -82,7 +82,9 @@ export function stepRider(b, world, inp, dt) {
   inp = { ...inp, steer: inp.steer || 0, throttle: inp.throttle || 0 };
 
   // smooth the controls a little so keyboards feel like a stick
-  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? 9 : 14)));
+  // (turning in eases on gently; letting go straightens up quicker)
+  const turnIn = Math.abs(inp.steer) > Math.abs(b.steer) && inp.steer * b.steer >= 0;
+  b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 5 : 8) : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
   b.pedal = b.ground ? Math.max(0, inp.throttle) : 0;
   b.stretch = !!inp.stretch; b.pump = !!inp.pump;

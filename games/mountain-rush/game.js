@@ -618,8 +618,10 @@ export function mount(stage) {
     bikeFrame(b, frameOut);
     const fwd = frameOut.fwd, up = frameOut.up;
     // lean into turns
-    const targetRoll = b.ground ? clamp(b.steer * Math.min(1, b.speed / 9) * 0.55, -0.6, 0.6) : vis.roll * 0.95;
-    vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 8));
+    // the faster you go the further you lean, and more again when a berm is holding you
+    const inBerm = clamp((b.bankUp || 0) * 4, 0, 1) * clamp(b.speed / 12, 0, 1);
+    const targetRoll = b.ground ? clamp(b.steer * (0.12 + 0.62 * clamp(b.speed / 15, 0, 1) + 0.22 * inBerm), -0.95, 0.95) : vis.roll * 0.95;
+    vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 6));
     up.applyAxisAngle(fwd, vis.roll);
     vis.manual = lerp(vis.manual, b.manual ? 0.42 + b.manualBal * 0.12 : 0, 1 - Math.exp(-dt * 10));
     xAxis.crossVectors(up, fwd).normalize();
