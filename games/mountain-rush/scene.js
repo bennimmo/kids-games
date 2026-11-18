@@ -105,6 +105,11 @@ export function createScene(world, T, Q) {
           float wd = smoothstep(0.35, 0.6, vWood);
           vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.9)).rgb;
           col = mix(col, plank, wd); gRockW *= 1. - wd; gDirtW *= 1. - wd;
+          // bare rock slabs (rock rolls): grey stone with cracks and lighter worn patches
+          float rk = smoothstep(0.3, 0.7, -vWood);
+          float crack = texture2D(tRock, wp * 0.031 + 0.4).g, patchy = texture2D(tRock, wp * 0.012).r;
+          vec3 slab = texture2D(tRock, wp * 0.13).rgb * (0.78 + 0.5 * patchy) * mix(0.62, 1.0, smoothstep(0.28, 0.4, crack));
+          col = mix(col, slab, rk); gDirtW *= 1. - rk; gRockW = max(gRockW, rk);
         }
         #endif
         diffuseColor.rgb *= col;`)
@@ -180,7 +185,7 @@ export function createScene(world, T, Q) {
           const x = cx + ttz * d, z = cz - ttx * d;
           world.exact(x, z, ex);
           pos[k * 3] = x; pos[k * 3 + 1] = ex.h; pos[k * 3 + 2] = z;
-          tr[k] = ex.m; wd[k] = ex.wood; tuv[k * 2] = sc; tuv[k * 2 + 1] = d;
+          tr[k] = ex.m; wd[k] = ex.stone > 0.02 ? -ex.stone : ex.wood;      // negative = bare rock slab tuv[k * 2] = sc; tuv[k * 2 + 1] = d;
         }
       }
       const idx = [];
