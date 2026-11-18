@@ -317,7 +317,8 @@ export function createScene(world, T, Q) {
   // scanned rocks on mid/high (a few different ones per map), the built-in lump otherwise
   const MD = T.models || {};
   const rockVars = (B.terrace ? [...(MD.rocksRed || []), ...(MD.rocksRed || []), ...(MD.rocks || [])] : B.snow ? [...(MD.rocks || [])] : [...(MD.rocksMoss || []), ...(MD.rocks || [])]);
-  if (B.snow) for (const v of rockVars) { v.mat = v.mat.clone(); v.mat.color.set(0xdfe6ee); }
+  // scans are photographed in flat light and come out dark here: lift them (and frost them on the snow map)
+  for (const v of rockVars) { v.mat = v.mat.clone(); if (B.snow) v.mat.color.setRGB(1.9, 2.0, 2.15); else v.mat.color.setRGB(1.55, 1.5, 1.45); }
   for (const [k, list] of bucket(world.rocks, r => 'rock' + (rockVars.length && r.s > 0.26 ? Math.floor(r.rot * 7.31) % rockVars.length : 'p'))) {       // (pebbles stay as the simple lump)
     const V = rockVars.length ? rockVars[+k.split('|')[0].slice(4)] : null;
     const meshes = V
@@ -346,7 +347,7 @@ export function createScene(world, T, Q) {
   }
 
   // ---------------------------------------------------------------- grass blades near the camera
-  const grass = Q.grass > 0 && !B.snow ? makeGrass(world, Q, uniforms) : null;
+  const grass = Q.grass > 0 && !B.snow ? makeGrass(world, Q, uniforms, T.photo) : null;
   if (grass) scene.add(grass.mesh);
 
   // ---------------------------------------------------------------- gates, flags, tape
@@ -501,7 +502,7 @@ function makeTreeKinds(T, B) {
   const r = rng(321), K = {};
   const need = new Set(B.trees.kinds.map(k => k[0]));
   if (need.has('pine')) K.pine = makePine(T);
-  if (need.has('snowpine')) K.snowpine = makePine(T, { tex: T.branchSnow, body: 0x7f958c, noTint: true });
+  if (need.has('snowpine')) K.snowpine = makePine(T, { tex: T.branchSnow, body: T.photo ? 0x3a4a44 : 0x7f958c, noTint: true });
   if (need.has('birch')) {
     const trunk = new THREE.CylinderGeometry(0.09, 0.2, 13, 8, 3, true); trunk.translate(0, 6.5, 0);
     const bark = new THREE.MeshStandardMaterial({ map: T.bark, color: 0xf2eee6, roughness: 0.8 });
@@ -581,7 +582,7 @@ export function mergeGeos(list) {
 }
 
 // ------------------------------------------------------------------ grass
-function makeGrass(world, Q, uniforms) {
+function makeGrass(world, Q, uniforms, photo) {
   const P = Q.grassPatch, step = Q.grass;
   const r = rng(3);
   // one clump = 4 curved blades
@@ -628,6 +629,7 @@ function makeGrass(world, Q, uniforms) {
   hm.needsUpdate = true;
   const cam = { value: new THREE.Vector3() };
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
+  if (photo) mat.color.setRGB(0.6, 0.72, 0.42);        // sit the blades into the photo ground instead of glowing above it
   mat.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { tHM: { value: hm }, uCam: cam, uP: { value: P }, uHalf: { value: HALF }, uTime: uniforms.uTime });
     sh.vertexShader = sh.vertexShader
