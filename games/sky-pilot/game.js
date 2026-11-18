@@ -379,16 +379,18 @@ export function mount(stage) {
   }
 
   function nameTag(text, color) {
-    const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    const c = document.createElement('canvas'); c.width = 512; c.height = 128;
     const g = c.getContext('2d');
-    g.font = '700 34px Nunito, Arial, sans-serif';
-    const w = Math.min(248, g.measureText(text).width + 34);
-    g.fillStyle = 'rgba(10,20,40,.72)'; g.beginPath(); g.roundRect(128 - w / 2, 6, w, 50, 22); g.fill();
-    g.strokeStyle = '#' + new THREE.Color(color).getHexString(); g.lineWidth = 5; g.stroke();
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 128, 33);
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, sizeAttenuation: false, transparent: true }));
-    sp.scale.set(0.26, 0.065, 1); sp.renderOrder = 20;
+    g.font = '900 68px Nunito, Arial, sans-serif';
+    const w = Math.min(500, g.measureText(text).width + 64);
+    g.fillStyle = 'rgba(10,20,40,.82)'; g.beginPath(); g.roundRect(256 - w / 2, 10, w, 100, 46); g.fill();
+    g.strokeStyle = '#' + new THREE.Color(color).getHexString(); g.lineWidth = 10; g.stroke();
+    // little pointer down to the plane
+    g.fillStyle = 'rgba(10,20,40,.82)'; g.beginPath(); g.moveTo(240, 108); g.lineTo(272, 108); g.lineTo(256, 126); g.fill();
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 62, 470);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, depthWrite: false, sizeAttenuation: false, transparent: true, fog: false, toneMapped: false }));
+    sp.scale.set(0.48, 0.12, 1); sp.center.set(0.5, 0); sp.renderOrder = 20;
     return sp;
   }
   const displayName = (n, type) => cleanName(n) || (PLANES[type] ? PLANES[type].icon + ' Pilot' : 'Pilot');
@@ -1058,7 +1060,7 @@ export function mount(stage) {
     for (const p of players) {
       const s = p.s;
       if (!s.onGround || s.speed > 0.5 || s.throttle > 0.05 || Math.random() > dt * 0.7) continue;
-      if ([...remotes.values()].some(r => Math.hypot(r.pos.x - s.pos.x, r.pos.z - s.pos.z) < 30 && Math.abs(r.pos.y - s.pos.y) < 15)) respawn(p);
+      if ([...remotes.values()].some(r => Math.hypot(r.pos.x - s.pos.x, r.pos.z - s.pos.z) < 15 && Math.abs(r.pos.y - s.pos.y) < 10)) respawn(p);
     }
   }
   function updateRemotes(dt) {
