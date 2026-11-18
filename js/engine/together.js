@@ -2,8 +2,9 @@
 //
 //  1. Add friends once on the menu (picture code, friends.js). Friends who are on show as bubbles.
 //  2. In a game, the big "Play with friends" button (togetherButton) -> playTogether():
-//     no friends on -> the friends panel opens; else the game makes a room and every
-//     friend who's on gets a pop-up "Kit wants to play Kit's Karts" (friends-ui.js).
+//     no friends on -> the friends panel opens; else "Who's playing?" (all ticked, tap to
+//     leave someone out), then the game makes a room and the picked friends get a
+//     pop-up "Kit wants to play Kit's Karts" (friends-ui.js).
 //  3. Tapping ✔ opens that game with #/<game>?join=<code>; the game calls takeJoinCode()
 //     on start and joins straight away. No codes to type in games.
 //  4. Lobby: every player entry carries { name, face, ready } (playerInfo()).
@@ -13,6 +14,7 @@
 
 import { icon } from './icons.js';
 import { myName, myFace, nameHTML, cleanFace, cleanName } from './profile.js';
+import { sound } from './sound.js';
 import { friendState, onFriends, sendInvite, clearInvite, setPlaying, ensureCore } from './friends.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, '');
@@ -30,8 +32,11 @@ export function togetherButton(label = 'Play with friends', cls = '') {
 // Returns the room, or null if the friends panel opened instead.
 export async function playTogether(game, create) {
   if (!friendState().buddies.length) { openFriends(); return null; } // no friends on: add / find one
+  const pick = await pickFriends();
+  if (!pick) return null;
   const room = await create();
   if (!room) return null;
+  invited = new Set(pick); // after create(): a game may tidy up (leftRoom) while making the room
   hosting(game, room.code);
   return room;
 }
@@ -39,7 +44,54 @@ export async function playTogether(game, create) {
 // Already have a room (e.g. made it another way): tell friends about it.
 export function hosting(game, code) {
   setPlaying(game, code);
-  sendInvite(game, code);
+  sendInvite(game, code, invited ? [...invited] : null);
+}
+
+// "Who's playing?": every friend who's on, all ticked. Tap to leave someone out.
+// Resolves to the picked uids, or null (closed).
+let invited = null;
+function pickFriends() {
+  return new Promise(done => {
+    const out = new Set(); // left out
+    const o = document.createElement('div');
+    o.className = 'ui-overlay tg-pick';
+    o.innerHTML = `<div class="ui-panel">
+        <div class="ui-kicker">Play with friends</div>
+        <h2 class="ui-title">Who's playing?</h2>
+        <p class="ui-sub">Tap a friend to leave them out.</p>
+        <div class="tg-pick-list"></div>
+        <div class="ui-row"><button class="ui-btn ghost tg-pick-no">${icon('close')}<span>Cancel</span></button>
+          <button class="ui-btn primary big tg-pick-go">${icon('next')}<span>Carry on</span></button></div>
+      </div>`;
+    // only the friends redraw (the card itself stays, so it doesn't flash)
+    const draw = () => {
+      const list = friendState().buddies;
+      o.querySelector('.tg-pick-list').innerHTML = list.map(f => `<button class="tg-pick-f${out.has(f.uid) ? '' : ' on'}" data-uid="${esc(f.uid)}" aria-pressed="${!out.has(f.uid)}">
+            <span class="tg-face">${cleanFace(f.face) || esc([...nameOf(f)][0])}</span><b>${nameHTML(f.name)}</b><i>${icon('check')}</i></button>`).join('');
+      o.querySelector('.tg-pick-go').disabled = !list.some(f => !out.has(f.uid));
+    };
+    const finish = v => { off(); o.remove(); done(v); };
+    o.addEventListener('click', e => {
+      if (e.target === o) { sound.pop(); finish(null); return; }
+      const b = e.target.closest('button');
+      if (!b) return;
+      sound.pop();
+      if (b.dataset.uid) { out.has(b.dataset.uid) ? out.delete(b.dataset.uid) : out.add(b.dataset.uid); draw(); }
+      else if (b.matches('.tg-pick-no')) finish(null);
+      else if (b.matches('.tg-pick-go')) {
+        const pick = friendState().buddies.map(f => f.uid).filter(u => !out.has(u));
+        if (pick.length) finish(pick);
+      }
+    });
+    // friends coming and going while it's open
+    const off = onFriends(s => {
+      if (!o.isConnected) return;
+      if (!s.buddies.length) { finish(null); openFriends(); return; }
+      draw();
+    });
+    draw();
+    document.body.appendChild(o);
+  });
 }
 
 // Opened from an invite? Returns the room code once (and tidies the address bar).
@@ -52,7 +104,7 @@ export function takeJoinCode(game) {
 export function joined(game, code) { setPlaying(game, code); }
 
 // Left the room (or the game): stop inviting.
-export function leftRoom() { setPlaying(null); clearInvite(); }
+export function leftRoom() { setPlaying(null); clearInvite(); invited = null; }
 
 export function openFriends() { window.dispatchEvent(new CustomEvent('kg-open-friends')); }
 export const inFriendGroup = () => friendState().buddies.length > 0;
@@ -87,7 +139,7 @@ export function saidNo(list = []) {
 export function coming(list) {
   const here = new Set(list.map(p => p.uid));
   const no = new Set(saidNo(list).map(f => f.uid));
-  return friendState().buddies.filter(f => !here.has(f.uid) && !no.has(f.uid));
+  return friendState().buddies.filter(f => !here.has(f.uid) && !no.has(f.uid) && (!invited || invited.has(f.uid)));
 }
 
 // Everyone (except the host) has pressed I'm ready.

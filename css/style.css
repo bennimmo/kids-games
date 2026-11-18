@@ -538,3 +538,20 @@ button.tg-ready.tg-ready.on { background: var(--btn-ok); }
 .fb-dock.left .fb-where { left: auto; }
 @media (hover: hover) { .fb-dock:hover .fb-where { display: block; } }
 .fb.calling .fb-side .fb-ring:not([hidden]) { animation: ring .4s ease-in-out infinite alternate; }
+
+/* "Me" bubble (in a call): my mic / camera / hang up pop out beside it, so it's clear they're mine. */
+.fb-me .fb-face { width: 60px; height: 60px; background: #7c4dff; }
+.fb-me .fb-tools {
+  position: absolute; top: 6px; bottom: auto; right: 100%; left: auto; padding: 0 8px 0 0; flex-direction: row-reverse;
+}
+.fb-dock.left .fb-me .fb-tools { right: auto; left: 100%; padding: 0 0 0 8px; flex-direction: row; }
+.fb-me .fb-badge { position: absolute; top: -6px; bottom: auto; right: -4px; left: auto; width: 28px; height: 28px; font-size: 15px; }
+.fb-dock.left .fb-me .fb-badge { right: auto; left: -4px; }
+/* link status under a friend's name */
+.fb-state { margin-top: 3px; padding: 1px 7px; border-radius: 10px; background: #fff3c4; color: #7a5200; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.fb-state.bad { background: #ffe0dc; color: #b42318; }
+.fb-state[hidden] { display: none; }
+.vt-test { justify-content: center; font-weight: 700; }
+.vt-res { background: #fafafa; border-radius: 14px; padding: 10px 14px; text-align: left; font-size: 16px; display: flex; flex-direction: column; gap: 4px; }
+.vt-res[hidden] { display: none; }
+.vt-res small { opacity: .75; }

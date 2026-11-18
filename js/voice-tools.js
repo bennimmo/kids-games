@@ -1,7 +1,7 @@
 // Playing friends' voices, plus the 🔧 voice tools (info + switches to try when a voice sounds wrong).
 import { icon } from './engine/icons.js';
 import { voiceOpts, setVoiceOpt, onVoiceOpts } from './engine/voice-opts.js';
-import { friendPeers, micTrack } from './engine/friends.js';
+import { friendPeers, micTrack, iceServers } from './engine/friends.js';
 import { audioCtx } from './engine/sound.js';
 import { nameHTML } from './engine/profile.js';
 import { sound } from './engine/sound.js';
@@ -135,16 +135,51 @@ export function openVoiceTools() {
   el.className = 'app-help vt';
   el.innerHTML = `<div class="app-help-card vt-card">
       <div class="flabel">🔧 Voice tools</div>
+      <button class="vt-sw vt-test">📡 Test connection</button>
+      <div class="vt-res" hidden></div>
       <div class="vt-sws"></div>
       <div class="vt-info"></div>
       <button class="app-btn vt-close name-ok" aria-label="Close">${icon('check')}</button>
     </div>`;
   for (const t of ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown']) el.addEventListener(t, e => e.stopPropagation());
   el.addEventListener('click', e => { if (e.target === el) closeVoiceTools(); });
+  el.querySelector('.vt-test').addEventListener('click', () => { sound.pop(); runTest(); });
   el.querySelector('.vt-close').addEventListener('click', () => { sound.pop(); closeVoiceTools(); });
   document.body.appendChild(el);
   render(); renderInfo();
   timer = setInterval(renderInfo, 1000);
 }
+// ------------------------------------------------------------ connection test
+// Can this device find its internet address (STUN) and reach our relay (TURN)?
+async function probe(servers, policy) {
+  const pc = new RTCPeerConnection({ iceServers: servers, iceTransportPolicy: policy });
+  const types = new Set();
+  pc.onicecandidate = e => { if (e.candidate) types.add(e.candidate.type || (e.candidate.candidate.match(/ typ (\w+)/) || [])[1]); };
+  pc.createDataChannel('t');
+  try {
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise(res => {
+      const t = setTimeout(res, 7000);
+      pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } };
+    });
+  } catch (e) { /* counts as nothing found */ }
+  pc.close();
+  return types;
+}
+async function runTest() {
+  const box = el && el.querySelector('.vt-res');
+  if (!box) return;
+  box.hidden = false;
+  box.innerHTML = 'Testing… ⏳';
+  const all = iceServers();
+  const [direct, relay] = await Promise.all([probe(all.filter(x => !x.username), 'all'), probe(all.filter(x => x.username), 'relay')]);
+  if (!el) return;
+  const ok = (v, yes, no) => `<div class="${v ? 'ok' : 'no'}">${v ? '✅' : '❌'} ${v ? yes : no}</div>`;
+  const d = direct.has('srflx'), r = relay.has('relay');
+  box.innerHTML = ok(d, 'Direct calls: OK', 'Direct calls: blocked (check DNS blocker for stun)') +
+    ok(r, 'Relay: OK', 'Relay: blocked (allow metered.ca and metered.live)') +
+    `<small>${d || r ? 'Calls should work.' : "Calls can't connect from this network."}</small>`;
+}
+
 function closeVoiceTools() { clearInterval(timer); if (el) el.remove(); el = null; }
 onVoiceOpts(() => { render(); });

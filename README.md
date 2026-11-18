@@ -53,13 +53,18 @@ Then open http://localhost:8000
 - Up to 4 friends in a group. Anyone in the group can let more in.
 - Friend bubbles float on the side over every game. Drag them up/down or to the other side.
 - Reload / iPad sleep: rejoins the group if back within 15 min. 👋 in the panel = leave.
-- 📷 Video: camera off until you tap 📷 in the bubble buttons. Small (240px, 15fps, ~150kbps). Your own mirrored "Me" bubble shows while it's on. Tap a friend's video to make it bigger.
-- 🎤 Voice: mic turns on when you join (asks once). 🎤/🔇 above the bubbles = mute. Pick a mic in the 📞 panel (if more than one).
+- 📹 Video: call with 📞 (voice) or 📹 (video); answer with ✓ or 📹. Your camera goes to everyone in the call. Small (240px, 15fps, ~150kbps). Tap a friend's video to make it bigger.
+- "Me" bubble during a call: your 🎤 / 📹 / hang up pop out beside it. Friends' bubbles have their own buttons (mute them, call, chat).
+- 🎤 Voice: mic turns on when you join (asks once). Pick a mic in the 📞 panel (if more than one).
+- Reliability: direct link first, relay if needed; still stuck after ~30s → force the relay; ~90s → rebuild every link. Bubbles show "Connecting…" / "Can't connect" / "Weak line" (weak = my video to them pauses, voice keeps going). 🔧 → 📡 Test connection checks direct (STUN) and relay (TURN).
 - `js/engine/friends.js`: Firebase only for finding each other (`games/friends/rooms/`, normal rules); the link is WebRTC, ready for voice/video (bubbles already have a `<video>`). Only names are shared, nothing kept.
-- Some networks block direct links: a TURN server would fix that (not added yet).
+- Relay (TURN): our free Metered account (20 GB/month), details in `ICE` in `friends.js`. New details in the Metered dashboard if they're ever used up.
 
+- **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
+   - "Play with friends" first asks **Who's playing?** (everyone ticked; tap to leave someone out). Only picked friends get the invite (`meta.invite.to`).
+   - People in a call who aren't your friends show while you're in the call, but are never saved as friends.
 2. In any game tap the green **Play with friends** button. Not linked yet → the friends panel opens.
 3. Friends get a pop-up on any screen: "🦊 Kit wants to play Kit's Karts" ✖ / ✔. ✔ takes them straight into your game. No codes in games. ✖ shows "not this time" on the host's strip.
 4. Lobby strip shows everyone: host "building the track…", friends "getting ready…" / "✔ Ready!", friends not in yet "on the way…".
@@ -110,7 +115,7 @@ Then open http://localhost:8000
 ### 🏁 Kit's Karts (`games/kits-karts/`)
 3D kart racing for age 8+. Draw a track like Raffy Race (uses its `track.js`), then race it in 3D (three.js).
 - 8 themes (top bar): 🏙️ city, 🌳 countryside, 🏜️ desert, ❄️ snow (slippy, snowing), 🏖️ beach, 🌋 volcano, 🍭 candy, 🌙 moon (low gravity).
-- Drawn tracks are smoothed (wobbles from the finger/mouse removed) before the road is made.
+- Drawn tracks are smoothed (wobbles from the finger/mouse removed) and roads drawn too close side by side are pushed apart (`spreadTrack`, MIN_GAP), so there's room for a barrier. Real crossings are kept.
 - Crossings (figure of 8): 🚀 jump over the other road (default) or 🌉 bridge. Tap the badge on the crossing to switch. Ramps have rails. A kart that misses the jump is carried back by 🚁.
 - Extras to drag on: ❓ mystery boxes, ⏩ boost, 🛹 ramp, mud, ice, water, cones, tyre walls, trees (theme plant), grandstand. No boxes placed = 3 rows added. 🎲 makes a random track.
 - Mystery box items (better ones the further back you are): 🍌 banana (x1 or x3), 🛢️ oil, 🚀 homing rocket, 🟢 bouncing ball, 💣 bomb, 🍄 turbo (x1 or x3), 🛡️ shield, ⭐ star, ⚡ zap (shrinks everyone ahead).
