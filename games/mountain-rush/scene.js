@@ -94,6 +94,26 @@ export function createScene(world, T, Q) {
         gDirtW = smoothstep(0.12, 0.7, vTrail);
         // darker worn line in the middle of the trail
         dirt *= mix(1.0, 0.82, smoothstep(0.85, 1.0, vTrail));
+        // the trail changes as you go: damp dark patches, pale dusty hardpack, leaf litter, gravelly bits
+        {
+          float v1 = texture2D(tFloor, wp * 0.0131 + 0.21).r, v2 = texture2D(tGrass, wp * 0.0093 + 0.6).g, v3 = texture2D(tRock, wp * 0.017).r;
+          dirt *= mix(1.0, 0.66, smoothstep(0.52, 0.7, v1));                                  // damp
+          vec3 dusty = vec3(dot(dirt, vec3(0.34))) * vec3(1.12, 1.04, 0.92) * 1.25;
+          dirt = mix(dirt, dusty, smoothstep(0.5, 0.72, v2) * 0.6);                           // dry hardpack
+          dirt = mix(dirt, forest * 0.9, smoothstep(0.56, 0.7, v3) * smoothstep(0.45, 0.62, texture2D(tFloor, wp * 0.31).g) * 0.75);   // litter
+          float peb = texture2D(tRock, wp * 0.83).r * texture2D(tRock, wp * 0.37 + 0.5).g;
+          dirt = mix(dirt, vec3(0.62, 0.6, 0.57) * (0.7 + peb), smoothstep(0.3, 0.42, peb) * smoothstep(0.42, 0.6, 1.0 - v1) * 0.7);    // gravel
+        }
+        #ifdef RIBBON
+        {
+          // tyre lines wandering down the trail, and a rain rut here and there
+          float wob = sin(vTuv.x * 0.21) * 0.45 + sin(vTuv.x * 0.057 + 1.3) * 0.5;
+          float line1 = exp(-pow((vTuv.y - wob) / 0.2, 2.0)), line2 = exp(-pow((vTuv.y - wob * 0.4 + 0.9) / 0.16, 2.0));
+          dirt *= 1.0 - 0.2 * line1 - 0.13 * line2;
+          float rut = exp(-pow((vTuv.y + 1.1 - sin(vTuv.x * 0.13) * 0.5) / 0.07, 2.0)) * smoothstep(0.3, 0.8, sin(vTuv.x * 0.043 + 2.0));
+          dirt *= 1.0 - 0.38 * rut;
+        }
+        #endif
         vec3 col = mix(grass, forest, forestW * 0.85);
         col = mix(col, dirt * 0.95, smoothstep(0.2, 0.4, slope) * 0.5);
         col = mix(col, dirt, gDirtW);
@@ -103,7 +123,11 @@ export function createScene(world, T, Q) {
         {
           // wooden planks laid across the trail (decks, ramps, plank berms)
           float wd = smoothstep(0.35, 0.6, vWood);
-          vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.9)).rgb;
+          // each board 0.32 m wide, its own shade, a dark gap either side
+          float bx = vTuv.x * 3.125, bid = floor(bx), bf = fract(bx);
+          float shade = 0.8 + 0.34 * fract(sin(bid * 12.9898 + 4.1) * 43758.5453);
+          float gap = smoothstep(0.0, 0.07, bf) * smoothstep(1.0, 0.93, bf);
+          vec3 plank = texture2D(tPlank, vec2(vTuv.y * 0.45, vTuv.x * 0.5)).rgb * shade * mix(0.3, 1.0, gap);
           col = mix(col, plank, wd); gRockW *= 1. - wd; gDirtW *= 1. - wd;
           // bare rock slabs (rock rolls): grey stone with cracks and lighter worn patches
           float rk = smoothstep(0.3, 0.7, -vWood);
@@ -184,8 +208,8 @@ export function createScene(world, T, Q) {
           const u = (c / COLS) * 2 - 1, d = Math.sign(u) * Math.pow(Math.abs(u), 1.25) * half;   // more detail in the middle
           const x = cx + ttz * d, z = cz - ttx * d;
           world.exact(x, z, ex);
-          pos[k * 3] = x; pos[k * 3 + 1] = ex.h; pos[k * 3 + 2] = z;
-          tr[k] = ex.m; wd[k] = ex.stone > 0.02 ? -ex.stone : ex.wood;      // negative = bare rock slab tuv[k * 2] = sc; tuv[k * 2 + 1] = d;
+          pos[k * 3] = x; pos[k * 3 + 1] = ex.hv; pos[k * 3 + 2] = z;
+          tr[k] = ex.m; wd[k] = ex.stone > 0.02 ? -ex.stone : ex.wood; tuv[k * 2] = sc - s0; tuv[k * 2 + 1] = d;      // (wood < 0 = bare rock slab; sc measured from the start of this piece: small numbers keep the board pattern sharp on phones)
         }
       }
       const idx = [];
@@ -726,6 +750,24 @@ function makeProps(world, T) {
     const timberMat = new THREE.MeshStandardMaterial({ color: 0x9a7448, roughness: 0.88 });
     for (const b of world.timbers || []) { const dx = b.x1 - b.x0, dy = b.y1 - b.y0, dz = b.z1 - b.z0, hz = Math.hypot(dx, dz), len = Math.hypot(hz, dy);
       put(timberMat, boxG, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2, hz > 0.001 ? Math.atan2(dx, dz) : 0, b.t, b.t, len, -Math.atan2(dy, hz)); } }
+  // suspended plank platforms: a timber deck on legs, clear of the ground
+  { const deckMat = new THREE.MeshStandardMaterial({ map: T.planks, roughness: 0.86, color: 0xf2e6d4 });
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0x7d5c38, roughness: 0.9 });
+    for (const dk of world.decks || []) {
+      const P = dk.pts, n = P.length, TH = 0.14, pos = [], uv = [], idx = [];
+      // four verts per station: top-left, top-right, bottom-left, bottom-right
+      for (let i = 0; i < n; i++) { const p = P[i]; pos.push(p.ax, p.y, p.az, p.bx, p.y, p.bz, p.ax, p.y - TH, p.az, p.bx, p.y - TH, p.bz); const v = (p.u - P[0].u) * 0.52; uv.push(0, v, 1.53, v, 0, v, 1.53, v); }
+      for (let i = 0; i < n - 1; i++) { const a = i * 4, b = a + 4;
+        idx.push(a, b, a + 1, a + 1, b, b + 1);                 // top
+        idx.push(a + 2, a + 3, b + 2, a + 3, b + 3, b + 2);     // underside
+        idx.push(a, a + 2, b, a + 2, b + 2, b);                 // left edge
+        idx.push(a + 1, b + 1, a + 3, a + 3, b + 1, b + 3); }   // right edge
+      const e = (n - 1) * 4; idx.push(0, 1, 2, 1, 3, 2, e, e + 2, e + 1, e + 1, e + 2, e + 3);
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, deckMat); m.castShadow = true; m.receiveShadow = true; group.add(m);
+      // joists across underneath
+      for (let i = 4; i < n - 1; i += 5) { const p = P[i], dx = p.bx - p.ax, dz = p.bz - p.az; put(beamMat, new THREE.BoxGeometry(1, 1, 1), (p.ax + p.bx) / 2, p.y - TH - 0.07, (p.az + p.bz) / 2, Math.atan2(dx, dz), 0.12, 0.14, Math.hypot(dx, dz) + 0.3); }
+    } }
   // stumps
   { const g1 = new THREE.CylinderGeometry(0.26, 0.34, 0.4, 10); g1.translate(0, 0.2, 0);
     const g2 = new THREE.CircleGeometry(0.255, 10); g2.rotateX(-Math.PI / 2); g2.translate(0, 0.402, 0);

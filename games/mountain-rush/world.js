@@ -212,9 +212,9 @@ export function buildWorld(mapId = 'pine-ridge') {
       else if (kind === 'woodkicker') s = kick(s, { lk: 4.6, hk: 2.1, gap: 9.5, ll: 15, wood: true, hoop: r() < 0.4 }).end + gapAfter;
       else if (kind === 'stepdown') { const f = { kind, s, lk: 6, hk: 1.4, gap: 8, ll: 14, D: 2.4, ret: 170 }; f.end = s + f.lk + f.gap + f.ll; feats.push(f); s = f.end + gapAfter + 6; }
       else if (kind === 'woodstep') {
-        const f = { kind, s, lk: 5.5, hk: 0.95, gap: 1.4, top: 13 };
+        const f = { kind, s, lk: 6.5, hk: 1.2, gap: 2.2, top: 16 };
         const a0 = Math.min(N - 1, Math.floor(s + f.lk)), a1 = Math.min(N - 1, Math.floor(s + f.lk + f.gap));
-        f.hp = Math.max(0.5, f.hk - 0.2 + (ln.yc[a0] - ln.yc[a1]));            // deck sits just below the lip, so it's easy to land on
+        f.hp = Math.max(0.9, f.hk - 0.15 + (ln.yc[a0] - ln.yc[a1]));            // deck sits just below the lip, so it's easy to land on
         f.end = s + f.lk + f.gap + f.top + 0.5; feats.push(f); s = f.end + gapAfter + 8;
       }
       else if (kind === 'drop') { const f = { kind, s, d: ((ri ? 1.9 : 1.5) + r() * 0.8) * ST.drop, run: 26, land: 9 * Math.sqrt(ST.drop) }; f.end = s + f.land; feats.push(f); s = f.end + gapAfter + 8; }
@@ -272,7 +272,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     }
     // the trail gets wider at jumps so you can ride round them (and out of a gap if you come up short)
     let widen = new Float32Array(N);
-    for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.4 : 0.9;
+    for (const f of feats) if (['kicker', 'stepup', 'woodstep', 'stepdown'].includes(f.kind)) for (let i = Math.max(0, Math.floor(f.s - 6)); i < Math.min(N, f.end + 4); i++) widen[i] = f.off ? 2.4 : f.kind === 'woodstep' ? 1.7 : 0.9;
     widen = blur(widen, 5);
     // plank berms: every other proper turn gets a taller wooden wall on the outside
     let woodBerm = new Float32Array(N);
@@ -284,7 +284,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     // sideways shape of a narrow feature: full height within `fw` of its centre line `c`, gone by fw + edge
     const nar = (d, c = 0, fw = 1.45, edge = 0.4) => 1 - smooth(fw, fw + edge, Math.abs(d - c));      // steep sides: off the edge = drop off, not a ramp to slide on
     const featAt = (sc, d) => {
-      let hN = 0, hW = 0, jump = 0, rough = 0, wood = 0, stone = 0;
+      let hN = 0, hW = 0, jump = 0, rough = 0, wood = 0, stone = 0, deck = 0;
       for (const f of feats) {
         const u = sc - f.s;
         if (f.kind === 'tech') {
@@ -333,12 +333,12 @@ export function buildWorld(mapId = 'pine-ridge') {
           jump = 1;
           const g0 = f.lk + f.gap, g2 = g0 + f.top;
           if (u < f.lk) hN += f.hk * Math.pow(clamp(u / f.lk, 0, 1), 1.9) * nar(d);                    // dirt kicker
-          else if (u < f.lk + 0.8) hN += lerp(f.hk, f.hp - 0.12, smooth(f.lk, f.lk + 0.8, u)) * nar(d);
-          else if (u < g0 - 0.15) hN += (f.hp - 0.12) * nar(d);                  // dirt packed right up to the deck: no wall to hit if you roll in slowly
-          else {                                                                                       // the plank deck: square sides, drop off the end
-            const deck = smooth(g0 - 0.15, g0 + 0.1, u) * (1 - smooth(g2, g2 + 0.3, u));
-            hN += f.hp * deck * nar(d, 0, 1.7, 0.5);
-            wood = Math.max(wood, (u < g2 + 0.35 ? 1 : 0) * nar(d, 0, 2.0, 0.25));
+          else if (u < f.lk + 0.8) hN += f.hk * (1 - smooth(f.lk, f.lk + 0.8, u)) * nar(d);
+          // the platform stands on legs above the ground (drawn as its own timber deck; the ground under it stays
+          // where it was). A short plank ramp on the front catches you if you come up short; drop off the end.
+          if (u > g0 - 1.7) {
+            const dk = f.hp * smooth(g0 - 1.7, g0, u) * (1 - smooth(g2, g2 + 0.3, u)) * nar(d, 0, 1.7, 0.25);
+            hN += dk; deck += dk;
           }
         } else if (f.kind === 'kicker') {
           jump = 1;
@@ -396,7 +396,7 @@ export function buildWorld(mapId = 'pine-ridge') {
           hW += fade * Math.max(0, nz.n2(sc / 1.7, d / 1.5 + 77 + ri * 31)) * 0.45;
         }
       }
-      return { hN, hW, jump, rough, wood, stone };
+      return { hN, hW, jump, rough, wood, stone, deck };
     };
     const halfW = i => { i = clamp(i, 0, N - 1); const i0 = Math.floor(i), i1 = Math.min(N - 1, i0 + 1), f = i - i0; return 2.05 + ST.width + Math.min(1.2, Math.abs(lerp(ln.curvS[i0], ln.curvS[i1], f)) * 45) + lerp(widen[i0], widen[i1], f); };
     return { id: ri, name: M.routes[ri].name, x: ln.x, z: ln.z, tx: ln.tx, tz: ln.tz, curvS: ln.curvS, yc: ln.yc, n: N, start: START, finish: FINISH, feats, featAt, halfW, woodBerm, zones: ln.zones, zoneIdx };
@@ -426,7 +426,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     const tilt = clamp(-c * 11, -0.32, 0.32) * clamp(d, -w - 1, w + 1) * wide;
     const dish = -0.12 * (1 - smooth(0, w, ad));
     const wood = Math.max(f.wood, outside ? wb * smooth(1.5, 2.3, ad) * (1 - smooth(w + 2.3, w + 3.0, ad)) : 0);
-    return { y: y + bank + tilt + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, stone: f.stone * (1 - smooth(w + 0.6, w + 1.6, ad)), shaped: Math.min(1, Math.abs(f.hN) * 2), rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
+    return { y: y + bank + tilt + f.hN + f.hW * wide + dish, d, ad, w, sc, jump: f.jump, wood, deck: f.deck, stone: f.stone * (1 - smooth(w + 0.6, w + 1.6, ad)), shaped: Math.min(1, Math.abs(f.hN) * 2), rough: f.rough * (1 - smooth(w - 0.3, w + 0.8, ad)) };
   };
   const nearestOnLine = (R, x, z, i) => {
     let best = i, bd = 1e9;
@@ -457,7 +457,7 @@ export function buildWorld(mapId = 'pine-ridge') {
   const tmpT = [];
   const shape = (x, z, id, out, withSink) => {
     const n0 = nat(x, z);
-    let sum = 0, wsum = 0, wmax = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0, wood = 0, stone = 0, tsc = 0, tdd = 0;
+    let sum = 0, wsum = 0, wmax = 0, m = 0, sink = 0, inRib = false, best = 1e9, bestR = -1, bestI = -1, rough = 0, wood = 0, stone = 0, tsc = 0, tdd = 0, sumV = 0;
     for (let ri = 0; ri < NR; ri++) {
       const i = nearI[ri][id];
       if (i < 0) continue;
@@ -465,7 +465,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       tmpT[ri] = t;
       const wt = 1 - smooth(t.w + 1.5, t.w + 16, t.ad);
       const pr = wt * (0.02 + (1 - smooth(t.w - 0.5, t.w + 2.2, t.ad)) * (1 + 14 * t.shaped));     // priority: strongest on the trail itself, and on a built jump
-      sum += pr * (t.y - n0); wsum += pr; wmax = Math.max(wmax, wt);
+      sum += pr * (t.y - n0); sumV += pr * (t.y - t.deck - n0); wsum += pr; wmax = Math.max(wmax, wt);
       m = Math.max(m, maskOf(t, R)); rough = Math.max(rough, t.rough);
       if (withSink) sink = Math.max(sink, 0.5 * (1 - smooth(t.w + RIB - 1.4, t.w + RIB - 0.2, t.ad)));
       if (t.ad < t.w + RIB) inRib = true;
@@ -474,6 +474,7 @@ export function buildWorld(mapId = 'pine-ridge') {
       if (t.ad - t.w < best) { best = t.ad - t.w; bestR = ri; bestI = i; tsc = t.sc; tdd = t.d; }
     }
     out.h = n0 + (wsum > 0 ? sum / wsum * wmax : 0) - sink;
+    out.hv = n0 + (wsum > 0 ? sumV / wsum * wmax : 0) - sink;          // what you see: the ground, without any platform standing over it
     out.m = m; out.rough = rough; out.wood = wood; out.stone = stone; out.sc = tsc; out.dd = tdd; out.inRib = inRib; out.edge = best; out.r = bestR; out.i = bestI;
     return out;
   };
@@ -484,7 +485,7 @@ export function buildWorld(mapId = 'pine-ridge') {
   for (let gz = 0; gz < NZ; gz++) for (let gx = 0; gx < NX; gx++) {
     const id = gz * NX + gx;
     shape(gx - HALF, gz, id, sh, true);
-    H[id] = sh.h; mask[id] = sh.m;
+    H[id] = sh.hv; mask[id] = sh.m;
   }
 
   // ---------------------------------------------------------------- lookups
@@ -636,7 +637,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     for (let q = 0; q < 3; q++) { const a = ang + (q - 1) * 0.5 + (r() - 0.5) * 0.3, len = Math.min(ta.d + 0.6, 1.8 + r() * 2.2); roots.push({ x: t.x, z: t.z, y: t.y, rot: a, len }); }
   }
   // timber frames: legs, rails and cross-braces under the plank decks and behind the wall rides
-  const timbers = [];
+  const timbers = [], decks = [];
   for (const R of routes) {
     const pt = (sc, dd) => { const i0 = clamp(Math.floor(sc), 0, R.n - 2), fr = sc - i0, x = lerp(R.x[i0], R.x[i0 + 1], fr) + R.tz[i0] * dd, z = lerp(R.z[i0], R.z[i0 + 1], fr) - R.tx[i0] * dd; return { x, z, y: height(x, z) }; };
     // a row of legs along one side: the foot stands at dPost on the ground found at dGround, the head reaches the deck height found at dTop
@@ -655,7 +656,11 @@ export function buildWorld(mapId = 'pine-ridge') {
       }
     };
     for (const f of R.feats) {
-      if (f.kind === 'woodstep') { const g0 = f.s + f.lk + f.gap; for (const sd of [-1, 1]) frame(g0, g0 + f.top, sd * 1.95, sd * 1.5, sd * 2.5, 2.25); }
+      if (f.kind === 'woodstep') {
+        const g0 = f.s + f.lk + f.gap; for (const sd of [-1, 1]) frame(g0 - 0.3, g0 + f.top, sd * 1.62, sd * 1.3, sd * 2.4, 2.3);
+        const pts = []; for (let u = g0 - 1.7; u <= g0 + f.top + 0.26; u += 0.5) { const c = pt(u, 0), a = pt(u, -1.7), b2 = pt(u, 1.7); pts.push({ x: c.x, z: c.z, y: c.y, ax: a.x, az: a.z, bx: b2.x, bz: b2.z, u }); }
+        decks.push({ pts });
+      }
       else if (f.kind === 'rollin') for (const sd of [-1, 1]) frame(f.s + f.run + 1.2, f.s + f.run + f.top + f.down - 0.6, sd * 1.5, sd * 1.15, sd * 2.0, 1.9);
       else if (f.kind === 'kicker' && f.wood) for (const sd of [-1, 1]) frame(f.s + 1.2, f.s + f.lk, sd * 1.8, sd * 1.4, sd * 2.4, 1.7);
       else if (f.kind === 'skinny') for (const sd of [-1, 1]) frame(f.s + 2.5, f.s + f.len - 2.5, sd * 0.72, sd * 0.4, sd * 1.1, 3.2, 0.3);
@@ -697,7 +702,7 @@ export function buildWorld(mapId = 'pine-ridge') {
     height, normal, trailMask, roughAt, trailAt, pathPoint, treesNear, exact,
     routes, path: routes[0],
     checkpoints, finish, start, startZ, finishZ, hoops,
-    trees, rocks, plants, logs, pads, roots, stumps, timbers, arrows, warns, flags, banners,
+    trees, rocks, plants, logs, pads, roots, stumps, timbers, decks, arrows, warns, flags, banners,
   };
 }
 
