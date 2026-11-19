@@ -11,7 +11,7 @@ import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftR
 import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
-import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS, NAMES } from './render.js';
+import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS } from './render.js';
 import { myName } from '../../js/engine/profile.js';
 import { makeRoom, findRoom, connect, MAP_IDS, GAME_ID } from './online.js';
 
@@ -48,7 +48,8 @@ export function mount(stage) {
   // ---------------------------------------------------------------- state
   let myLook = sanitizeLook(load(LOOK_KEY, null) || randomLook(0));
   // my name from the main menu, unless I gave my tank a name of its own
-  if (myName() && (NAMES.includes(myLook.name) || myLook.name === 'Tank')) myLook.name = myName();
+  // my tank is called whatever I put on the home screen
+  if (myName()) myLook.name = myName();
   const localSetup = (() => {
     const s = load(LOCAL_KEY, null);
     const slots = [0, 1, 2, 3].map(i => {
@@ -848,7 +849,7 @@ export function mount(stage) {
         if (i === 0) { myLook = l; save(LOOK_KEY, l); } else s.slots[i].look = l;
         save(LOCAL_KEY, s);
         localScreen();
-      });
+      }, i !== 0);
     }));
     p.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => {
       sound.pop();
@@ -863,15 +864,16 @@ export function mount(stage) {
     p.querySelector('[data-a="go"]').addEventListener('click', () => { sound.pop(); startLocal(); });
   }
 
-  function editLook(start, done) {
+  // askName: only for extra players on this device (my own name comes from the home screen)
+  function editLook(start, done, askName = false) {
     const look = { ...start };
     const wrap = document.createElement('div');
     wrap.className = 'tt-modal ui-overlay';
     wrap.innerHTML = `<div class="tt-edit ui-panel">
       <div class="ui-kicker">Tank Tantrum</div>
-      <h2 class="ui-title">My tank</h2>
+      <h2 class="ui-title">${askName ? 'Tank' : 'My tank'}</h2>
       <canvas class="tt-preview"></canvas>
-      <input class="tt-input" maxlength="12" value="${esc(look.name)}" aria-label="Tank name" placeholder="Name">
+      ${askName ? `<input class="tt-input" maxlength="12" value="${esc(look.name)}" aria-label="Tank name" placeholder="Name">` : ''}
       <div class="ui-label">Colour</div>
       <div class="tt-swatches">${TANK_COLORS.map(c => `<button class="tt-sw" data-c="${c}" style="--c:${c}" aria-label="Colour"></button>`).join('')}</div>
       <div class="ui-label">Hat</div>
@@ -891,10 +893,11 @@ export function mount(stage) {
     wrap.querySelectorAll('.tt-sw').forEach(b => b.addEventListener('click', () => { look.color = b.dataset.c; sound.pop(); refresh(); }));
     wrap.querySelectorAll('.tt-picks').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { look[g.dataset.k] = b.dataset.v; sound.pop(); refresh(); })));
     const input = wrap.querySelector('.tt-input');
-    input.addEventListener('input', () => { look.name = input.value; });
+    if (input) input.addEventListener('input', () => { look.name = input.value; });
     wrap.querySelector('[data-a="done"]').addEventListener('click', () => {
       sound.pop();
       wrap.remove();
+      if (!askName && myName()) look.name = myName();
       done(sanitizeLook(look));
     });
   }
