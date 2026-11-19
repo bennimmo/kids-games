@@ -159,6 +159,9 @@ function groundStep(b, world, inp, dt, popNow) {
   const wet = world.waterAt ? world.waterAt(b.pos.x, b.pos.z, b.pos.y) : 0;
   b.wet = wet;
   if (wet > 0.02) { b.splashT = (b.splashT || 0) - dt; if (speed > 2 && b.splashT <= 0) { b.splashT = 0.05; b.events.push({ type: 'splash', v: speed, deep: wet }); } }
+  // too steep to ride up and you've run out of speed (the side of a cutting, a bank): don't sit there perched
+  // on it pedalling. The front wheel falls away along the slope and you roll off it.
+  if (n.y < 0.62 && speed < 3) { const l = Math.hypot(n.x, n.z) || 1; glance(b, n.x / l, n.z / l, 3.5 * dt); }
   // ---- what the tyres are on, and how much grip that gives
   const sf = world.surfaceAt ? world.surfaceAt(b.pos.x, b.pos.z, tmpSurf) : tmpSurf;
   const mu = (onDirt ? 1 : 0.72) * world.B.grip * b.P.grip * (sf.wood > 0.5 ? 0.86 : 1) * (sf.stone > 0.5 ? 0.92 : 1) * (wet > 0.02 ? 0.72 : 1);
@@ -280,7 +283,12 @@ function groundStep(b, world, inp, dt, popNow) {
     const hv = Math.hypot(b.vel.x, b.vel.z) || 1, dx = b.vel.x / hv * 0.8, dz = b.vel.z / hv * 0.8;
     const kap = (world.height(b.pos.x + dx, b.pos.z + dz) - 2 * h + world.height(b.pos.x - dx, b.pos.z - dz)) / 0.64;
     const need = -kap * hv * hv;
-    if (need > G * b.P.soak * (b.rough > 0.3 ? 2.4 : 1) || b.pos.y > h + (b.rough > 0.3 ? 0.45 : 0.25)) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
+    // Rock gardens: the wheels follow the bumps and the rider soaks them up, so you stay on the ground through
+    // them (and on the lip where the rocks start) unless the ground really drops away from under you.
+    const rocky = Math.max(b.rough, world.roughAt(b.pos.x + dx * 4, b.pos.z + dz * 4), world.roughAt(b.pos.x - dx * 2.5, b.pos.z - dz * 2.5)) > 0.25;
+    let needR = need;
+    if (rocky) { const ex = dx * 3.5, ez = dz * 3.5; needR = -(world.height(b.pos.x + ex, b.pos.z + ez) - 2 * h + world.height(b.pos.x - ex, b.pos.z - ez)) / 7.84 * hv * hv; }     // judge the shape of the hill, not each rock
+    if ((rocky ? needR > G * b.P.soak * 1.5 : need > G * b.P.soak) || b.pos.y > h + (rocky ? 0.55 : 0.25)) { b.pos.y = Math.max(b.pos.y, h) + 0.005; takeOff(b); return; }
   }
   b.pos.y = h;
   if (into < 0) {   // ground came up: lose the bit going into it (suspension soaks it up)
@@ -315,7 +323,21 @@ function hitWall(b, world, ox, oy, oz) {
   const into = -(b.vel.x * nx + b.vel.z * nz);
   if (into > 0) { b.vel.x += nx * into * 1.05; b.vel.z += nz * into * 1.05; }
   if (into > 6.5 && !b.noCrash) { crash(b, 'wall'); return true; }
+  // glance off: the front wheel is turned along the wall, so you slide along it and away instead of sitting
+  // there pushing into it (and then pinging out when something finally gives)
+  if (b.ground) glance(b, nx, nz, 0.07);
   return false;
+}
+
+// turn the bike along a wall (nx, nz points away from it) and a touch away from it
+function glance(b, nx, nz, maxTurn) {
+  const hx = Math.sin(b.yaw), hz = Math.cos(b.yaw), hi = -(hx * nx + hz * nz);
+  if (hi <= 0) return;
+  let tx = hx + nx * hi, tz = hz + nz * hi; const tl = Math.hypot(tx, tz);
+  if (tl < 0.15) { const sgn = b.steer > 0 ? -1 : 1; tx = -nz * sgn; tz = nx * sgn; } else { tx /= tl; tz /= tl; }      // head-on: peel off to one side (the way you're steering)
+  const want = Math.atan2(tx + nx * 0.25, tz + nz * 0.25);
+  b.yaw = wrap(b.yaw + clamp(wrap(want - b.yaw), -maxTurn, maxTurn));
+  b.roll *= 0.8; b.drift *= 0.8;
 }
 
 function endManual(b) {
