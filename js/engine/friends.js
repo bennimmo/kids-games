@@ -817,8 +817,9 @@ function saveFriend(uid, name, face) {
   if (!okUid(uid)) return;
   const old = contacts.find(c => c.uid === uid);
   if (old && old.name === name && old.face === face) return;
-  // Same person on a new device id (cleared browser): keep just the newest.
-  contacts = contacts.filter(c => c.uid !== uid && !(c.name === name && c.face === face && face));
+  // Keyed by device id only: the same child on an iPad and a computer is two entries
+  // (one shows on, one off) — never swap one for the other.
+  contacts = contacts.filter(c => c.uid !== uid);
   contacts.unshift({ uid, name, face: face || '', at: Date.now() });
   storeFriends();
   syncAllow();
