@@ -191,10 +191,10 @@ Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb (drills out, BOOM, zooms back, BOOM).
 - 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
 - Shots pass through ground within 75 of your tank (`MUZZLE_GRACE`), so a bit of hill in front of you doesn't blow you up.
-- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400 (`mapWidth` in `sim.js`).
+- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400, 7 = 3800, 8 = 4200 (`mapWidth` in `sim.js`).
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
-- Maps: grass, snow, candy, moon (low gravity). Tank maker: colour, hat, flag (saved). Your tank's name is your home-screen name; only extra players on the same device type a name.
+- Maps: grass, snow, candy, moon (low gravity). Tank maker: colour, hat, flag (saved). Your tank's name is your home-screen name. Players sharing one screen are Kit-1, Kit-2… (no typing). Online, "Players on this screen" (1–4) adds shared-screen tanks; up to 8 tanks in a room.
 - 🎬 Replay when a tank is knocked out, and a victory dance.
 - `?ttdebug` puts `window.__tt()` in the console.
 - Ground art (`ground.js`): rock layers, roots, pebbles, and buried dinosaur skeletons, fossils and silly things per map. Looks only, made from the map seed so friends see the same.

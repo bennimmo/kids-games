@@ -5,9 +5,9 @@
 import { WEAPONS, WEAPON } from './weapons.js';
 
 export const W = 2000, H = 1000, CELL = 2, COLS = W / CELL, ROWS = H / CELL;   // W, COLS = the smallest map
-export const MAX_W = 3400;
+export const MAX_W = 4200;
 // Map width for a number of tanks (a multiple of 200).
-export const mapWidth = n => (n <= 3 ? 2000 : n === 4 ? 2600 : n === 5 ? 3000 : MAX_W);
+export const mapWidth = n => (n <= 3 ? 2000 : n === 4 ? 2600 : n === 5 ? 3000 : n === 6 ? 3400 : n === 7 ? 3800 : MAX_W);
 export const WATER_Y = 940;
 export const DT = 1 / 60;
 export const MAX_SPEED = 800;
