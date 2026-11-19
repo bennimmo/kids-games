@@ -36,10 +36,11 @@
             },
             "players": {
               "$pid": {
-                ".write": "auth != null && ($pid === auth.uid + '_k' || $pid === auth.uid + '_t' || $pid === auth.uid + '_r') && root.child('games/friends/allow/' + $uid + '/' + auth.uid).val() === true",
+                ".write": "auth != null && ($pid === auth.uid + '_k' || $pid === auth.uid + '_t' || $pid === auth.uid + '_r' || ($pid.beginsWith(auth.uid + '_i_') && $pid.length <= 140)) && root.child('games/friends/allow/' + $uid + '/' + auth.uid).val() === true",
                 "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
                 "face": { ".validate": "newData.isString() && newData.val().length <= 16" },
                 "group": { ".validate": "newData.isString() && newData.val().matches(/^c[a-z0-9]{16}$/)" },
+                "uid": { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{6,64}$/) && $pid.endsWith('_i_' + newData.val())" },
                 "text": { ".validate": "newData.isString() && newData.val().length <= 80" },
                 "code": { ".validate": "newData.isString() && newData.val().length <= 12" },
                 "at": { ".validate": "newData.isNumber()" },

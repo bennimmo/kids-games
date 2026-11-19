@@ -98,6 +98,7 @@ let invites = [];                     // [{ uid, name, face, game, code, at }] f
 const dismissed = new Set();          // 'uid:code' already answered
 let playing = null;                   // { game, code } room I'm in (from together.js)
 const INVITE_MS = 15 * 60 * 1000;
+let intros = [];                      // [{ pid, from, fromName, uid, name, face }] friends introducing someone
 let declines = [];                    // [{ uid, code }] friends who said no to my invite
 let where = '';                       // game id I'm in ('' = menu)
 let home = null;                      // { id, unsubs }
@@ -112,6 +113,7 @@ const state = () => ({
   invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
   friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak })) : [],
   declines: declines.slice(),
+  intros: intros.filter(i => !isFriend(i.uid)),
   // Bubbles: friends who are on now (in a call with me or not).
   buddies: buddies(),
   // Saved friends, online ones first: { uid, name, face, online, game, inCall, calling }
@@ -748,6 +750,42 @@ function readMessages(id, v) {
   }
 }
 
+// ------------------------------------------------------------ introduce friends
+// "Sam, meet Max": both get asked "Be friends?". Tick on both sides = friends (no pictures needed).
+const INTRO_MS = 3 * 24 * 60 * 60 * 1000;
+export function introduce(uid, toUids) {
+  const a = contacts.find(c => c.uid === uid);
+  if (!a || !fb) return 0;
+  let n = 0;
+  for (const t of toUids) {
+    const b = contacts.find(c => c.uid === t);
+    if (!b || b.uid === a.uid) continue;
+    const tell = (to, about) => fb.D.set(ref(`${homeId(to.uid)}/players/${fb.uid}_i_${about.uid}`),
+      plain({ uid: about.uid, name: about.name, face: about.face || '', at: fb.now() })).catch(() => {});
+    tell(a, b); tell(b, a); n++;
+  }
+  return n;
+}
+function readIntros(id, v) {
+  const out = [];
+  for (const [pid, m] of Object.entries(v)) {
+    if (!m || !okUid(m.uid) || !pid.endsWith('_i_' + m.uid)) continue;
+    const from = pid.slice(0, -('_i_' + m.uid).length), c = okUid(from) && contacts.find(x => x.uid === from);
+    const stale = !c || m.uid === fb.uid || isFriend(m.uid) || fb.now() - (m.at || 0) > INTRO_MS;
+    if (stale) { fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {}); continue; } // friends only
+    out.push({ pid, from, fromName: c.name, fromFace: c.face, uid: m.uid, name: cleanName(m.name) || 'Friend', face: cleanFace(m.face) });
+  }
+  intros = out;
+}
+export function answerIntro(pid, yes) {
+  const i = intros.find(x => x.pid === pid);
+  if (!i || !home) return;
+  intros = intros.filter(x => x.pid !== pid);
+  if (yes) saveFriend(i.uid, i.name, i.face);
+  fb.D.remove(ref(`${home.id}/players/${pid}`)).catch(() => {});
+  emit();
+}
+
 // Friends who are on now: { uid, name, face, game, inCall, status, stream }
 function buddies() {
   const out = [];
@@ -856,6 +894,7 @@ async function openHome() {
       .filter(([pid, r]) => isFriend(uidOf(pid, '_r')) && r && r.code)
       .map(([pid, r]) => ({ uid: uidOf(pid, '_r'), code: String(r.code).slice(0, 12) }));
     readMessages(id, v);
+    readIntros(id, v);
     // Calls: only from saved friends, shown with the name I saved (not whatever they send).
     homeKnocks = Object.entries(v)
       .filter(([pid, k]) => k && isFriend(uidOf(pid, '_k')))

@@ -9,7 +9,7 @@ import { gameArt } from './game-art.js';
 import { playVoice, tidyVoices, unlockVoices, openVoiceTools } from './voice-tools.js';
 import { onVoiceOpts } from './engine/voice-opts.js';
 import {
-  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, sendMessage, onMessage, MSG_MAX, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
+  onFriends, friendState, startFriends, dismissInvite, declineInvite, callFriend, removeFriend, newCode, askFriend, cancelAsk, accept, decline, leaveGroup, sendMessage, onMessage, MSG_MAX, introduce, answerIntro, startMic, setMuted, listMics, chooseMic, startCam, stopCam,
   FRIEND_CODE_LEN, MAX_FRIENDS,
 } from './engine/friends.js';
 
@@ -191,6 +191,76 @@ function renderKnock(s) {
   sound.pop();
 }
 
+// ------------------------------------------------------------ "Kit says you know Sam" popup (any screen)
+
+let shownIntro = '', introEl = null;
+function renderIntro(s) {
+  const v = s.knocks.length ? null : s.intros[0]; // a call comes first
+  const key = v ? v.pid : '';
+  if (key === shownIntro) return;
+  shownIntro = key;
+  introEl.hidden = !v;
+  if (!v) return;
+  introEl.innerHTML = `<div class="app-help-card fk-card">
+      <div class="fn-from"><span>${v.fromFace || ''}</span> ${nameHTML(v.fromName)} says you know</div>
+      <div class="fk-ring${v.face ? ' face' : ''}" style="--c:${colorFor(v.uid)}">${v.face || nameHTML(v.name).slice(0, 1)}</div>
+      <div class="fk-name">${nameHTML(v.name)}</div>
+      <div class="fi-says">Be friends?</div>
+      <div class="name-row">
+        <button class="app-btn fk-no" aria-label="No">${icon('close')}</button>
+        <button class="app-btn fn-yes name-ok" aria-label="Yes">${icon('check')}</button>
+      </div>
+    </div>`;
+  introEl.querySelector('.fn-yes').addEventListener('click', () => { sound.pop(); answerIntro(v.pid, true); });
+  introEl.querySelector('.fk-no').addEventListener('click', () => { sound.pop(); answerIntro(v.pid, false); });
+  sound.pop();
+}
+
+// ------------------------------------------------------------ introduce friends (from the friends panel)
+// Step 1: who's the new friend? Step 2: who to meet them (all ticked, tap to leave out).
+function openIntroduce() {
+  let who = null;
+  const out = new Set();
+  const o = document.createElement('div');
+  o.className = 'ui-overlay tg-pick fintro-pick';
+  const face = c => `<span class="tg-face">${c.face || nameHTML(c.name).slice(0, 1)}</span><b>${nameHTML(c.name)}</b>`;
+  const draw = () => {
+    const all = friendState().contacts;
+    const w = who && all.find(c => c.uid === who);
+    const others = w ? all.filter(c => c.uid !== who) : all;
+    o.innerHTML = `<div class="ui-panel">
+        <div class="ui-kicker">${icon('people')} Introduce friends</div>
+        <h2 class="ui-title">${w ? `Who should meet ${nameHTML(w.name)}?` : 'Who is the new friend?'}</h2>
+        <p class="ui-sub">${w ? 'Tap a friend to leave them out.' : 'Tap the friend you want to introduce.'}</p>
+        <div class="tg-pick-list">${others.map(c => w
+          ? `<button class="tg-pick-f${out.has(c.uid) ? '' : ' on'}" data-uid="${c.uid}" aria-pressed="${!out.has(c.uid)}">${face(c)}<i>${icon('check')}</i></button>`
+          : `<button class="tg-pick-f on fintro-who" data-who="${c.uid}">${face(c)}</button>`).join('')}</div>
+        <div class="ui-row"><button class="ui-btn ghost fintro-no">${icon(w ? 'back' : 'close')}<span>${w ? 'Back' : 'Cancel'}</span></button>
+          ${w ? `<button class="ui-btn primary big fintro-go"${others.some(c => !out.has(c.uid)) ? '' : ' disabled'}>${icon('check')}<span>Introduce</span></button>` : ''}</div>
+      </div>`;
+  };
+  const close = () => o.remove();
+  o.addEventListener('click', e => {
+    if (e.target === o) { sound.pop(); close(); return; }
+    const b = e.target.closest('button');
+    if (!b) return;
+    sound.pop();
+    if (b.dataset.who) { who = b.dataset.who; out.clear(); draw(); }
+    else if (b.dataset.uid) { out.has(b.dataset.uid) ? out.delete(b.dataset.uid) : out.add(b.dataset.uid); draw(); }
+    else if (b.matches('.fintro-no')) { if (who) { who = null; draw(); } else close(); }
+    else if (b.matches('.fintro-go')) {
+      const to = friendState().contacts.map(c => c.uid).filter(u => u !== who && !out.has(u));
+      const c = friendState().contacts.find(x => x.uid === who);
+      if (!introduce(who, to)) return;
+      close();
+      sayAt(who, `${icon('check')} Introduced ${nameHTML(c ? c.name : '')}!`, true);
+    }
+  });
+  shield(o);
+  draw();
+  document.body.appendChild(o);
+}
+
 // ------------------------------------------------------------ "come and play" invite popup (any screen)
 
 let shownInvite = '';
@@ -367,7 +437,7 @@ function renderPanel(s) {
           <button class="app-btn fcall name-ok" aria-label="Connect" ${entry.length === FRIEND_CODE_LEN ? '' : 'disabled'}>${icon('check')}</button>
         </div>
         ${newOut ? `<div class="fmsg">${OUT_MSG[newOut.status](newOut.name)}${newOut.status === 'asking' ? ` <button class="fsmall fcancel" aria-label="Stop">${icon('close')}</button>` : ''}</div>` : ''}`}
-      </div>` : `<button class="tg-btn small fadd-btn">${icon('plus')}<span>Add a friend</span></button>`}
+      </div>` : `<button class="tg-btn small fadd-btn">${icon('plus')}<span>Add a friend</span></button>${list.length >= 2 && !editing ? `<button class="tg-btn small fintro-btn">${icon('people')}<span>Introduce friends</span></button>` : ''}`}
       ${s.friends.length ? `<div class="fsec">
         <div class="flabel">${icon('phone')} In the call</div>
         <div class="flist">${s.friends.map(f => `<span class="fchip${f.status === 'on' ? ' on' : ''}" style="--c:${colorFor(f.uid)}">${f.face ? f.face + ' ' : ''}${nameHTML(f.name)}</span>`).join('')}</div>
@@ -414,6 +484,7 @@ function panelClick(e) {
   const re = () => renderPanel(friendState());
   if (btn.matches('.fclose')) { sound.pop(); closePanel(); }
   else if (btn.matches('.fadd-btn')) { sound.pop(); adding = true; cancelAsk(); newCode(); re(); }
+  else if (btn.matches('.fintro-btn')) { sound.pop(); closePanel(); openIntroduce(); }
   else if (btn.matches('.fedit')) { sound.pop(); editing = !editing; sureRm = null; re(); }
   else if (btn.dataset.call) { sound.pop(); callFriend(btn.dataset.call, !!btn.dataset.video); }
   else if (btn.dataset.rm) {
@@ -442,7 +513,7 @@ export function mountFriends({ editName }) {
   onEditName = editName;
   layer = document.createElement('div');
   layer.className = 'friends-layer';
-  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-list"></div><div class="fb fb-me on" hidden><div class="fb-face"><b></b><video playsinline autoplay muted></video></div><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera">${icon('videoOff')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div>`;
+  layer.innerHTML = `<div class="fb-dock" hidden><div class="fb-list"></div><div class="fb fb-me on" hidden><div class="fb-face"><b></b><video playsinline autoplay muted></video></div><div class="fb-tools"><button class="fb-mic" aria-label="My microphone">${icon('mic')}</button><button class="fb-cam off" aria-label="My camera">${icon('videoOff')}</button><button class="fb-hang" aria-label="Hang up">${icon('hangup')}</button></div><span class="fb-badge" hidden>${icon('micOff')}</span><div class="fb-name">Me</div></div></div><div class="app-help fk" hidden></div><div class="app-help fk fi" hidden></div><div class="app-help fk fn" hidden></div>`;
   document.body.appendChild(layer);
   dock = layer.querySelector('.fb-dock');
   list = layer.querySelector('.fb-list');
@@ -477,7 +548,8 @@ export function mountFriends({ editName }) {
   }, true);
   knockEl = layer.querySelector('.fk:not(.fi)');
   inviteEl = layer.querySelector('.fi');
-  shield(dock); shield(knockEl); shield(inviteEl);
+  introEl = layer.querySelector('.fn');
+  shield(dock); shield(knockEl); shield(inviteEl); shield(introEl);
   // Games ask for this ("Play with friends" before linking up).
   window.addEventListener('kg-open-friends', () => {
     if (friendState().codeStatus === 'noname') onEditName(true);
@@ -489,6 +561,7 @@ export function mountFriends({ editName }) {
     renderBubbles(s);
     renderKnock(s);
     renderInvite(s);
+    renderIntro(s);
     renderBar(s);
     // they said yes: close the panel so the bubble shows
     if (panel && wasAsking && !s.outgoing && s.inGroup) closePanel();

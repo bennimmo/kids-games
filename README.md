@@ -61,6 +61,7 @@ Then open http://localhost:8000
 - Relay (TURN): our free Metered account (20 GB/month), details in `ICE` in `friends.js`. New details in the Metered dashboard if they're ever used up.
 
 - **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
+- **Introduce friends:** My friends → "Introduce friends" → pick the new friend → pick who should meet them (all ticked). Each side gets "Kit says you know Max — be friends?". Both tick = friends, no pictures needed. Sent as `players/<introducer>_i_<uid>` in each home; only from saved friends; deleted once answered.
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
    - "Play with friends" first asks **Who's playing?** (everyone ticked; tap to leave someone out). Only picked friends get the invite (`meta.invite.to`).
