@@ -656,7 +656,10 @@ export function mount(stage) {
     // the faster you go the further you lean, and more again when a berm is holding you
     const inBerm = clamp((b.bankUp || 0) * 4, 0, 1) * clamp(b.speed / 12, 0, 1);
     // the lean you see is the lean the physics is using to turn the bike (plus a little show in a berm)
-    const targetRoll = b.ground ? clamp((b.roll || 0) * 0.6 + b.steer * (0.03 + 0.14 * inBerm), -0.8, 0.8) : vis.roll * 0.95;
+    // How far you see it lean depends on speed, like a real bike: walking pace = steer with the bars, hardly any
+    // lean; flat out = right over.
+    const leanBySpeed = lerp(0.2, 0.84, clamp((b.speed - 2) / 13, 0, 1));
+    const targetRoll = b.ground ? clamp((b.roll || 0) * leanBySpeed + b.steer * 0.14 * inBerm, -0.95, 0.95) : vis.roll * 0.95;
     vis.roll = lerp(vis.roll, targetRoll, 1 - Math.exp(-dt * 14));
     up.applyAxisAngle(fwd, vis.roll);
     vis.manual = lerp(vis.manual, b.manual ? 0.42 + b.manualBal * 0.12 : 0, 1 - Math.exp(-dt * 10));
@@ -677,11 +680,14 @@ export function mount(stage) {
     if (dt > 0) {
       const bump = b.ground ? (b.rough * 0.25 + Math.min(0.08, b.speed * 0.004)) * (Math.random() - 0.5) : 0;
       const tgt = b.ground ? 0.25 + 0.15 * Math.max(0, b.crouch) + bump : 0.03;
-      const st = (s0, v0, k, c) => { const a = (tgt - s0) * k - v0 * c; v0 += a * dt; s0 = clamp(s0 + v0 * dt, 0, 1); return [s0, v0]; };
-      [vis.sf, vis.vf] = st(vis.sf, vis.vf, 160, 15); [vis.sr, vis.vr] = st(vis.sr, vis.vr, 110, 12);
+      // weight moves about: the fork dives under braking, both ends squash in a hard corner, the back squats when you pedal
+      const load = b.ground ? 0.16 * Math.min(1, Math.abs(b.roll || 0)) * clamp(b.speed / 12, 0, 1) : 0;
+      const tF = b.ground ? tgt + load + 0.3 * b.brake * clamp(b.speed / 6, 0, 1) : tgt, tR = b.ground ? tgt + load - 0.1 * b.brake + 0.06 * b.pedal : tgt;
+      const st = (s0, v0, k, c, tg) => { const a = (tg - s0) * k - v0 * c; v0 += a * dt; s0 = clamp(s0 + v0 * dt, 0, 1); return [s0, v0]; };
+      [vis.sf, vis.vf] = st(vis.sf, vis.vf, 160, 15, tF); [vis.sr, vis.vr] = st(vis.sr, vis.vr, 110, 12, tR);
       if (vis.manual > 0.1) vis.sr = Math.max(vis.sr, 0.45);
     }
-    lastPose = { suspF: vis.sf, suspR: vis.sr, steer: b.steer, crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 };
+    lastPose = { suspF: vis.sf, suspR: vis.sr, steer: b.steer * (b.ground ? lerp(1, 0.3, clamp(b.speed / 13, 0, 1)) : 1), crouch: b.crouch * 0.8 + (b.ground ? clamp(b.speed / 25, 0, 0.3) : 0.15), lean: b.ground ? 0 : -b.flipV * 0.03, crank: b.crank, wheel: b.wheel, superman: b.superman, nohand: b.nohand, table: b.table, cancan: b.cancan, nofoot: b.nofoot, whip: b.whipping ? b.whip : 0, bar: b.barring ? b.bar : 0, manual: vis.manual * 2 };
     bike.pose(lastPose);
   }
   function startCrash() {
@@ -722,7 +728,7 @@ export function mount(stage) {
   function emitDust(dt) {
     const b = rider;
     // tyre marks when sliding or braking hard
-    const marking = b.ground && !b.crashed && (b.slide > 0.25 || (b.brake > 0.5 && b.speed > 5));
+    const marking = b.ground && !b.crashed && (b.slide > 0.25 || b.skidding);
     if (marking) {
       const f0 = bikeFrame(b, frameOut).fwd, x = b.pos.x - f0.x * 0.62, z = b.pos.z - f0.z * 0.62, y = W.height(x, z);
       if (skidLast && Math.hypot(x - skidLast.x, z - skidLast.z) > 0.25) {
@@ -785,6 +791,7 @@ export function mount(stage) {
       camera.position.copy(cam.pos);
       if (cam.shake > 0) { camera.position.x += (Math.random() - 0.5) * cam.shake; camera.position.y += (Math.random() - 0.5) * cam.shake; cam.shake = Math.max(0, cam.shake - dt * 1.2); }
       camera.lookAt(cam.look);
+      if (!crashed) camera.rotateZ(-vis.roll * 0.1);          // the view tips a little with the bike
     }
     cam.fov = lerp(cam.fov, fovT, 1 - Math.exp(-dt * 3));
     if (Math.abs(camera.fov - cam.fov) > 0.05) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }

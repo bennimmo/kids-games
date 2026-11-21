@@ -96,6 +96,8 @@ export function stepRider(b, world, inp, dt) {
 
   // smooth the controls a little so keyboards feel like a stick
   // (turning in eases on gently; letting go straightens up quicker)
+  // (a stick pushed part-way gives a gentle turn: finer control near the middle, full turn at the edge)
+  if (b.ground) inp.steer = Math.sign(inp.steer) * Math.pow(Math.abs(inp.steer), 1.5);
   const turnIn = Math.abs(inp.steer) > Math.abs(b.steer) && inp.steer * b.steer >= 0;
   b.steer = lerp(b.steer, inp.steer, 1 - Math.exp(-dt * (b.ground ? (turnIn ? 11 : 13) : 14)));
   b.lean = lerp(b.lean, inp.throttle, 1 - Math.exp(-dt * 12));
@@ -166,14 +168,15 @@ function groundStep(b, world, inp, dt, popNow) {
   const sf = world.surfaceAt ? world.surfaceAt(b.pos.x, b.pos.z, tmpSurf) : tmpSurf;
   const mu = (onDirt ? 1 : 0.72) * world.B.grip * b.P.grip * (sf.wood > 0.5 ? 0.86 : 1) * (sf.stone > 0.5 ? 0.92 : 1) * (wet > 0.02 ? 0.72 : 1);
   const H = b.H || HANDLING.sharp;
-  const tyre = H.grip * mu * n.y;
+  const tyre = H.grip * mu * n.y * (1 - 0.22 * b.brake);        // braking uses up some of the grip you'd turn with
   // ---- lean to steer: the stick asks for a turn, the bike leans over to make it, and the lean is what turns you.
   // Slow: you turn the bars (quick, tight). Fast: you can only ask for what the tyres can hold, so the same
   // stick gives a wider, smoother arc, and it takes a moment to tip in and to stand back up.
   const v = Math.abs(vF), vv = Math.max(v, 0.6);
-  const yawCmd = b.steer * Math.min(H.low, 0.97 * tyre / vv) * (b.manual > 0.3 ? 0.6 : 1);
+  const yawCmd = b.steer * Math.min(H.low, 0.97 * tyre / vv) * (b.manual > 0.3 ? 0.6 : 1) * (1 - 0.3 * b.brake);        // (hard on the brakes you can't turn as tight)
   const rollWant = Math.atan(yawCmd * vv / G);
-  const tipIn = Math.abs(rollWant) > Math.abs(b.roll) ? H.tip : H.tip + 2;
+  // a slow bike flicks over; a fast one takes longer to lean in and to stand back up
+  const tipIn = (Math.abs(rollWant) > Math.abs(b.roll) ? H.tip : H.tip + 2) * lerp(1.15, 0.66, clamp(v / 17, 0, 1));
   b.rollV += (tipIn * tipIn * (rollWant - b.roll) - 2 * tipIn * b.rollV) * dt;
   b.roll += b.rollV * dt;
   // (when the front tyre is pushing wide the bike turns less than its lean asks: understeer)
@@ -183,7 +186,7 @@ function groundStep(b, world, inp, dt, popNow) {
   // ---- the back wheel. The front tyre carries the steering and digs in; it almost never slides. The back
   // just follows, and it is the one that lets go: when the turn (or the brake) asks more than it can hold it
   // swings out, the bike points further into the corner, and it costs you speed until it hooks up again.
-  { const rearGrip = tyre * H.rear * (b.brake > 0.5 ? 0.42 : 1) * (b.pedal > 0.5 && v < 7 ? 0.85 : 1);
+  { const rearGrip = tyre * H.rear * (b.brake > 0.5 ? 0.52 : 1) * (b.pedal > 0.5 && v < 7 ? 0.85 : 1);
     const ask = Math.abs(yawRate) * v + Math.abs(b.rollV) * 2.2;          // cornering load, plus a flick of the bike
     const turnDir = Math.sign(b.roll) || Math.sign(b.steer);
     if (ask > rearGrip && v > 3) b.drift += -turnDir * Math.min(3.2, (ask - rearGrip) / Math.max(4, v) * 1.6 * H.drift) * dt;
@@ -193,15 +196,20 @@ function groundStep(b, world, inp, dt, popNow) {
 
   // forces along the bike
   const gF = -G * f.y, gS = -G * s.y;
-  const pedalA = b.pedal * b.P.pedal * Math.max(0, 8 - 0.48 * Math.max(0, vF));
-  const roll = (onDirt ? 0.22 : 0.9) * world.B.roll * Math.sign(vF);
+  // (leaned right over you can't pedal: the inside pedal would hit the ground)
+  const pedalA = b.pedal * b.P.pedal * Math.max(0, 8 - 0.48 * Math.max(0, vF)) * (1 - 0.7 * clamp((Math.abs(b.roll) - 0.75) / 0.3, 0, 1));
+  const roll = (sf.wood > 0.5 ? 0.14 : onDirt ? 0.22 : 0.9) * world.B.roll * Math.sign(vF);        // planks roll fast, grass drags
   const drag = 0.0062 * b.P.drag * vF * Math.abs(vF);
   // pumping: crouch on the way down a roller / landing to gain speed
   const pumpA = inp.pump && f.y < -0.03 ? clamp(-f.y * 6, 0, 1) * 1.6 : 0;
   let a = gF + pedalA + pumpA - roll - drag * (inp.pump ? 0.75 : 1) - (wet > 0.02 ? vF * Math.min(1.6, 0.5 + wet * 3) : 0);
   vF += a * dt;
+  b.skidding = false;
   if (b.brake > 0) {
-    const bd = b.brake * 8 * dt;
+    // both brakes together: how hard you stop depends on what the tyres are on (dirt bites, grass, snow, planks
+    // and wet don't). Hard on the lever locks the back wheel: it skids, and in a turn it steps out.
+    const bd = b.brake * 10.5 * clamp(mu, 0.4, 1.1) * n.y * dt;
+    b.skidding = b.brake > 0.6 && Math.abs(vF) > 2.5;
     if (vF > bd) vF -= bd;
     else if (vF > -0.05 && b.brake > 0.5) vF = Math.max(vF - 2.5 * dt, -2);     // stopped and still braking: roll backwards (to get off a wall)
     else if (vF < -2) vF = Math.min(-2, vF + bd);
