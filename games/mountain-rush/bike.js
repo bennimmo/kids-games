@@ -380,6 +380,13 @@ export function createBike(T, env, look = {}, type = 'trek') {
 
     let hip = V(0, 1.04 - 0.2 * c - 0.05 * m, -0.38 - 0.04 * c + 0.1 * l - 0.22 * m);
     let sh = V(0, 1.42 - 0.18 * c - 0.05 * m, 0.02 + 0.04 * c + 0.12 * l - 0.2 * m);
+    // body english on the ground: weight back for braking and steep drops, forward to sprint or climb, and in a
+    // corner the bike leans under the rider, who stays more upright (shoulders and hips to the outside)
+    { const bk = p.back || 0, fw = p.fwd || 0, hg = p.hang || 0;
+      hip.z += -0.17 * bk + 0.05 * fw; hip.y += -0.05 * bk + 0.04 * fw; sh.z += -0.12 * bk + 0.09 * fw; sh.y += -0.07 * bk - 0.03 * fw;
+      hip.x += hg * 0.09; sh.x += hg * 0.17; }
+    // stopped: a foot goes down
+    if ((p.foot || 0) > 0.01) feet[0] = lerpV(feet[0], V(0.34, 0.03, 0.14), p.foot);
     // smaller bikes: rider crouches lower and closer
     if (BK.size < 1) { const k = 0.45 + 0.55 * BK.size; hip.y *= k; sh.y *= k; hip.z *= BK.size; sh.z = sh.z * BK.size + (1 - BK.size) * 0.15; }
     // grips follow the bars

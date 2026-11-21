@@ -309,11 +309,12 @@ function groundStep(b, world, inp, dt, popNow) {
     b.vel.x -= n2.x * into; b.vel.y -= n2.y * into; b.vel.z -= n2.z * into;
   }
   // over rocks the wheels and suspension do the work: the frame and rider stay steady, not see-sawing
-  const follow = b.rough > 0.2 ? 0.035 : 0.3;
+  const follow = b.rough > 0.2 ? 0.035 : 0.16;
   // two wheels: the bike's pitch comes from where its front and rear tyres touch (0.58 m ahead and behind),
   // so the front rises onto a ramp first and drops off an edge first, like the real thing
   { const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw), WB = 0.58;
     const hF = clamp(world.height(b.pos.x + fx * WB, b.pos.z + fz * WB) - h, -0.7, 0.7), hR = clamp(world.height(b.pos.x - fx * WB, b.pos.z - fz * WB) - h, -0.7, 0.7);
+    b.wF = hF; b.wR = hR;                    // where each wheel's patch of ground is, relative to the middle
     const tl = Math.hypot(2 * WB, hF - hR), tx = fx * 2 * WB / tl, ty = (hF - hR) / tl, tz = fz * 2 * WB / tl;      // along the bike, wheel to wheel
     const d2 = n2.x * tx + n2.y * ty + n2.z * tz; let ux = n2.x - tx * d2, uy = n2.y - ty * d2, uz = n2.z - tz * d2; const ul = Math.hypot(ux, uy, uz) || 1; ux /= ul; uy /= ul; uz /= ul;
     b.up.x = lerp(b.up.x, ux, follow); b.up.y = lerp(b.up.y, uy, follow); b.up.z = lerp(b.up.z, uz, follow); norm(b.up); }
