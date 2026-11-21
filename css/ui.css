@@ -340,3 +340,11 @@ button.tg-ready.tg-ready { font-family: var(--font); font-weight: 900; border-ra
 .tg-pick-f.on { opacity: 1; filter: none; border-color: var(--accent, #22c55e); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #22c55e) 35%, transparent); }
 .tg-pick-f.on i { background: #22c55e; color: #fff; }
 .tg-pick .ui-row { justify-content: center; gap: 12px; }
+
+/* introduce friends */
+.fn .fk-ring { animation: none; background: var(--c, var(--btn-ok)); }
+.fn .fk-ring.face { background: rgba(255, 255, 255, .1); }
+.fn-from { color: var(--ui-dim); font-size: 18px; font-weight: 700; margin-bottom: 14px; }
+.fn-from span { font-size: 24px; vertical-align: middle; }
+.friend-card .fintro-btn { margin: 8px 0 0 8px; }
+.fintro-who i { display: none; }

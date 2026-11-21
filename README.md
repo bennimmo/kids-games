@@ -61,6 +61,7 @@ Then open http://localhost:8000
 - Relay (TURN): our free Metered account (20 GB/month), details in `ICE` in `friends.js`. New details in the Metered dashboard if they're ever used up.
 
 - **Messages:** tap a friend's bubble → 💬 → type or pick a quick one. It pops out of your bubble on their screen. Sent via their home room (`players/<uid>_t`) and deleted as soon as it's shown — never kept.
+- **Introduce friends:** My friends → "Introduce friends" → pick the new friend → pick who should meet them (all ticked). Each side gets "Kit says you know Max — be friends?". Both tick = friends, no pictures needed. Sent as `players/<introducer>_i_<uid>` in each home; only from saved friends; deleted once answered.
 ## 👫 Play together (the same in every game)
 1. Link up once on the menu (📞 + 6 pictures, above).
    - "Play with friends" first asks **Who's playing?** (everyone ticked; tap to leave someone out). Only picked friends get the invite (`meta.invite.to`).
@@ -190,10 +191,10 @@ Take turns to drive, aim and fire silly weapons. Last tank standing wins 🏆.
 - 14 weapons: shell, rubber chicken (bounces), cupcake cluster, smelly sock (homing), mole missile (digs), grumpy cloud (rains 3 turns), custard wall, giant boot, whoopee blast (big push), shrink ray, magnet mine, teleport toilet, firework party, yo-yo bomb (drills out, BOOM, zooms back, BOOM).
 - 🌬️ Wind is OFF by default; switch it on in "Who's playing?" or the online room (host). When on it changes every turn. Crates drop with extra weapons or ❤️. Ground blows up, tanks fall, water = out.
 - Shots pass through ground within 75 of your tank (`MUZZLE_GRACE`), so a bit of hill in front of you doesn't blow you up.
-- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400 (`mapWidth` in `sim.js`).
+- Bigger maps for more tanks: 2–3 tanks 2000 wide, 4 = 2600, 5 = 3000, 6 = 3400, 7 = 3800, 8 = 4200 (`mapWidth` in `sim.js`).
 - 📱 Play here: up to 4 tanks, each a person (pass the iPad) or 🤖 Easy / Tricky.
 - 👫 Online: picture-code rooms, up to 6 tanks, host can add 🤖. After a game the next one starts by itself in 15 s with everyone still in the room (host: ▶ Play now or 👥 Room). 🏠 and 🚪 ask first, so nobody leaves by accident. Only shots are sent; every device runs the same game from the same seed (`sim.js` has no DOM, fixed time step, own random numbers, no trig). After each shot the shooter sends the tanks' state; anything out of step is nudged back.
-- Maps: grass, snow, candy, moon (low gravity). Tank maker: name, colour, hat, flag (saved).
+- Maps: grass, snow, candy, moon (low gravity). Tank maker: colour, hat, flag (saved). Your tank's name is your home-screen name. Players sharing one screen are Kit-1, Kit-2… (no typing). Online, "Players on this screen" (1–4) adds shared-screen tanks; up to 8 tanks in a room.
 - 🎬 Replay when a tank is knocked out, and a victory dance.
 - `?ttdebug` puts `window.__tt()` in the console.
 - Ground art (`ground.js`): rock layers, roots, pebbles, and buried dinosaur skeletons, fossils and silly things per map. Looks only, made from the map seed so friends see the same.
@@ -215,7 +216,11 @@ A simple paint program, like old Windows Paint.
 - Shared code: `js/engine/net.js` (any game can use it).
 - One Realtime Database for all games: `games/<game>/rooms/<code>/...`
 - Room codes are 3 pictures (`CODE_LEN` in net.js), so kids can join without reading.
-- Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules).
+- Security rules: `database.rules.json` (paste into Firebase → Realtime Database → Rules; not deployed by the site push).
+  - Homes `games/friends/homes/<uid>`: only friends can read / knock / message (`games/friends/allow/<uid>` = who I saved, written only by me).
+  - Shared worlds `games/<game>/pub/<area>/<uid>`: only friends can read; only you write yours.
+  - Key shapes, game names and field sizes are checked.
+- Test the rules: run the Firebase emulators (database 9000, auth 9099) with `database.rules.json`, then open the site with `?emu` on localhost.
 - Test on one computer with 2 tabs, no internet: add `?net=local` to the URL,
   e.g. `http://localhost:8000/?net=local#/race-track`
 

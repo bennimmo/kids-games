@@ -11,13 +11,13 @@ import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftR
 import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
-import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS, NAMES } from './render.js';
+import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS } from './render.js';
 import { myName } from '../../js/engine/profile.js';
 import { makeRoom, findRoom, connect, MAP_IDS, GAME_ID } from './online.js';
 
 const TURN_TIME = 45;
 const NEXT_GAME = 15;   // online: seconds until the next game starts
-const MAX_TANKS = 6;
+const MAX_TANKS = 8;
 const LOOK_KEY = 'tt-look', LOCAL_KEY = 'tt-local';
 const DANCES = ['bounce', 'spin', 'wiggle', 'flip'];
 const SLOT_TYPES = ['human', 'easy', 'tricky', 'off'];
@@ -48,7 +48,8 @@ export function mount(stage) {
   // ---------------------------------------------------------------- state
   let myLook = sanitizeLook(load(LOOK_KEY, null) || randomLook(0));
   // my name from the main menu, unless I gave my tank a name of its own
-  if (myName() && (NAMES.includes(myLook.name) || myLook.name === 'Tank')) myLook.name = myName();
+  // my tank is called whatever I put on the home screen
+  if (myName()) myLook.name = myName();
   const localSetup = (() => {
     const s = load(LOCAL_KEY, null);
     const slots = [0, 1, 2, 3].map(i => {
@@ -74,6 +75,23 @@ export function mount(stage) {
   const pointers = new Map();
   let pinch = null;
 
+  // Players sharing one screen: Kit-1, Kit-2… (each a different colour)
+  function sharedLooks(look, n) {
+    if (n <= 1) return [look];
+    const c0 = Math.max(0, TANK_COLORS.indexOf(look.color));
+    return Array.from({ length: n }, (_, i) => sanitizeLook({ ...look, name: `${look.name.slice(0, 9)}-${i + 1}`, color: TANK_COLORS[(c0 + i * 3) % TANK_COLORS.length] }));
+  }
+  const baseName = () => myName() || myLook.name;
+  // Names for the local game: if more than one person plays here, Kit-1, Kit-2…
+  function localNames(slots) {
+    const humans = slots.filter(s => s.type === 'human').length;
+    let k = 0;
+    return slots.map((s, i) => {
+      if (s.type !== 'human') return s.look.name;
+      k++;
+      return humans > 1 ? `${baseName().slice(0, 9)}-${k}` : baseName();
+    });
+  }
   const pickMap = m => (m === 'random' || !MAPS[m] ? MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)] : m);
 
   // ---------------------------------------------------------------- matches
@@ -110,7 +128,8 @@ export function mount(stage) {
   function startLocal() {
     const slots = localSetup.slots.filter(s => s.type !== 'off');
     if (slots.length < 2) return;
-    const looks = slots.map((s, i) => (i === 0 ? myLook : s.look));
+    const names = localNames(slots);
+    const looks = slots.map((s, i) => sanitizeLook({ ...(i === 0 ? myLook : s.look), name: names[i] }));
     newMatch({
       seed: Math.floor(Math.random() * 1e9), map: pickMap(localSetup.map), wind: localSetup.wind,
       looks, ctrl: slots.map(s => (s.type === 'human' ? 'me' : s.type)), mode: 'local',
@@ -123,7 +142,7 @@ export function mount(stage) {
     if (roster.length < 2) return false;
     const hostPid = net.hostPid();
     const looks = roster.map(r => sanitizeLook(r.look));
-    const ctrl = roster.map(r => (r.pid ? (r.pid === net.pid ? 'me' : 'remote') : (net.isHost ? (r.bot === 'tricky' ? 'tricky' : 'easy') : 'remote')));
+    const ctrl = roster.map(r => (r.pid ? (r.pid === net.pid ? 'me' : 'remote') : (net.isHost ? (r.bot === 'tricky' ? 'tricky' : 'easy') : 'remote')));   // a shared screen has several 'me' tanks
     const owners = roster.map(r => (r.pid ? r.pid : hostPid));
     if (!ctrl.includes('me')) return false;   // joined after it started
     net.joinGame(game.id);
@@ -145,7 +164,7 @@ export function mount(stage) {
     const t = w.tanks[i];
     if (t.ammo[match.sel[i]] === 0) match.sel[i] = 'shell';
     elev = 0.6;
-    match.ready = !(match.mode === 'local' && match.humans > 1 && match.ctrl[i] === 'me');
+    match.ready = !(match.humans > 1 && match.ctrl[i] === 'me');   // shared screen: pass it on
     userPan = false;
     overview = true; userZoom = 1;   // back to seeing everyone each turn
     closeBackpack();
@@ -823,7 +842,7 @@ export function mount(stage) {
       <h2 class="ui-title">Who's playing?</h2>
       <div class="ui-label">Players</div>
       <div class="tt-slots">${s.slots.map((sl, i) => {
-        const look = i === 0 ? myLook : sl.look;
+        const look = { ...(i === 0 ? myLook : sl.look), name: localNames(s.slots)[i] };
         const off = sl.type === 'off';
         return `<div class="tt-slot ${off ? 'off' : ''}">
           <button class="tt-slot-tank" data-edit="${i}" ${off ? 'disabled' : ''}><canvas></canvas><b>${off ? '—' : esc(look.name)}</b>${off ? '' : `<small>${icon('edit')}</small>`}</button>
@@ -863,6 +882,7 @@ export function mount(stage) {
     p.querySelector('[data-a="go"]').addEventListener('click', () => { sound.pop(); startLocal(); });
   }
 
+  // Colour, hat and flag. Names come from the home screen (Kit, or Kit-1, Kit-2… on a shared screen).
   function editLook(start, done) {
     const look = { ...start };
     const wrap = document.createElement('div');
@@ -871,7 +891,6 @@ export function mount(stage) {
       <div class="ui-kicker">Tank Tantrum</div>
       <h2 class="ui-title">My tank</h2>
       <canvas class="tt-preview"></canvas>
-      <input class="tt-input" maxlength="12" value="${esc(look.name)}" aria-label="Tank name" placeholder="Name">
       <div class="ui-label">Colour</div>
       <div class="tt-swatches">${TANK_COLORS.map(c => `<button class="tt-sw" data-c="${c}" style="--c:${c}" aria-label="Colour"></button>`).join('')}</div>
       <div class="ui-label">Hat</div>
@@ -890,8 +909,6 @@ export function mount(stage) {
     refresh();
     wrap.querySelectorAll('.tt-sw').forEach(b => b.addEventListener('click', () => { look.color = b.dataset.c; sound.pop(); refresh(); }));
     wrap.querySelectorAll('.tt-picks').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { look[g.dataset.k] = b.dataset.v; sound.pop(); refresh(); })));
-    const input = wrap.querySelector('.tt-input');
-    input.addEventListener('input', () => { look.name = input.value; });
     wrap.querySelector('[data-a="done"]').addEventListener('click', () => {
       sound.pop();
       wrap.remove();
@@ -977,6 +994,12 @@ export function mount(stage) {
     if (screen === 'lobby') lobbyScreen();
   }
 
+  // How many people play on this screen (1-4). Their tanks are called Kit-1, Kit-2…
+  function herePicker(total) {
+    const mine = net.here();
+    return `<div class="ui-label">Players on this screen</div><div class="ui-row tt-here">${[1, 2, 3, 4].map(n =>
+      `<button class="ui-btn small ${n === mine ? 'primary' : ''}" data-here="${n}" ${total - mine + n > MAX_TANKS ? 'disabled' : ''}>${'👤'.repeat(n)}</button>`).join('')}</div>`;
+  }
   function lobbyBots() { const m = net.meta() || {}; return Array.isArray(m.bots) ? m.bots.slice(0, MAX_TANKS) : []; }
 
   const hostUid = () => (net && net.hostPid() ? net.hostPid().split('_')[0] : null);
@@ -988,7 +1011,7 @@ export function mount(stage) {
     const meta = net.meta() || {};
     const players = net.players();
     const bots = lobbyBots();
-    const total = players.length + bots.length;
+    const total = players.reduce((n, pl) => n + pl.here, 0) + bots.length;
     const playing = meta.phase === 'play' && !(match && match.mode === 'online');
     const map = meta.map || 'random';
     const list = lobbyPeople();
@@ -996,7 +1019,7 @@ export function mount(stage) {
     const doing = 'picking the map';
     const lock = !net.isHost ? '' : notReady(list).length ? startLabel(list) : (total < 2 ? 'Wait for a friend, or add a 🤖' : '');
     const tanks = `<div class="tt-players">
-        ${players.map(pl => `<div class="tt-pl ${pl.me ? 'me' : ''}"><canvas data-look='${esc(JSON.stringify(pl.look))}'></canvas><b>${esc(pl.look.name)}</b></div>`).join('')}
+        ${players.flatMap(pl => sharedLooks(pl.look, pl.here).map(l => `<div class="tt-pl ${pl.me ? 'me' : ''}"><canvas data-look='${esc(JSON.stringify(l))}'></canvas><b>${esc(l.name)}</b></div>`)).join('')}
         ${bots.map((b, i) => `<div class="tt-pl bot"><canvas data-look='${esc(JSON.stringify(sanitizeLook(b.look)))}'></canvas><b>${esc(sanitizeLook(b.look).name)}</b><small>Computer</small>${net.isHost ? `<button class="tt-rm" data-rm="${i}" aria-label="Remove">${icon('close')}</button>` : ''}</div>`).join('')}
       </div>`;
     const html = `
@@ -1011,6 +1034,7 @@ export function mount(stage) {
           <button class="ui-btn small" data-bot="tricky" ${total >= MAX_TANKS ? 'disabled' : ''}>${icon('plus')} Tricky computer</button>
           <button class="ui-btn small" data-a="tank">${icon('edit')} My tank</button>
         </div>
+        ${herePicker(total)}
         <div class="ui-label">Map</div>${mapPicker(map)}
         ${windPicker(meta.wind === true)}
         <div class="ui-row tt-foot">
@@ -1022,6 +1046,7 @@ export function mount(stage) {
           ? `<div class="tg-wait"><div class="tg-wait-who">A game is going on. You can play in the next one!</div>${readyButton(net.ready())}</div>`
           : waitHTML(host, doing, net.ready())}
         <button class="ui-btn tt-mytank-big" data-a="tank"><canvas data-look='${esc(JSON.stringify(myLook))}'></canvas>${icon('edit')} My tank</button>
+        ${herePicker(total)}
         <div class="ui-label">Tanks</div>
         ${tanks}
         <div class="ui-row tt-foot">
@@ -1055,6 +1080,7 @@ export function mount(stage) {
       if (net && !net.isHost) net.setReady(false); // changing tank: not ready until done
       editLook(myLook, l => { myLook = l; save(LOOK_KEY, l); if (net) net.setLook(l); lastLobbyHtml = ''; lobbyScreen(); });
     });
+    p.querySelectorAll('[data-here]').forEach(b => b.addEventListener('click', () => { sound.pop(); net.setHere(Number(b.dataset.here)); }));
     const rd = q('[data-ready]');
     if (rd) rd.addEventListener('click', () => { sound.pop(); net.setReady(!net.ready()); });
     const go = q('[data-a="go"]');
@@ -1072,7 +1098,7 @@ export function mount(stage) {
     if (!net || !net.isHost) return;
     const players = net.players().sort((a, b) => (a.pid === net.pid ? -1 : b.pid === net.pid ? 1 : a.pid < b.pid ? -1 : 1));
     const roster = [
-      ...players.map(pl => ({ pid: pl.pid, look: pl.look })),
+      ...players.flatMap(pl => sharedLooks(pl.look, pl.here).map(look => ({ pid: pl.pid, look }))),
       ...lobbyBots().map(b => ({ bot: b.level === 'tricky' ? 'tricky' : 'easy', look: sanitizeLook(b.look) })),
     ].slice(0, MAX_TANKS);
     if (roster.length < 2) { net.setLobby({ phase: 'lobby' }); return; }   // everyone else left: wait in the room
@@ -1087,7 +1113,10 @@ export function mount(stage) {
   }
 
   // ---------------------------------------------------------------- go
-  if (/[?&]ttdebug/.test(location.search)) window.__tt = () => ({ match, replay, screen, net, time });
+  if (/[?&]ttdebug/.test(location.search)) {
+    window.__tt = () => ({ match, replay, screen, net, time });
+    window.__ttHost = async () => { const r = await makeRoom(); joined(r); return r.code; };   // tests: make a room without friends
+  }
   startDemo();
   const inviteCode = takeJoinCode(GAME_ID);
   if (inviteCode) joinFromInvite(inviteCode); else show('title');

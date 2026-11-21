@@ -39,8 +39,8 @@ export function connect(room, look, { onChange, onClosed }) {
   const pid = room.uid + '_0';   // database rules: player ids start with "<uid>_"
   let players = {}, live = {}, meta = null;
   let metaSeen = false, closed = false, gameId = null;
-  let myLook = sanitizeLook(look), myReady = false;
-  const writeMe = () => room.setPlayer(pid, { look: myLook, ...playerInfo(myReady) }).catch(() => {});
+  let myLook = sanitizeLook(look), myReady = false, myHere = 1;   // myHere: players sharing this screen
+  const writeMe = () => room.setPlayer(pid, { look: myLook, here: myHere, ...playerInfo(myReady) }).catch(() => {});
   let driveTimer = null, drivePending = null, lastDrive = 0;
   const unsubs = [];
   const emit = () => { if (!closed) onChange(); };
@@ -76,7 +76,9 @@ export function connect(room, look, { onChange, onClosed }) {
     isHost: room.isHost,
     meta: () => meta,
     hostPid,
-    players: () => Object.entries(players).map(([id, p]) => ({ pid: id, me: id === pid, look: sanitizeLook(p && p.look) })),
+    players: () => Object.entries(players).map(([id, p]) => ({ pid: id, me: id === pid, look: sanitizeLook(p && p.look), here: Math.min(4, Math.max(1, Math.floor(Number(p && p.here)) || 1)) })),
+    here: () => myHere,
+    setHere(n) { myHere = Math.min(4, Math.max(1, n | 0)); writeMe(); },
     rawPlayers: () => players,
     hasPlayer: id => !!players[id],
     setLook(l) { myLook = sanitizeLook(l); writeMe(); },

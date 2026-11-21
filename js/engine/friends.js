@@ -4,7 +4,7 @@
 //   games/friends/rooms/<code>   my friend code (6 hex = 6 pictures), new on every visit to the menu
 //       host, meta: { name, ok/<pid>: <group>, no/<pid>, full/<pid> }   (written by me)
 //       players/<uid>_k: { name }                                       (a friend knocking)
-//   games/friends/rooms/h<uid>  my home: always there while the app is open, so saved friends can call me
+//   games/friends/homes/<uid>   my home (code "h<uid>"; only friends can read it / knock): always there while the app is open, so saved friends can call me
 //       host, meta: { name, face, on, game, at, invite? }  (on = app open; game = what I'm playing;
 //             invite = { game, code, at }: "come and play my game", seen by every friend, see together.js)
 //       players/<uid>_k: { name, face, group? }   (a friend calling; group = their call to join)
@@ -69,7 +69,18 @@ let sid = randomHex(10); // this page load (new one if we rebuild every link)
 
 let fb = null;
 async function core() { if (!fb) fb = await firebaseCore(); return fb; }
-const ref = p => fb.D.ref(fb.db, `${AREA}/${p}`);
+// Homes ('h' + uid) live in their own place: only friends can read them, only friends can knock (database.rules.json).
+const ref = p => fb.D.ref(fb.db, p[0] === 'h' ? `games/friends/homes/${p.slice(1)}` : `${AREA}/${p}`);
+// Who I've saved: the database rules use this list to let only my friends see my home and knock.
+let allowSent = '';
+function syncAllow() {
+  if (!fb) return;
+  const want = Object.fromEntries(contacts.map(c => [c.uid, true]));
+  const key = JSON.stringify(want);
+  if (key === allowSent) return;
+  allowSent = key;
+  fb.D.set(fb.D.ref(fb.db, `games/friends/allow/${fb.uid}`), contacts.length ? want : null).catch(() => { allowSent = ''; });
+}
 
 // ------------------------------------------------------------ state + events
 
@@ -87,6 +98,7 @@ let invites = [];                     // [{ uid, name, face, game, code, at }] f
 const dismissed = new Set();          // 'uid:code' already answered
 let playing = null;                   // { game, code } room I'm in (from together.js)
 const INVITE_MS = 15 * 60 * 1000;
+let intros = [];                      // [{ pid, from, fromName, uid, name, face }] friends introducing someone
 let declines = [];                    // [{ uid, code }] friends who said no to my invite
 let where = '';                       // game id I'm in ('' = menu)
 let home = null;                      // { id, unsubs }
@@ -101,6 +113,7 @@ const state = () => ({
   invites: liveInvites().filter(v => !dismissed.has(v.uid + ':' + v.code) && !(playing && playing.code === v.code && playing.game === v.game)),
   friends: group ? [...group.peers.values()].map(p => ({ uid: p.uid, name: p.name, face: p.face || '', status: p.status, stream: p.stream, game: p.game || '', cam: !!p.cam, stuck: isStuck(p), weak: !!p.weak })) : [],
   declines: declines.slice(),
+  intros: intros.filter(i => !isFriend(i.uid)),
   // Bubbles: friends who are on now (in a call with me or not).
   buddies: buddies(),
   // Saved friends, online ones first: { uid, name, face, online, game, inCall, calling }
@@ -404,7 +417,7 @@ export async function askFriend(theirCode) {
       } else if (m.full && m.full[pid]) finish('full');
       else if (m.no && m.no[pid]) finish('no');
     });
-  } catch (e) { set('offline'); }
+  } catch (e) { set(e && /permission/i.test(String(e.message || e.code)) ? 'away' : 'offline'); } // not friends (any more)
 }
 
 // ------------------------------------------------------------ the group
@@ -737,6 +750,42 @@ function readMessages(id, v) {
   }
 }
 
+// ------------------------------------------------------------ introduce friends
+// "Sam, meet Max": both get asked "Be friends?". Tick on both sides = friends (no pictures needed).
+const INTRO_MS = 3 * 24 * 60 * 60 * 1000;
+export function introduce(uid, toUids) {
+  const a = contacts.find(c => c.uid === uid);
+  if (!a || !fb) return 0;
+  let n = 0;
+  for (const t of toUids) {
+    const b = contacts.find(c => c.uid === t);
+    if (!b || b.uid === a.uid) continue;
+    const tell = (to, about) => fb.D.set(ref(`${homeId(to.uid)}/players/${fb.uid}_i_${about.uid}`),
+      plain({ uid: about.uid, name: about.name, face: about.face || '', at: fb.now() })).catch(() => {});
+    tell(a, b); tell(b, a); n++;
+  }
+  return n;
+}
+function readIntros(id, v) {
+  const out = [];
+  for (const [pid, m] of Object.entries(v)) {
+    if (!m || !okUid(m.uid) || !pid.endsWith('_i_' + m.uid)) continue;
+    const from = pid.slice(0, -('_i_' + m.uid).length), c = okUid(from) && contacts.find(x => x.uid === from);
+    const stale = !c || m.uid === fb.uid || isFriend(m.uid) || fb.now() - (m.at || 0) > INTRO_MS;
+    if (stale) { fb.D.remove(ref(`${id}/players/${pid}`)).catch(() => {}); continue; } // friends only
+    out.push({ pid, from, fromName: c.name, fromFace: c.face, uid: m.uid, name: cleanName(m.name) || 'Friend', face: cleanFace(m.face) });
+  }
+  intros = out;
+}
+export function answerIntro(pid, yes) {
+  const i = intros.find(x => x.pid === pid);
+  if (!i || !home) return;
+  intros = intros.filter(x => x.pid !== pid);
+  if (yes) saveFriend(i.uid, i.name, i.face);
+  fb.D.remove(ref(`${home.id}/players/${pid}`)).catch(() => {});
+  emit();
+}
+
 // Friends who are on now: { uid, name, face, game, inCall, status, stream }
 function buddies() {
   const out = [];
@@ -768,15 +817,17 @@ function saveFriend(uid, name, face) {
   if (!okUid(uid)) return;
   const old = contacts.find(c => c.uid === uid);
   if (old && old.name === name && old.face === face) return;
-  // Same person on a new device id (cleared browser): keep just the newest.
-  contacts = contacts.filter(c => c.uid !== uid && !(c.name === name && c.face === face && face));
+  // Keyed by device id only: the same child on an iPad and a computer is two entries
+  // (one shows on, one off) — never swap one for the other.
+  contacts = contacts.filter(c => c.uid !== uid);
   contacts.unshift({ uid, name, face: face || '', at: Date.now() });
   storeFriends();
+  syncAllow();
   watchPresence();
 }
 export function removeFriend(uid) {
   contacts = contacts.filter(c => c.uid !== uid);
-  storeFriends(); watchPresence(); emit();
+  storeFriends(); syncAllow(); watchPresence(); emit();
 }
 const homeId = uid => 'h' + uid;
 // Online = says so AND has checked in lately (a device that just vanishes can't say goodbye).
@@ -784,6 +835,7 @@ const HOME_BEAT_MS = 30000, HOME_STALE_MS = 95000;
 const prOn = pr => !!(pr && pr.on && (pr.at == null || !fb || fb.now() - pr.at < HOME_STALE_MS) && !(pr.gone != null && pr.at === pr.gone));
 
 // Who's on, and what they're playing (read from each saved friend's home).
+const presenceTries = new Map();
 function watchPresence() {
   if (!fb) return;
   const want = new Set(contacts.map(c => c.uid));
@@ -791,6 +843,7 @@ function watchPresence() {
   for (const u of want) {
     if (presenceUnsubs.has(u)) continue;
     presenceUnsubs.set(u, fb.D.onValue(ref(`${homeId(u)}/meta`), s => {
+      presenceTries.delete(u);
       const m = s.val() || {};
       presence.set(u, { on: m.on === true, at: typeof m.at === 'number' ? m.at : null, game: typeof m.game === 'string' ? m.game.slice(0, 30) : '', invite: m.invite && typeof m.invite === 'object' ? m.invite : null });
       const c = contacts.find(x => x.uid === u);
@@ -798,7 +851,13 @@ function watchPresence() {
         c.name = cleanName(m.name) || c.name; c.face = cleanFace(m.face); storeFriends();
       }
       emit();
-    }, () => {}));
+    }, () => {
+      // Not allowed (yet): they haven't saved me back. Try again in a bit.
+      presenceUnsubs.delete(u); presence.delete(u); emit();
+      const n = presenceTries.get(u) || 0;
+      presenceTries.set(u, n + 1);
+      setTimeout(watchPresence, Math.min(30000, 1500 * 2 ** n)); // quick at first (just added each other)
+    }));
   }
 }
 
@@ -808,6 +867,7 @@ async function openHome() {
   const { D, uid } = fb;
   const id = homeId(uid);
   home = { id, unsubs: [] };
+  syncAllow();
   const meta = () => ({ name: myName(), face: myFace(), on: true, game: where, at: D.serverTimestamp(), invite: myInvite });
   const put = async () => {
     D.onDisconnect(ref(`${id}/meta/on`)).set(false);
@@ -835,6 +895,7 @@ async function openHome() {
       .filter(([pid, r]) => isFriend(uidOf(pid, '_r')) && r && r.code)
       .map(([pid, r]) => ({ uid: uidOf(pid, '_r'), code: String(r.code).slice(0, 12) }));
     readMessages(id, v);
+    readIntros(id, v);
     // Calls: only from saved friends, shown with the name I saved (not whatever they send).
     homeKnocks = Object.entries(v)
       .filter(([pid, k]) => k && isFriend(uidOf(pid, '_k')))

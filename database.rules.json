@@ -1,19 +1,110 @@
 {
   "rules": {
     "games": {
-      "$game": {
+      "friends": {
+        "allow": {
+          "$owner": {
+            ".read": "auth != null && auth.uid === $owner",
+            ".write": "auth != null && auth.uid === $owner",
+            "$friend": { ".validate": "$friend.matches(/^[A-Za-z0-9_-]{6,64}$/) && newData.val() === true" }
+          }
+        },
+        "homes": {
+          "$uid": {
+            ".read": "auth != null && (auth.uid === $uid || root.child('games/friends/allow/' + $uid + '/' + auth.uid).val() === true)",
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "$uid.matches(/^[A-Za-z0-9_-]{6,64}$/)",
+            "host": { ".validate": "newData.val() === $uid" },
+            "created": { ".validate": "newData.isNumber()" },
+            "meta": {
+              "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+              "face": { ".validate": "newData.isString() && newData.val().length <= 16" },
+              "on": { ".validate": "newData.isBoolean()" },
+              "game": { ".validate": "newData.isString() && newData.val().length <= 30" },
+              "at": { ".validate": "newData.isNumber()" },
+              "invite": {
+                "game": { ".validate": "newData.isString() && newData.val().length <= 30" },
+                "code": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{3}$/)" },
+                "at": { ".validate": "newData.isNumber()" },
+                "to": { "$u": { ".validate": "$u.matches(/^[A-Za-z0-9_-]{6,64}$/) && newData.val() === true" } },
+                "$other": { ".validate": false }
+              },
+              "ok": { "$pid": { ".validate": "newData.isString() && newData.val().length <= 20" } },
+              "no": { "$pid": { ".validate": "newData.isBoolean()" } },
+              "full": { "$pid": { ".validate": "newData.isBoolean()" } },
+              "$other": { ".validate": false }
+            },
+            "players": {
+              "$pid": {
+                ".write": "auth != null && ($pid === auth.uid + '_k' || $pid === auth.uid + '_t' || $pid === auth.uid + '_r' || ($pid.beginsWith(auth.uid + '_i_') && $pid.length <= 140)) && root.child('games/friends/allow/' + $uid + '/' + auth.uid).val() === true",
+                "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+                "face": { ".validate": "newData.isString() && newData.val().length <= 16" },
+                "group": { ".validate": "newData.isString() && newData.val().matches(/^c[a-z0-9]{16}$/)" },
+                "uid": { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9_-]{6,64}$/) && $pid.endsWith('_i_' + newData.val())" },
+                "text": { ".validate": "newData.isString() && newData.val().length <= 80" },
+                "code": { ".validate": "newData.isString() && newData.val().length <= 12" },
+                "at": { ".validate": "newData.isNumber()" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        },
         "rooms": {
           "$code": {
             ".read": "auth != null",
             ".write": "auth != null && (data.child('host').val() === auth.uid || (!data.exists() && newData.child('host').val() === auth.uid))",
+            ".validate": "$code.matches(/^([0-9a-f]{6}|c[a-z0-9]{16})$/)",
+            "host": { ".validate": "newData.isString()" },
+            "created": { ".validate": "newData.isNumber()" },
+            "meta": { ".validate": "newData.child('name').val() == null || (newData.child('name').isString() && newData.child('name').val().length <= 20)" },
             "players": {
               "$pid": {
-                ".write": "auth != null && $pid.beginsWith(auth.uid + '_')"
+                ".write": "auth != null && ($pid === auth.uid + '_k' || $pid === auth.uid + '_m')",
+                "name": { ".validate": "newData.isString() && newData.val().length <= 20" },
+                "face": { ".validate": "newData.isString() && newData.val().length <= 16" },
+                "group": { ".validate": "newData.isString() && newData.val().matches(/^c[a-z0-9]{16}$/)" },
+                "sid": { ".validate": "newData.isString() && newData.val().length <= 40" },
+                "game": { ".validate": "newData.isString() && newData.val().length <= 30" },
+                "cam": { ".validate": "newData.isBoolean()" },
+                "$other": { ".validate": false }
               }
             },
             "live": {
               "$pid": {
-                ".write": "auth != null && $pid.beginsWith(auth.uid + '_')"
+                ".write": "auth != null && $pid === auth.uid + '_m'"
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        }
+      },
+      "$game": {
+        ".validate": "$game.matches(/^(sky-pilot|kits-karts|raffy-race|star-dash|tank-tantrum|paint|beautiful-bells|mountain-rush|choo-choo|balloon-pop|draw-a-road)$/)",
+        "pub": {
+          "$area": {
+            "$uid": {
+              ".read": "auth != null && (auth.uid === $uid || root.child('games/friends/allow/' + $uid + '/' + auth.uid).val() === true)",
+              ".validate": "$area.matches(/^[a-z0-9-]{1,30}$/)",
+              "$pid": {
+                ".write": "auth != null && auth.uid === $uid && $pid.beginsWith(auth.uid + '_') && $pid.length <= 80"
+              }
+            }
+          }
+        },
+        "rooms": {
+          "$code": {
+            ".read": "auth != null",
+            ".write": "auth != null && (data.child('host').val() === auth.uid || (!data.exists() && newData.child('host').val() === auth.uid))",
+            ".validate": "$code.matches(/^([0-9a-f]{3}|lb-[a-z0-9-]{1,30})$/)",
+            "players": {
+              "$pid": {
+                ".write": "auth != null && $pid.beginsWith(auth.uid + '_') && $pid.length <= 80 && $pid.matches(/^[A-Za-z0-9_:.-]+$/)"
+              }
+            },
+            "live": {
+              "$pid": {
+                ".write": "auth != null && $pid.beginsWith(auth.uid + '_') && $pid.length <= 80 && $pid.matches(/^[A-Za-z0-9_:.-]+$/)"
               }
             }
           }
