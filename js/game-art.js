@@ -2,6 +2,20 @@
 // gameArt(id) -> SVG string, or '' if there's no drawing (then the emoji icon is used).
 
 const ART = {
+  'axie': `
+    <circle cx="20" cy="26" r="4" fill="#fff" opacity=".7"/><circle cx="80" cy="20" r="3" fill="#fff" opacity=".7"/><circle cx="74" cy="34" r="2" fill="#fff" opacity=".7"/>
+    <path d="M30 66c-10 2-18 10-22 18 10-2 20-6 26-12z" fill="#ffb8cc"/>
+    <ellipse cx="42" cy="66" rx="22" ry="11" fill="#ffb8cc"/>
+    <g stroke="#ff4f86" stroke-width="4.5" stroke-linecap="round">
+      <path d="M36 44 22 34M35 50 19 46M37 56 22 58M66 44 80 34M67 50 83 46M65 56 80 58"/>
+    </g>
+    <ellipse cx="51" cy="50" rx="21" ry="17" fill="#ffb8cc"/>
+    <ellipse cx="45" cy="40" rx="8" ry="3.5" fill="#fff" opacity=".45"/>
+    <circle cx="43" cy="48" r="3" fill="#1d1b2c"/><circle cx="59" cy="48" r="3" fill="#1d1b2c"/>
+    <circle cx="42" cy="47" r="1" fill="#fff"/><circle cx="58" cy="47" r="1" fill="#fff"/>
+    <path d="M44 55q7 6 14 0" stroke="#1d1b2c" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="38" cy="55" rx="3.5" ry="2" fill="#ff5a82" opacity=".45"/><ellipse cx="64" cy="55" rx="3.5" ry="2" fill="#ff5a82" opacity=".45"/>`,
+
   'sky-pilot': `
     <defs>
       <linearGradient id="sp-b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6b5b"/><stop offset="1" stop-color="#e2412f"/></linearGradient>

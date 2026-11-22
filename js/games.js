@@ -8,6 +8,14 @@ export const AGES = [
 // To add a game: make a folder in /games with a game.js, then add it here.
 export const GAMES = [
   {
+    id: 'axie',
+    age: 'big',
+    name: 'Axie Pals',
+    icon: '🦎',
+    color: '#ff9ec0',
+    load: () => import('../games/axie/game.js'),
+  },
+  {
     id: 'mountain-rush',
     age: 'big',
     name: 'Mountain Rush',

@@ -249,3 +249,14 @@ For age 2+. Tap balloons to pop them. No losing, no timer.
 - Runs in a frame from `games/sandwich/app/` (his built files; paths made relative).
 - Sandwiches save on this device (IndexedDB, `app/local-store.js`), not on his server. `app/meine.html` = Meine Stullen.
 - `app/_astro/share.*.js` is ours: keep/upload/share go to the device instead of `/api/photos`.
+
+### 🦎 Axie Pals (`games/axie/`)
+Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`).
+- New pet: pick egg colour (6), name, level. Tap the egg 6 times to hatch.
+- Needs: 🍤 food, 🧽 clean, ⚽ fun, 💤 sleep. Real time, gentle: they go down while the game is closed (asleep 8pm–7am), but never below the level's floor. Never dies; just sulks.
+- Levels: 🐣 Easy = birthday every day, always grows. 🐥 Medium = every 2 days, grows only when needs are OK on average. 🦅 Hard = every 3 days, every need must be OK, needs drop 2× faster.
+- Feed (🪱 🦐 🟤 🧁). 3 cakes = tummy ache → 💊 medicine. Poo comes after eating: tap it to scoop. 🧽 rub the glass to clean. 💡/🌙 lights = sleep. Tap/stroke it to tickle. Tap the water for a bubble it chases.
+- Birthdays: cake (tap to blow), a present (`GIFTS` in `items.js`), auto photo. Grows: Baby → Little → Kid → Big kid → Grown-up.
+- 🪙 Coins from care and 🎮 bubble pop (25 s, gold = 3). 🎁 Things: put toys/decor in the tank, wear hats/glasses/scarf, 🛒 shop. 📸 album (last 24).
+- Next: walks, and friends' pets visiting (multiplayer).
+- Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl), `game.js` (screens, input, UI).
