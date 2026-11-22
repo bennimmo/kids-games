@@ -28,7 +28,7 @@ export const save = rec => tx('readwrite', s => s.put(rec));
 export const remove = id => tx('readwrite', s => s.delete(id));
 export async function setImages(id, images) {
   const rec = await get(id);
-  if (!rec) throw new Error('Nicht gefunden');
+  if (!rec) throw new Error('Not found');
   rec.images = images;
   await save(rec);
 }

@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#140d07">
-<title>Meine Stullen</title>
+<title>My sandwiches</title>
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <style>
   :root { --bg: #140d07; --fg: #f5ead8; --dim: #b9a68c; --card: #241810; --accent: #f2b33d; }
@@ -31,18 +31,18 @@
 </head>
 <body>
 <header>
-  <h1>Meine Stullen</h1>
-  <a class="btn" href="./index.html">Neue Stulle</a>
+  <h1>My sandwiches</h1>
+  <a class="btn" href="./index.html">New sandwich</a>
 </header>
 <div class="grid"></div>
-<p class="empty" hidden>Noch keine Stullen. Mach ein Foto und tipp „Behalten“.</p>
+<p class="empty" hidden>No sandwiches yet. Take a photo and tap “Keep”.</p>
 <div class="view" hidden>
   <img alt="">
   <div class="meta"></div>
   <div class="row">
-    <button class="share">Teilen</button>
-    <button class="ghost del">Löschen</button>
-    <button class="ghost close">Zurück</button>
+    <button class="share">Share</button>
+    <button class="ghost del">Delete</button>
+    <button class="ghost close">Back</button>
   </div>
 </div>
 <script type="module">
@@ -58,8 +58,8 @@ async function draw() {
     const b = document.createElement('button');
     const img = document.createElement('img');
     const u = URL.createObjectURL(r.images['thumb.jpg']); urls.push(u);
-    img.src = u; img.alt = 'Stulle ' + r.id;
-    const n = document.createElement('span'); n.textContent = 'Nr. ' + r.id;
+    img.src = u; img.alt = 'Sandwich ' + r.id;
+    const n = document.createElement('span'); n.textContent = 'No. ' + r.id;
     b.append(img, n);
     b.onclick = () => show(r.id);
     return b;
@@ -72,19 +72,19 @@ async function show(id) {
   if (bigUrl) URL.revokeObjectURL(bigUrl);
   bigUrl = URL.createObjectURL(r.images['photo.jpg'] || r.images['thumb.jpg']);
   big.src = bigUrl;
-  meta.textContent = 'Stulle Nr. ' + r.id + ' · ' + new Date(r.created).toLocaleDateString('de-DE');
+  meta.textContent = 'Sandwich No. ' + r.id + ' · ' + new Date(r.created).toLocaleDateString('en-GB');
   view.hidden = false;
   history.replaceState(null, '', '#' + id);
 }
 function hide() { view.hidden = true; open = null; history.replaceState(null, '', location.pathname); }
 view.querySelector('.close').onclick = hide;
 view.querySelector('.del').onclick = async () => {
-  if (!open || !confirm('Diese Stulle löschen?')) return;
+  if (!open || !confirm('Delete this sandwich?')) return;
   await remove(open.id); hide(); draw();
 };
 view.querySelector('.share').onclick = async () => {
   const blob = open?.images?.['photo.jpg']; if (!blob) return;
-  const file = new File([blob], `stulle-${open.id}.jpg`, { type: 'image/jpeg' });
+  const file = new File([blob], `sandwich-${open.id}.jpg`, { type: 'image/jpeg' });
   if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file] }); } catch {} return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
 };

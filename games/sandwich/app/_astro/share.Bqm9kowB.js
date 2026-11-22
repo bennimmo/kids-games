@@ -31,7 +31,7 @@ async function share(url, title) {
   const rec = id ? await get(id).catch(() => null) : null;
   const blob = rec?.images?.['photo.jpg'];
   if (blob) {
-    const file = new File([blob], `stulle-${id}.jpg`, { type: 'image/jpeg' });
+    const file = new File([blob], `sandwich-${id}.jpg`, { type: 'image/jpeg' });
     if (navigator.canShare?.({ files: [file] })) {
       try { await navigator.share({ files: [file], title }); return 'shared'; }
       catch (e) { if (e?.name === 'AbortError') return 'shared'; }
