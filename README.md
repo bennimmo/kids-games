@@ -258,5 +258,10 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
 - Feed (🪱 🦐 🟤 🧁). 3 cakes = tummy ache → 💊 medicine. Poo comes after eating: tap it to scoop. 🧽 rub the glass to clean. 💡/🌙 lights = sleep. Tap/stroke it to tickle. Tap the water for a bubble it chases.
 - Birthdays: cake (tap to blow), a present (`GIFTS` in `items.js`), auto photo. Grows: Baby → Little → Kid → Big kid → Grown-up.
 - 🪙 Coins from care and 🎮 bubble pop (25 s, gold = 3). 🎁 Things: put toys/decor in the tank, wear hats/glasses/scarf, 🛒 shop. 📸 album (last 24).
-- Next: walks, and friends' pets visiting (multiplayer).
+- 👫 Playdate (`playdate.js`): tap 👫 → pick friends → they get the invite and their axolotl swims into your tank (name tag, colour, clothes, size). Visitors see the host's decor.
+  - Each device moves its own axolotl (`live/<pid>.p`, ~7×/sec). Food, bubbles, tickles (tap a friend's axolotl) and 🎮 bubble pop (starts for everyone) are numbered events in `live/<pid>.ev`. Needs and coins never leave the device.
+  - Friends make it happier (fun goes up), a 📸 playdate photo is taken after 5 s. 👫 again → End playdate / Go home.
+  - Needs `axie` in the game list in `database.rules.json` (paste the rules into Firebase).
+  - Test: `?axdebug&net=local`, `__axie.host()` in one tab, open `#/axie?join=<code>` in another.
+- Next: walks.
 - Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl), `game.js` (screens, input, UI).

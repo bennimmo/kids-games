@@ -10,6 +10,9 @@ import {
   newPet, loadPet, savePet, forgetPet, catchUp, update as tickPet, addPoo, clamp,
   mood, sulky, nightNow, nextBirthday, birthdayProgress, isGrowing, giftFor,
 } from './pet.js';
+import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
+import { takeJoinCode } from '../../js/engine/together.js';
+import { createRoom } from '../../js/engine/net.js';
 import { drawTank, drawGlass, drawShadow, drawAlgae, drawNight, drawEmoji, drawPoo, drawBubble, drawEgg, drawAxolotl, drawSay, drawCake } from './draw.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -119,6 +122,9 @@ export function mount(stage, info) {
   let game = null;             // bubble pop mini game
   let egg = null;
   let panelOpen = false;
+  // Playdate (friends' axolotls in the tank)
+  let pd = null, pdStarting = false, foodN = 0, tankT = 0, lastTank = '';
+  const mates = new Map();   // pid -> { x, y, dir, face, pet, who, face, seen, photo }
 
   const colOf = () => COLOURS.find(c => c.id === pet?.colour) || COLOURS[0];
   const save = () => { if (pet && screen === 'tank') savePet(pet); };
@@ -157,6 +163,7 @@ export function mount(stage, info) {
           <div class="axie-need" data-k="energy">💤<i></i></div>
         </div>
         <div class="axie-right">
+          <div class="axie-chip" data-pd hidden></div>
           <div class="axie-chip" data-coins></div>
           <div class="axie-chip"><button data-act="settings" aria-label="Settings">⚙️</button></div>
         </div>
@@ -167,6 +174,7 @@ export function mount(stage, info) {
         <button data-act="lights" aria-label="Lights">💡</button>
         <button data-act="medicine" aria-label="Medicine" hidden>💊</button>
         <button data-act="play" aria-label="Play">🎮</button>
+        <button data-act="friends" aria-label="Playdate">👫</button>
         <button data-act="things" aria-label="Things">🎁</button>
         <button data-act="photo" aria-label="Photos">📸</button>
       </div>`;
@@ -196,6 +204,12 @@ export function mount(stage, info) {
     med.classList.toggle('hot', pet.sick);
     bar.querySelector('[data-act=lights]').textContent = pet.lights ? '💡' : '🌙';
     bar.querySelector('[data-act=clean]').classList.toggle('on', mode === 'clean');
+    bar.querySelector('[data-act=friends]').classList.toggle('on', !!pd);
+    const pc = ui.querySelector('[data-pd]');
+    if (pc) {
+      pc.hidden = !pd;
+      if (pd) pc.textContent = pd.isHost ? `👫 ${mates.size || '…'}` : `🏠 ${pd.hostName()}`;
+    }
   }
 
   function hint(text, secs = 2.5) {
@@ -252,6 +266,7 @@ export function mount(stage, info) {
     } else if (a === 'things') openThings('mine');
     else if (a === 'photo') openAlbum();
     else if (a === 'settings') openSettings();
+    else if (a === 'friends') pd ? openPlaydate() : startPlaydate();
     refreshHud();
   }
 
@@ -261,13 +276,16 @@ export function mount(stage, info) {
     if (pet.food >= 95) { setFace('sad', 1); ax.shake = 0.8; sayIt('🙅'); sfx.no(); return; }
     const box = swimBox();
     const x = clamp(ax.x + ax.dir * rand(60, 160) * S, box.x0, box.x1);
-    foods.push({ f, x, y: TOP - 10, vy: 30, age: 0 });
+    const id = (pd ? pd.uid.slice(0, 6) : 'me') + '-' + (++foodN);
+    foods.push({ f, x, y: TOP - 10, vy: 30, age: 0, id });
+    pd?.send({ k: 'food', f: f.id, id, fx: x / W });
     sound.tone(700, 0.08, 'sine', 0.12, 400);
     setFace('wow', 0.8);
   }
 
   function eat(food) {
     const f = food.f;
+    pd?.send({ k: 'ate', id: food.id });
     pet.food = clamp(pet.food + f.food);
     pet.fun = clamp(pet.fun + f.fun);
     setFace('eat', 1.1);
@@ -310,6 +328,7 @@ export function mount(stage, info) {
     return !!pet.placed[id];
   };
   function toggleThing(id) {
+    setTimeout(() => pd?.updateInfo(), 0);
     const it = ITEMS[id];
     if (it.kind === 'wear') {
       pet.wear[it.slot] = pet.wear[it.slot] === id ? undefined : id;
@@ -502,7 +521,10 @@ export function mount(stage, info) {
   }
 
   // ---------- Bubble pop mini game ----------
-  function startGame() {
+  function startGame(fromFriend) {
+    if (game || party) return;
+    if (!fromFriend) pd?.send({ k: 'game' });
+    closeTray();
     game = { t: 25, score: 0, spawn: 0, list: [] };
     bar.style.visibility = 'hidden';
     hint('🫧 Pop the bubbles! Gold = 3 🪙', 2.5);
@@ -622,8 +644,10 @@ export function mount(stage, info) {
     const dx = (x - ax.x) * ax.dir / S, dy = (y - ax.y) / S;
     return ((dx + 25) ** 2) / (110 ** 2) + (dy ** 2) / (55 ** 2) < 1;
   };
+  // What's in the tank: mine, or the host's when I'm visiting a friend.
+  const shown = () => (pd && !pd.isHost ? pd.tank() : pet.placed);
   function itemPos(id) {
-    const it = ITEMS[id], p = pet.placed[id];
+    const it = ITEMS[id], p = shown()[id] || pet.placed[id];
     if (it.kind === 'decor') return { x: p.fx * W, y: FLOOR + 10 - it.size * 0.4 };
     if (it.kind === 'float') return { x: (flt[id]?.x ?? p.fx * W), y: TOP + 6 };
     if (it.kind === 'toy' && ball) return { x: ball.x, y: ball.y };
@@ -670,6 +694,16 @@ export function mount(stage, info) {
       }
     }
     if (mode === 'clean') { drag = { kind: 'clean', x: p.x, y: p.y, got: 0 }; return; }
+    for (const [mid, m] of mates) {
+      const dx = (p.x - m.x) * m.dir / m.s, dy = (p.y - m.y) / m.s;
+      if (((dx + 25) ** 2) / (110 ** 2) + (dy ** 2) / (55 ** 2) < 1) {
+        pd?.send({ k: 'tickle', to: mid });
+        sfx.giggle();
+        pop('💖', p.x, p.y, 2);
+        pet.fun = clamp(pet.fun + 2);
+        return;
+      }
+    }
     if (petHit(p.x, p.y)) {
       if (pet.asleep) { sayIt('😴'); sfx.snore(); return; }
       drag = { kind: 'pet', x: p.x, y: p.y, dist: 0 };
@@ -679,7 +713,7 @@ export function mount(stage, info) {
       pop('💖', p.x, p.y);
       return;
     }
-    for (const id of Object.keys(pet.placed)) {
+    for (const id of Object.keys(pd && !pd.isHost ? {} : pet.placed)) {
       const it = ITEMS[id];
       if (!it || it.kind === 'wear') continue;
       const q = itemPos(id);
@@ -693,6 +727,7 @@ export function mount(stage, info) {
     // Empty water: blow a bubble for the axolotl to chase
     if (p.y > TOP && p.y < FLOOR) {
       bubbles.push({ x: p.x, y: p.y, r: rand(14, 22), vy: -rand(18, 30), chase: !pet.asleep });
+      pd?.send({ k: 'bub', fx: p.x / W, fy: (p.y - TOP) / (FLOOR - TOP) });
       sfx.bubble();
     }
   }
@@ -952,8 +987,32 @@ export function mount(stage, info) {
     }
 
     // HUD bars move slowly; refresh now and then
+    // ---- Playdate: move friends' axolotls, send mine
+    if (pd) {
+      pd.setPos(ax.x / W, (ax.y - TOP) / (FLOOR - TOP), ax.dir, faceNow());
+      for (const m of mates.values()) {
+        const k = Math.min(1, dt * 6);
+        m.x += (m.tx - m.x) * k; m.y += (m.ty - m.y) * k;
+        m.swim = clamp(Math.hypot(m.tx - m.x, m.ty - m.y) / 40, 0, 1);
+        if (!m.photo && t - m.seen > 5 && !party && !game && !panelOpen) {
+          m.photo = true; setFace('joy', 1.5); setTimeout(() => { snap(); hint('📸 Playdate photo!', 2); }, 300);
+        }
+      }
+      if (mates.size) pet.fun = clamp(pet.fun + dt * 0.4);  // friends make it happy
+      if (pd.isHost) {
+        tankT -= dt;
+        if (tankT <= 0) {
+          tankT = 2;
+          const tk = {};
+          for (const [id, v] of Object.entries(pet.placed)) if (ITEMS[id] && (ITEMS[id].kind === 'decor' || ITEMS[id].kind === 'float')) tk[id] = Math.round(v.fx * 1000);
+          const js = JSON.stringify(tk);
+          if (js !== lastTank) { lastTank = js; pd.setTank({ placed: tk }); }
+        }
+      }
+    }
+
     saveT += dt;
-    if (saveT > 4) { saveT = 0; save(); refreshHud(); }
+    if (saveT > 4) { saveT = 0; save(); refreshHud(); pd?.updateInfo(); }
   }
 
   // ---------- Draw ----------
@@ -988,7 +1047,7 @@ export function mount(stage, info) {
     }
 
     // Decor on the floor
-    for (const id of Object.keys(pet.placed)) {
+    for (const id of Object.keys(shown())) {
       const it = ITEMS[id];
       if (!it || it.kind !== 'decor') continue;
       const q = itemPos(id);
@@ -1019,6 +1078,27 @@ export function mount(stage, info) {
     if (ball && pet.placed.ball) drawShadow(ctx, ball.x, FLOOR, 18, FLOOR - ball.y);
     if (ball && pet.placed.ball) drawEmoji(ctx, '⚽', ball.x, ball.y, 44, ball.rot);
 
+    // Friends' axolotls (with a name tag)
+    for (const m of mates.values()) {
+      const col = COLOURS.find(c => c.id === m.pet.colour) || COLOURS[0];
+      drawShadow(ctx, m.x - 20 * m.s * m.dir, FLOOR, 70 * m.s, FLOOR - m.y);
+      const w = m.pet.wear;
+      drawAxolotl(ctx, m.x, m.y, m.s, {
+        col, dir: m.dir, t: t + m.ph, swim: m.swim, face: m.face, blink: false, sick: m.face === 'sick',
+        wear: { hat: w.hat ? ITEMS[w.hat].icon : null, partyHat: w.hat === 'party', face: w.face ? ITEMS[w.face].icon : null, neck: w.neck || null, neckBow: w.neck === 'tie' },
+      });
+      const label = `${m.who === m.pet.name ? '' : m.who + "'s "}${m.pet.name}`;
+      ctx.save();
+      ctx.font = '800 15px Nunito, sans-serif';
+      const tw = ctx.measureText(label).width + 20;
+      const ly = m.y - 70 * m.s - (w.hat ? 34 * m.s : 0);
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      ctx.beginPath(); ctx.roundRect(m.x + 20 * m.s * m.dir - tw / 2, ly - 13, tw, 26, 13); ctx.fill();
+      ctx.fillStyle = '#15172e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, m.x + 20 * m.s * m.dir, ly + 1);
+      ctx.restore();
+    }
+
     drawShadow(ctx, ax.x - 20 * S * ax.dir, FLOOR, 70 * S, FLOOR - ax.y);
     // The axolotl
     const dir = ax.dir;
@@ -1044,7 +1124,7 @@ export function mount(stage, info) {
     }
 
     // Floats on top of the water
-    for (const id of Object.keys(pet.placed)) {
+    for (const id of Object.keys(shown())) {
       const it = ITEMS[id];
       if (!it || it.kind !== 'float') continue;
       const q = itemPos(id);
@@ -1091,11 +1171,128 @@ export function mount(stage, info) {
     }
   }
 
+  // ---------- Playdate ----------
+  const petInfo = () => ({ name: pet.name, colour: pet.colour, age: pet.age, wear: { ...pet.wear } });
+  function syncMates() {
+    if (!pd) return;
+    const list = pd.mates();
+    const base = clamp(Math.min(W, H) / 680, 0.55, 1.25);
+    const ids = new Set();
+    for (const f of list) {
+      ids.add(f.pid);
+      let m = mates.get(f.pid);
+      if (!f.pos) continue;
+      const tx = f.pos.fx * W, ty = TOP + f.pos.fy * (FLOOR - TOP);
+      if (!m) {
+        m = { x: tx, y: ty, swim: 0, seen: t, photo: false, ph: Math.random() * 10 };
+        mates.set(f.pid, m);
+        sound.win();
+        toast(`${f.face} ${esc(f.pet.name)} came to play! 💖`, 2.6);
+        if (pet.asleep) { pet.asleep = false; pet.lights = true; }
+      }
+      Object.assign(m, { tx, ty, dir: f.pos.dir, face: f.pos.face, pet: f.pet, who: f.who, s: base * stageOf(f.pet.age).scale });
+    }
+    for (const [id, m] of mates) if (!ids.has(id)) {
+      mates.delete(id);
+      hint(`👋 Bye ${m.pet.name}!`, 2.5);
+    }
+    refreshHud();
+  }
+  function onPlaydateEvent(from, e) {
+    if (screen !== 'tank') return;
+    if (e.k === 'food') {
+      const f = FOODS.find(x => x.id === e.f);
+      if (f && !foods.some(x => x.id === e.id)) foods.push({ f, x: e.fx * W, y: TOP - 10, vy: 30, age: 0, id: e.id });
+    } else if (e.k === 'ate') {
+      const f = foods.find(x => x.id === e.id);
+      if (f) f.gone = true;
+    } else if (e.k === 'bub') {
+      bubbles.push({ x: e.fx * W, y: TOP + e.fy * (FLOOR - TOP), r: rand(14, 22), vy: -rand(18, 30), chase: !pet.asleep });
+      sfx.bubble();
+    } else if (e.k === 'tickle' && pd && e.to === pd.pid) {
+      if (pet.asleep) return;
+      setFace('giggle', 1); sfx.giggle();
+      pet.fun = clamp(pet.fun + 3);
+      pop('💖', ax.x, ax.y - 30 * S, 2);
+      refreshHud();
+    } else if (e.k === 'game') {
+      if (!pet.asleep && !pet.sick && !panelOpen) startGame(true);
+    }
+  }
+  function usePlaydate(room) {
+    pd = connectPlaydate(room, {
+      petInfo,
+      onEvent: onPlaydateEvent,
+      onChange: syncMates,
+      onClosed: () => {
+        pd = null; mates.clear();
+        toast('Playdate over 👋', 2.5);
+        refreshHud();
+      },
+    });
+    lastTank = '';
+    tankT = 0;
+    refreshHud();
+  }
+  async function startPlaydate() {
+    if (pd || pdStarting) return;
+    pdStarting = true;
+    try {
+      const tk = {};
+      for (const [id, v] of Object.entries(pet.placed)) if (ITEMS[id] && (ITEMS[id].kind === 'decor' || ITEMS[id].kind === 'float')) tk[id] = Math.round(v.fx * 1000);
+      const room = await hostPlaydate({ placed: tk });
+      if (!room) return;
+      usePlaydate(room);
+      hint('👫 Waiting for friends…', 3);
+    } catch (e) {
+      hint("Couldn't connect 😢 Try again", 3);
+    } finally { pdStarting = false; }
+  }
+  async function joinFrom(code) {
+    try {
+      const room = await joinPlaydate(code);
+      if (!room) { hint('That playdate has finished 👋', 3); return; }
+      usePlaydate(room);
+      sound.win();
+      hint('🏠 Off to play!', 2.5);
+    } catch (e) {
+      hint("Couldn't connect 😢 Try again", 3);
+    }
+  }
+  async function leavePlaydate() {
+    const p = pd;
+    pd = null; mates.clear();
+    if (p) await p.leave();
+    refreshHud();
+  }
+  function openPlaydate() {
+    const list = pd.mates();
+    const ov = overlay(`
+      <div class="ui-kicker">Playdate</div>
+      <div class="ui-title">${pd.isHost ? '👫 In your tank' : `🏠 At ${esc(pd.hostName())}'s tank`}</div>
+      <div class="ui-row">${list.length ? list.map(m => `<span class="ui-chip">${m.face} ${esc(m.pet.name)}</span>`).join('') : '<span class="ui-sub">Waiting for friends…</span>'}</div>
+      <div class="ui-sub">Feed, blow bubbles and play 🎮 together. Tap a friend's axolotl to tickle it!</div>
+      <div class="ui-row"><button class="ui-btn danger" data-leave>👋 ${pd.isHost ? 'End playdate' : 'Go home'}</button><button class="ui-btn primary" data-close>Keep playing</button></div>`, false);
+    ov.querySelector('[data-leave]').addEventListener('click', () => { ov.close(); leavePlaydate(); });
+  }
+
+  // Tests: ?axdebug&net=local, then __axie.host() in one tab and #/axie?join=<code> in another.
+  if (/axdebug/.test(location.search)) {
+    window.__axie = {
+      host: async () => { const r = await createRoom('axie', { v: 1, tank: {} }); await r.setMeta({ hostUid: r.uid }); usePlaydate(r); return r.code; },
+      state: () => ({ pd: !!pd, mates: mates.size, foods: foods.length, game: !!game, fun: pet && pet.fun }),
+    };
+  }
+
   // ---------- Start ----------
   const stopLoop = startLoop(update, draw);
-  if (pet && pet.hatched) startTank(false);
-  else if (pet) startEgg();
+  const inviteCode = takeJoinCode('axie');
+  if (pet && pet.hatched) {
+    startTank(false);
+    if (inviteCode) joinFrom(inviteCode);
+  } else if (pet) startEgg();
   else startSetup();
+  if (inviteCode && !(pet && pet.hatched)) setTimeout(() => hint('Hatch your own axolotl first, then join! 🥚', 4), 500);
 
   const onVis = () => {
     if (!pet || screen !== 'tank') return;
@@ -1107,6 +1304,7 @@ export function mount(stage, info) {
 
   return () => {
     save();
+    if (pd) { const p = pd; pd = null; p.leave(); }
     stopLoop();
     document.removeEventListener('visibilitychange', onVis);
     window.removeEventListener('pagehide', save);
