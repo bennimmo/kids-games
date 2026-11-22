@@ -243,3 +243,9 @@ For age 2+. Tap balloons to pop them. No losing, no timer.
 - Big tap areas, palm slaps ignored
 - Nothing floats in the bottom middle (Android app-switch bar). Balloons there pop in higher up instead
 - Grown-ups: hold 🏠 for a second to exit (a quick tap does nothing)
+
+## 🥪 Sandwich Maker (`games/sandwich`)
+- The Stullensimulator by Gregor Weichbrodt (stulle.app), copied from his site with his permission.
+- Runs in a frame from `games/sandwich/app/` (his built files; paths made relative).
+- Sandwiches save on this device (IndexedDB, `app/local-store.js`), not on his server. `app/meine.html` = Meine Stullen.
+- `app/_astro/share.*.js` is ours: keep/upload/share go to the device instead of `/api/photos`.

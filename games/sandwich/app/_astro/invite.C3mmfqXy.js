@@ -1,0 +1,1 @@
+import{r as e}from"./kept.BZRJuc8_.js";function t(t){document.querySelector(`.invite`)?.addEventListener(`click`,()=>{e(t)})}export{t};

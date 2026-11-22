@@ -16,6 +16,14 @@ export const GAMES = [
     load: () => import('../games/mountain-rush/game.js'),
   },
   {
+    id: 'sandwich',
+    age: 'little',
+    name: 'Sandwich Maker',
+    icon: '🥪',
+    color: '#e0a35c',
+    load: () => import('../games/sandwich/game.js'),
+  },
+  {
     id: 'sky-pilot',
     age: 'big',
     name: 'Sky Pilot',
