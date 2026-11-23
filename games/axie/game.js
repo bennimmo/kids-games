@@ -10,6 +10,7 @@ import {
   newPet, loadPet, savePet, forgetPet, catchUp, update as tickPet, addPoo, clamp,
   mood, sulky, nightNow, today, nextBirthday, birthdayProgress, isGrowing, giftFor,
 } from './pet.js';
+import { MINI, MINI_CSS, play as playMini } from './minigames.js';
 import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
 import { takeJoinCode } from '../../js/engine/together.js';
 import { createRoom } from '../../js/engine/net.js';
@@ -61,7 +62,7 @@ const CSS = `
 .axie-bar button[hidden] { display:none; }
 .axie-tray { position:absolute; left:50%; bottom:${BAR_H + 4}px; transform:translateX(-50%); display:flex; gap:8px; padding:8px; border-radius:22px; background:rgba(255,255,255,.9); z-index:6; animation: ui-in .2s both; }
 .axie-tray button { background:rgba(0,0,0,.06); }
-.axie-hint { position:absolute; left:50%; top:76px; transform:translateX(-50%); padding:10px 18px; border-radius:18px; background:rgba(255,255,255,.92); color:#15172e; font-weight:800; font-size:20px; z-index:6; pointer-events:none; white-space:nowrap; animation: ui-in .25s both; }
+.axie-hint { position:absolute; left:50%; top:76px; transform:translateX(-50%); padding:10px 18px; border-radius:18px; background:rgba(255,255,255,.92); color:#15172e; font-weight:800; font-size:20px; z-index:25; pointer-events:none; white-space:nowrap; animation: ui-in .25s both; }
 .axie-toast { position:absolute; left:50%; top:40%; transform:translate(-50%,-50%); padding:16px 26px; border-radius:24px; background:rgba(255,255,255,.95); color:#15172e; font-weight:900; font-size:28px; z-index:8; pointer-events:none; text-align:center; animation: ui-in .3s both; }
 .axie-grid { width:100%; display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:10px; }
 .axie-item { all:unset; cursor:pointer; position:relative; height:84px; border-radius:18px; background:var(--ui-card); display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:38px; border:2px solid transparent; }
@@ -109,7 +110,7 @@ export function mount(stage, info) {
   if (!document.getElementById('axie-css')) {
     const st = document.createElement('style');
     st.id = 'axie-css';
-    st.textContent = CSS;
+    st.textContent = CSS + MINI_CSS;
     document.head.appendChild(st);
   }
   const root = document.createElement('div');
@@ -286,7 +287,7 @@ export function mount(stage, info) {
     } else if (a === 'play') {
       if (pet.asleep) { sayIt('😴'); hint('Turn the light on first 💡'); return; }
       if (pet.sick) { sayIt('🤢'); hint('Give medicine first 💊'); return; }
-      startGame();
+      openGames();
     } else if (a === 'things') openThings('mine');
     else if (a === 'wardrobe') openWardrobe('hat');
     else if (a === 'photo') openAlbum();
@@ -706,6 +707,37 @@ export function mount(stage, info) {
     const shopMsg = fresh.length ? `<br><small style="font-size:18px">🛒 New in the shop:<br>${fresh.join(' ')}</small>` : '';
     if (st.name !== prev.name) toast(`${st.icon}<br>${esc(pet.name)} is a ${st.name} now!${shopMsg}`, 4);
     else if (shopMsg) toast(`🎂 +${COINS.birthday} 🪙${shopMsg}`, 4);
+    save();
+    refreshHud();
+  }
+
+  // ---------- Games menu (play with your axolotl) ----------
+  const miniTile = `.mg-tile{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:110px;border-radius:20px;background:var(--ui-card);font-size:44px;font-weight:800}
+    .mg-tile small{font-size:15px;color:var(--ui-text)}.mg-tile:active{transform:scale(.95)}`;
+  function openGames() {
+    const left = Math.max(0, COINS.gamesPaid - today(pet).games);
+    const ov = overlay(`<style>${miniTile}</style>
+      <div class="ui-title">🎮 Play with ${esc(pet.name)}</div>
+      <div class="ui-chip">${left ? `🪙 ${left} coin game${left > 1 ? 's' : ''} left today` : '🌙 Just for fun now – coins again tomorrow'}</div>
+      <div class="ui-choices">${MINI.map(m => `<button class="mg-tile" data-g="${m.id}">${m.icon}<small>${m.name}</small></button>`).join('')}</div>
+      <div class="ui-row"><button class="ui-btn primary" data-close>Done</button></div>`);
+    ov.querySelectorAll('[data-g]').forEach(b => b.addEventListener('click', () => {
+      sfx.click();
+      ov.close();
+      if (b.dataset.g === 'bubbles') { startGame(); return; }
+      playMini(b.dataset.g, { pet, col: colOf, overlay: html => overlay(html), sfx, sound, menu: openGames, done: rewardMini });
+    }));
+  }
+  // A mini game finished: a few coins (first games of the day), and it's happier.
+  function rewardMini(result) {
+    const d = today(pet);
+    const paid = d.games < COINS.gamesPaid;
+    d.games++;
+    const n = paid ? ({ win: 6, draw: 3, lose: 1 })[result] || 0 : 0;
+    pet.fun = clamp(pet.fun + 15);
+    pet.energy = clamp(pet.energy - 3);
+    if (n) { pet.coins += n; sfx.coin(); }
+    hint(n ? `+${n} 🪙` : '🌙 Just for fun – coins again tomorrow', 2);
     save();
     refreshHud();
   }

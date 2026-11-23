@@ -264,5 +264,6 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
   - Friends make it happier (fun goes up), a 📸 playdate photo is taken after 5 s. 👫 again → End playdate / Go home.
   - Needs `axie` in the game list in `database.rules.json` (paste the rules into Firebase).
   - Test: `?axdebug&net=local`, `__axie.host()` in one tab, open `#/axie?join=<code>` in another.
+- 🎮 Games menu (`minigames.js`): 🫧 Bubble pop, ❌⭕ Noughts & crosses (vs the axolotl), 🐚 Find me! (shell game), 🃏 Memory (take turns), 🎵 Copy me (Simon). It gets cleverer as it grows (`skill(age)`; more shells, pairs, longer tunes). All games share the 3 coin games a day: win 6, draw 3, lose 1.
 - Next: walks.
 - Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl), `game.js` (screens, input, UI).
