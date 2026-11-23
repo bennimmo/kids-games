@@ -266,4 +266,5 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
   - Test: `?axdebug&net=local`, `__axie.host()` in one tab, open `#/axie?join=<code>` in another.
 - 🎮 Games menu (`minigames.js`): 🫧 Bubble pop, ❌⭕ Noughts & crosses (vs the axolotl), 🐚 Find me! (shell game), 🃏 Memory (take turns), 🎵 Copy me (Simon). It gets cleverer as it grows (`skill(age)`; more shells, pairs, longer tunes). All games share the 3 coin games a day: win 6, draw 3, lose 1.
 - Next: walks.
-- Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl), `game.js` (screens, input, UI).
+- Art: the axolotl is drawn along a wavy spine (body + see-through fins bend as it swims). Main tank things, tank friends, food and the ball are hand-drawn in `art.js` (100×100 box, floor at y=50); anything without a drawing falls back to its emoji.
+- Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl, clothes), `art.js` (tank things), `minigames.js`, `playdate.js`, `game.js` (screens, input, UI).

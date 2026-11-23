@@ -10,6 +10,7 @@ import {
   newPet, loadPet, savePet, forgetPet, catchUp, update as tickPet, addPoo, clamp,
   mood, sulky, nightNow, today, nextBirthday, birthdayProgress, isGrowing, giftFor,
 } from './pet.js';
+import { drawThing, hasArt } from './art.js';
 import { MINI, MINI_CSS, play as playMini } from './minigames.js';
 import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
 import { takeJoinCode } from '../../js/engine/together.js';
@@ -880,7 +881,7 @@ export function mount(stage, info) {
   const shown = () => (pd && !pd.isHost ? pd.tank() : pet.placed);
   function itemPos(id) {
     const it = ITEMS[id], p = shown()[id] || pet.placed[id];
-    if (it.kind === 'decor') return { x: p.fx * W, y: FLOOR + 10 - it.size * 0.4 };
+    if (it.kind === 'decor') return { x: p.fx * W, y: hasArt(id) ? FLOOR + 14 - it.size / 2 : FLOOR + 10 - it.size * 0.4 };
     if (it.kind === 'float') return { x: (flt[id]?.x ?? p.fx * W), y: TOP + 6 };
     if (it.kind === 'toy' && ball) return { x: ball.x, y: ball.y };
     if (it.kind === 'friend' && friends[id]) return { x: friends[id].x, y: friends[id].y };
@@ -1143,7 +1144,7 @@ export function mount(stage, info) {
         ball.vy += 120 * dt;
         ball.vx *= 1 - Math.min(1, dt * 0.9); ball.vy *= 1 - Math.min(1, dt * 0.9);
         ball.x += ball.vx * dt; ball.y += ball.vy * dt;
-        const r = 22;
+        const r = 25;
         if (ball.y > FLOOR - r + 8) { ball.y = FLOOR - r + 8; ball.vy *= -0.5; ball.vx *= 0.92; }
         if (ball.y < TOP + r) { ball.y = TOP + r; ball.vy *= -0.5; }
         if (ball.x < r) { ball.x = r; ball.vx *= -0.7; }
@@ -1275,7 +1276,7 @@ export function mount(stage, info) {
       if (!it || it.kind !== 'decor') continue;
       const q = itemPos(id);
       drawShadow(ctx, q.x, FLOOR, it.size * 0.4, 0);
-      drawEmoji(ctx, it.icon, q.x, q.y, it.size, it.tilt || 0);
+      drawThing(ctx, id, q.x, q.y, it.size, t, it.tilt || 0);
     }
     // Poos
     pet.poos.forEach((p, i) => drawPoo(ctx, p.x * W, FLOOR + 16, 1.1, Math.sin(t * 3 + i) * 0.5 + 0.5));
@@ -1287,19 +1288,19 @@ export function mount(stage, info) {
       drawEmoji(ctx, '🥅', s.x, s.y - k * 120 - 10, 44, 0, 1 - k);
     }
     // Food
-    for (const f of foods) drawEmoji(ctx, f.f.icon, f.x, f.y, 30, Math.sin(t * 4 + f.x) * 0.3, f.age > 22 ? (25 - f.age) / 3 : 1);
+    for (const f of foods) drawThing(ctx, 'food-' + f.f.id, f.x, f.y, 34, t, Math.sin(t * 4 + f.x) * 0.3, f.age > 22 ? (25 - f.age) / 3 : 1);
     // Friends
     for (const [id, f] of Object.entries(friends)) {
       const it = ITEMS[id];
       ctx.save();
       ctx.translate(f.x, f.y);
-      ctx.scale(it.swims ? -f.dir : (it.slow ? -f.dir : 1), 1);
-      drawEmoji(ctx, it.icon, 0, Math.sin(t * 6 + f.x) * (it.walks ? 1.5 : 3), it.size);
+      ctx.scale(hasArt(id) ? f.dir : (it.swims || it.slow ? -f.dir : 1), 1);
+      drawThing(ctx, id, 0, Math.sin(t * 6 + f.x) * (it.walks ? 1.5 : 3), it.size, t);
       ctx.restore();
     }
     // Ball
     if (ball && pet.placed.ball) drawShadow(ctx, ball.x, FLOOR, 18, FLOOR - ball.y);
-    if (ball && pet.placed.ball) drawEmoji(ctx, '⚽', ball.x, ball.y, 44, ball.rot);
+    if (ball && pet.placed.ball) drawThing(ctx, 'ball', ball.x, ball.y, 50, t, ball.rot);
 
     // Friends' axolotls (with a name tag)
     for (const m of mates.values()) {
@@ -1351,7 +1352,7 @@ export function mount(stage, info) {
       const it = ITEMS[id];
       if (!it || it.kind !== 'float') continue;
       const q = itemPos(id);
-      drawEmoji(ctx, it.icon, q.x, q.y + Math.sin(t * 2 + q.x) * 4, it.size, Math.sin(t * 1.5 + q.x) * 0.1);
+      drawThing(ctx, id, q.x, q.y + Math.sin(t * 2 + q.x) * 4, it.size, t, Math.sin(t * 1.5 + q.x) * 0.1);
     }
 
     // Bubbles
