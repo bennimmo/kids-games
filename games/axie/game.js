@@ -11,6 +11,7 @@ import {
   mood, sulky, nightNow, today, nextBirthday, birthdayProgress, isGrowing, giftFor,
 } from './pet.js';
 import { drawThing, hasArt } from './art.js';
+import { ic, ICON_CSS } from './icons.js';
 import { MINI, MINI_CSS, play as playMini } from './minigames.js';
 import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
 import { takeJoinCode } from '../../js/engine/together.js';
@@ -87,7 +88,8 @@ const CSS = `
   .axie-chip { height:40px; padding:0 10px; font-size:15px; }
   .axie-bar { gap:5px; padding:6px; border-radius:22px; }
   .axie-bar button, .axie-tray button { width:40px; height:48px; font-size:24px; border-radius:14px; }
-  .axie-bar { gap:4px; }
+  .axie-bar { gap:4px; left:10px; right:10px; transform:none; justify-content:center; max-width:none; overflow:visible; }
+  .axie-bar button { flex:1 1 0; width:auto; min-width:0; max-width:52px; }
   .axie-wd canvas { height:170px; }
   .axie-tabs button { width:42px; height:42px; font-size:22px; border-radius:13px; }
   .axie-worn button { height:32px; font-size:18px; }
@@ -111,7 +113,7 @@ export function mount(stage, info) {
   if (!document.getElementById('axie-css')) {
     const st = document.createElement('style');
     st.id = 'axie-css';
-    st.textContent = CSS + MINI_CSS;
+    st.textContent = CSS + MINI_CSS + ICON_CSS;
     document.head.appendChild(st);
   }
   const root = document.createElement('div');
@@ -165,6 +167,22 @@ export function mount(stage, info) {
     refreshHud();
   };
 
+  // ---------- Icons ----------
+  const TAB_IC = { hat: 'hat', face: 'glasses', neck: 'scarf', back: 'back', pattern: 'pattern', colour: 'colour', outfits: 'outfits' };
+  const GAME_IC = { bubbles: 'bubbles', ttt: 'ttt', shells: 'shell', memory: 'cards', copy: 'music' };
+  // A little picture of a tank thing for the shop (the same drawing as in the tank).
+  const thumbs = {};
+  function thumb(id) {
+    if (!hasArt(id)) return ITEMS[id].icon;
+    if (!thumbs[id]) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 112;
+      drawThing(c.getContext('2d'), id, 56, 56, 100, 1);
+      thumbs[id] = c.toDataURL();
+    }
+    return `<img class="axie-thumb" src="${thumbs[id]}" alt="">`;
+  }
+
   // ---------- Layout ----------
   function layout() {
     W = view.width; H = view.height;
@@ -182,27 +200,27 @@ export function mount(stage, info) {
       <div class="axie-hud">
         <div class="axie-chip" data-name></div>
         <div class="axie-needs">
-          <div class="axie-need" data-k="food">🍤<i></i></div>
-          <div class="axie-need" data-k="clean">🧽<i></i></div>
-          <div class="axie-need" data-k="fun">⚽<i></i></div>
-          <div class="axie-need" data-k="energy">💤<i></i></div>
+          <div class="axie-need" data-k="food">${ic('feed')}<i></i></div>
+          <div class="axie-need" data-k="clean">${ic('clean')}<i></i></div>
+          <div class="axie-need" data-k="fun">${ic('ball')}<i></i></div>
+          <div class="axie-need" data-k="energy">${ic('sleep')}<i></i></div>
         </div>
         <div class="axie-right">
           <div class="axie-chip" data-pd hidden></div>
           <div class="axie-chip" data-coins></div>
-          <div class="axie-chip"><button data-act="settings" aria-label="Settings">⚙️</button></div>
+          <div class="axie-chip"><button data-act="settings" aria-label="Settings">${ic('settings')}</button></div>
         </div>
       </div>
       <div class="axie-bar">
-        <button data-act="feed" aria-label="Feed">🍤</button>
-        <button data-act="clean" aria-label="Clean">🧽</button>
-        <button data-act="lights" aria-label="Lights">💡</button>
-        <button data-act="medicine" aria-label="Medicine" hidden>💊</button>
-        <button data-act="play" aria-label="Play">🎮</button>
-        <button data-act="friends" aria-label="Playdate">👫</button>
-        <button data-act="things" aria-label="Things">🎁</button>
-        <button data-act="wardrobe" aria-label="Wardrobe">👗</button>
-        <button data-act="photo" aria-label="Photos">📸</button>
+        <button data-act="feed" aria-label="Feed">${ic('feed')}</button>
+        <button data-act="clean" aria-label="Clean">${ic('clean')}</button>
+        <button data-act="lights" aria-label="Lights">${ic('light')}</button>
+        <button data-act="medicine" aria-label="Medicine" hidden>${ic('medicine')}</button>
+        <button data-act="play" aria-label="Play">${ic('play')}</button>
+        <button data-act="friends" aria-label="Playdate">${ic('friends')}</button>
+        <button data-act="things" aria-label="Things">${ic('things')}</button>
+        <button data-act="wardrobe" aria-label="Wardrobe">${ic('wardrobe')}</button>
+        <button data-act="photo" aria-label="Photos">${ic('photo')}</button>
       </div>`;
     hud = ui.querySelector('.axie-hud');
     needsEl = [...ui.querySelectorAll('.axie-need')];
@@ -224,11 +242,12 @@ export function mount(stage, info) {
     }
     const st = stageOf(pet.age);
     nameChip.innerHTML = `${esc(pet.name)} <span title="${st.name}">${st.icon}</span> 🎂${pet.age}`;
-    coinChip.textContent = `🪙 ${pet.coins}`;
+    coinChip.innerHTML = `${ic('coin')} ${pet.coins}`;
     const med = bar.querySelector('[data-act=medicine]');
     med.hidden = !pet.sick;
     med.classList.toggle('hot', pet.sick);
-    bar.querySelector('[data-act=lights]').textContent = pet.lights ? '💡' : '🌙';
+    const lb = bar.querySelector('[data-act=lights]'), want = pet.lights ? 'light' : 'moon';
+    if (lb.dataset.ic !== want) { lb.dataset.ic = want; lb.innerHTML = ic(want); }
     bar.querySelector('[data-act=clean]').classList.toggle('on', mode === 'clean');
     bar.querySelector('[data-act=friends]').classList.toggle('on', !!pd);
     const pc = ui.querySelector('[data-pd]');
@@ -269,7 +288,7 @@ export function mount(stage, info) {
       if (trayEl) { closeTray(); return; }
       trayEl = document.createElement('div');
       trayEl.className = 'axie-tray';
-      trayEl.innerHTML = FOODS.map(f => `<button data-f="${f.id}">${f.icon}</button>`).join('');
+      trayEl.innerHTML = FOODS.map(f => `<button data-f="${f.id}">${thumb('food-' + f.id)}</button>`).join('');
       trayEl.querySelectorAll('button').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); dropFood(FOODS.find(f => f.id === b.dataset.f)); }));
       ui.appendChild(trayEl);
     } else if (a === 'clean') {
@@ -387,25 +406,25 @@ export function mount(stage, info) {
 
   function openThings(tab) {
     const mine = pet.owned.filter(id => ITEMS[id] && ITEMS[id].kind !== 'wear');
-    const tabs = `<div class="ui-seg"><button data-tab="mine" class="${tab === 'mine' ? 'on' : ''}">🧸 Mine</button><button data-tab="shop" class="${tab === 'shop' ? 'on' : ''}">🛒 Shop</button></div>`;
+    const tabs = `<div class="ui-seg"><button data-tab="mine" class="${tab === 'mine' ? 'on' : ''}">${ic('things')} Mine</button><button data-tab="shop" class="${tab === 'shop' ? 'on' : ''}">${ic('coin')} Shop</button></div>`;
     let body;
     if (tab === 'mine') {
       body = mine.length
-        ? `<div class="axie-grid">${mine.map(id => `<button class="axie-item ${isOn(id) ? 'on' : ''}" data-id="${id}">${ITEMS[id].icon}</button>`).join('')}</div>
+        ? `<div class="axie-grid">${mine.map(id => `<button class="axie-item ${isOn(id) ? 'on' : ''}" data-id="${id}">${thumb(id)}</button>`).join('')}</div>
            <div class="ui-sub">Tap to put in or take out. Clothes are in the 👗 wardrobe.</div>`
         : `<div class="ui-sub">Nothing yet. Presents come on birthdays 🎂 or buy things in the 🛒 Shop.</div>`;
     } else {
       const list = SHOP.filter(s => !pet.owned.includes(s.id));
       body = `<div class="axie-grid">${list.map(s => {
         const locked = s.age > pet.age;
-        return `<button class="axie-item ${locked || pet.coins < s.price ? 'poor' : ''}" data-buy="${s.id}">${locked ? `<span style="filter:grayscale(1) brightness(.6)">${ITEMS[s.id].icon}</span><small>🔒 🎂${s.age}</small>` : `${ITEMS[s.id].icon}<small>${s.age === pet.age ? '✨ ' : ''}🪙 ${s.price}</small>`}</button>`;
+        return `<button class="axie-item ${locked || pet.coins < s.price ? 'poor' : ''}" data-buy="${s.id}">${locked ? `<span style="filter:grayscale(1) brightness(.6)">${thumb(s.id)}</span><small>🔒 🎂${s.age}</small>` : `${thumb(s.id)}<small>${s.age === pet.age ? '✨ ' : ''}${ic('coin')} ${s.price}</small>`}</button>`;
       }).join('') || '<div class="ui-sub">You have everything! 🎉</div>'}</div>
         <div class="ui-sub">🔒 🎂3 = comes to the shop on birthday 3. ✨ = new!</div>`;
     }
     const ov = overlay(`
-      <div class="ui-title">🎁 Things</div>
+      <div class="ui-title">${ic('things')} Things</div>
       ${tabs}
-      <div class="ui-chip">🪙 ${pet.coins}</div>
+      <div class="ui-chip">${ic('coin')} ${pet.coins}</div>
       ${body}
       <div class="ui-row"><button class="ui-btn primary" data-close>Done</button></div>`);
     ov.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => { sfx.click(); ov.close(); openThings(b.dataset.tab); }));
@@ -430,9 +449,9 @@ export function mount(stage, info) {
     let cur = tab;
     let giggle = 0;
     const ov = overlay(`
-      <div class="ui-title">👗 Wardrobe</div>
+      <div class="ui-title">${ic('wardrobe')} Wardrobe</div>
       <div class="axie-wd"><canvas></canvas><div class="axie-worn"></div></div>
-      <div class="axie-tabs">${SLOTS.map(sl => `<button data-tab="${sl.id}" aria-label="${sl.name}">${sl.icon}</button>`).join('')}</div>
+      <div class="axie-tabs">${SLOTS.map(sl => `<button data-tab="${sl.id}" aria-label="${sl.name}">${ic(TAB_IC[sl.id])}</button>`).join('')}</div>
       <div class="ui-chip" data-coins></div>
       <div class="axie-body" style="width:100%"></div>
       <div class="ui-row"><button class="ui-btn ghost" data-off>🧺 Take all off</button><button class="ui-btn primary" data-close>Done</button></div>`);
@@ -452,7 +471,7 @@ export function mount(stage, info) {
     const clothesTab = () => ['hat', 'face', 'neck', 'back'].includes(cur);
 
     function render() {
-      coinsEl.textContent = `🪙 ${pet.coins}`;
+      coinsEl.innerHTML = `${ic('coin')} ${pet.coins}`;
       ov.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === cur));
       // What it's wearing now (tap to take off)
       const bits = Object.entries(pet.wear).filter(([, id]) => id && ITEMS[id]).map(([slot, id]) => `<button data-off-slot="${slot}">${ITEMS[id].icon}</button>`);
@@ -469,20 +488,20 @@ export function mount(stage, info) {
           const locked = !have && (!w || w.age > pet.age);
           return tile(locked ? `<span style="filter:grayscale(1) brightness(.6)">${ITEMS[id].icon}</span>` : ITEMS[id].icon, {
             on: pet.wear[cur] === id, poor: !have && (locked || pet.coins < w.price), data: `data-w="${id}"`,
-            tag: have ? '' : !w ? '🎁 present' : w.age > pet.age ? `🔒 🎂${w.age}` : `${w.age === pet.age ? '✨' : ''}🪙${w.price}`,
+            tag: have ? '' : !w ? '🎁 present' : w.age > pet.age ? `🔒 🎂${w.age}` : `${w.age === pet.age ? '✨' : ''}${ic('coin')}${w.price}`,
           });
         }).join('')}</div><div class="ui-sub">Tap to wear. Tap again to take off – it stays in your wardrobe.<br>🔒 🎂5 = in the shop on birthday 5. 🎁 = a birthday present.</div>`;
       } else if (cur === 'pattern') {
         body.innerHTML = `<div class="axie-grid">${tile('🚫', { on: !pet.pattern, data: 'data-p=""' })}${Object.entries(PATTERNS).map(([id, pt]) => {
           const have = owns('pat-' + id);
           const locked = !have && pt.age > pet.age;
-          return tile(locked ? `<span style="filter:grayscale(1) brightness(.6)">${pt.icon}</span>` : pt.icon, { on: pet.pattern === id, poor: !have && (locked || pet.coins < pt.price), data: `data-p="${id}"`, tag: have ? '' : locked ? `🔒 🎂${pt.age}` : `🪙${pt.price}` });
+          return tile(locked ? `<span style="filter:grayscale(1) brightness(.6)">${pt.icon}</span>` : pt.icon, { on: pet.pattern === id, poor: !have && (locked || pet.coins < pt.price), data: `data-p="${id}"`, tag: have ? '' : locked ? `🔒 🎂${pt.age}` : `${ic('coin')}${pt.price}` });
         }).join('')}</div>`;
       } else if (cur === 'colour') {
         body.innerHTML = `<div class="axie-grid">${COLOURS.map(c => {
           const have = pet.colours.includes(c.id);
           return tile(`<div class="axie-swatch" style="width:40px;height:40px;margin:0 0 14px;background:radial-gradient(circle at 35% 30%, #fff, ${c.body} 45%, ${c.gill})"></div>`,
-            { on: pet.colour === c.id, poor: !have && (pet.age < COLOUR_AGE || pet.coins < COLOUR_PRICE), data: `data-c="${c.id}"`, tag: have ? c.name : pet.age < COLOUR_AGE ? `🔒 🎂${COLOUR_AGE}` : `🪙${COLOUR_PRICE}` });
+            { on: pet.colour === c.id, poor: !have && (pet.age < COLOUR_AGE || pet.coins < COLOUR_PRICE), data: `data-c="${c.id}"`, tag: have ? c.name : pet.age < COLOUR_AGE ? `🔒 🎂${COLOUR_AGE}` : `${ic('coin')}${COLOUR_PRICE}` });
         }).join('')}</div>`;
       } else {
         const desc = o => {
@@ -605,8 +624,8 @@ export function mount(stage, info) {
   function openAlbum() {
     const list = pet.photos.slice().reverse();
     const ov = overlay(`
-      <div class="ui-title">📸 ${esc(pet.name)}'s album</div>
-      <button class="ui-btn go big" data-snap>📸 Take a photo</button>
+      <div class="ui-title">${ic('photo')} ${esc(pet.name)}'s album</div>
+      <button class="ui-btn go big" data-snap>${ic('photo')} Take a photo</button>
       ${list.length ? `<div class="axie-photos">${list.map((p, i) => `<figure data-i="${i}"><img src="${p.img}" alt=""><figcaption>🎂 ${p.age}</figcaption></figure>`).join('')}</div>`
         : '<div class="ui-sub">No photos yet. One is taken on every birthday 🎂</div>'}
       <div class="ui-row"><button class="ui-btn primary" data-close>Done</button></div>`);
@@ -718,9 +737,9 @@ export function mount(stage, info) {
   function openGames() {
     const left = Math.max(0, COINS.gamesPaid - today(pet).games);
     const ov = overlay(`<style>${miniTile}</style>
-      <div class="ui-title">🎮 Play with ${esc(pet.name)}</div>
-      <div class="ui-chip">${left ? `🪙 ${left} coin game${left > 1 ? 's' : ''} left today` : '🌙 Just for fun now – coins again tomorrow'}</div>
-      <div class="ui-choices">${MINI.map(m => `<button class="mg-tile" data-g="${m.id}">${m.icon}<small>${m.name}</small></button>`).join('')}</div>
+      <div class="ui-title">${ic('play')} Play with ${esc(pet.name)}</div>
+      <div class="ui-chip">${left ? `${ic('coin')} ${left} coin game${left > 1 ? 's' : ''} left today` : '🌙 Just for fun now – coins again tomorrow'}</div>
+      <div class="ui-choices">${MINI.map(m => `<button class="mg-tile" data-g="${m.id}">${ic(GAME_IC[m.id])}<small>${m.name}</small></button>`).join('')}</div>
       <div class="ui-row"><button class="ui-btn primary" data-close>Done</button></div>`);
     ov.querySelectorAll('[data-g]').forEach(b => b.addEventListener('click', () => {
       sfx.click();
