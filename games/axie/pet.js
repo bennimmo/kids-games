@@ -43,6 +43,12 @@ export function loadPet() {
   } catch (e) { return null; }
 }
 
+// Today's coin counters (reset each day).
+export function today(p) {
+  const d = new Date().toDateString();
+  if (!p.daily || p.daily.day !== d) p.daily = { day: d, care: 0, games: 0, bonus: false };
+  return p.daily;
+}
 export function savePet(p) {
   if (!p) return;
   try { localStorage.setItem(KEY, JSON.stringify(p)); } catch (e) {

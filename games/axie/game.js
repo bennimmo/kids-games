@@ -5,10 +5,10 @@
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
-import { LEVELS, COLOURS, NAMES, FOODS, ITEMS, SHOP, SLOTS, WARDROBE, PATTERNS, COLOUR_PRICE, OUTFIT_SLOTS, stageOf } from './items.js';
+import { LEVELS, COLOURS, NAMES, FOODS, ITEMS, SHOP, SLOTS, WARDROBE, PATTERNS, COLOUR_PRICE, COLOUR_AGE, OUTFIT_SLOTS, COINS, newAt, stageOf } from './items.js';
 import {
   newPet, loadPet, savePet, forgetPet, catchUp, update as tickPet, addPoo, clamp,
-  mood, sulky, nightNow, nextBirthday, birthdayProgress, isGrowing, giftFor,
+  mood, sulky, nightNow, today, nextBirthday, birthdayProgress, isGrowing, giftFor,
 } from './pet.js';
 import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
 import { takeJoinCode } from '../../js/engine/together.js';
@@ -149,7 +149,14 @@ export function mount(stage, info) {
   const pop = (icon, x, y, n = 1, big = 30) => {
     for (let i = 0; i < n; i++) parts.push({ icon, x: x + rand(-20, 20), y: y + rand(-10, 10), vx: rand(-30, 30), vy: rand(-90, -50), life: 1.4, size: big });
   };
-  const addCoins = (n, x, y) => {
+  // kind 'care' = from looking after it; capped each day (COINS.careDay).
+  const addCoins = (n, x, y, kind) => {
+    if (kind === 'care') {
+      const d = today(pet);
+      n = Math.min(n, COINS.careDay - d.care);
+      if (n <= 0) return;
+      d.care += n;
+    }
     pet.coins += n;
     sfx.coin();
     pop('🪙', x ?? ax.x, y ?? ax.y - 40, Math.min(n, 4), 26);
@@ -320,7 +327,7 @@ export function mount(stage, info) {
         }, 1500);
       }
     }
-    if (Math.random() < 0.5) addCoins(1);
+    if (Math.random() < 0.5) addCoins(1, undefined, undefined, 'care');
     refreshHud();
   }
 
@@ -386,8 +393,12 @@ export function mount(stage, info) {
            <div class="ui-sub">Tap to put in or take out. Clothes are in the 👗 wardrobe.</div>`
         : `<div class="ui-sub">Nothing yet. Presents come on birthdays 🎂 or buy things in the 🛒 Shop.</div>`;
     } else {
-      body = `<div class="axie-grid">${SHOP.filter(s => !pet.owned.includes(s.id)).map(s => `<button class="axie-item ${pet.coins < s.price ? 'poor' : ''}" data-buy="${s.id}">${ITEMS[s.id].icon}<small>🪙 ${s.price}</small></button>`).join('') || '<div class="ui-sub">You have everything! 🎉</div>'}</div>
-        <div class="ui-sub">Earn 🪙 by looking after ${esc(pet.name)} and playing 🎮</div>`;
+      const list = SHOP.filter(s => !pet.owned.includes(s.id));
+      body = `<div class="axie-grid">${list.map(s => {
+        const locked = s.age > pet.age;
+        return `<button class="axie-item ${locked || pet.coins < s.price ? 'poor' : ''}" data-buy="${s.id}">${locked ? `<span style="filter:grayscale(1) brightness(.6)">${ITEMS[s.id].icon}</span><small>🔒 🎂${s.age}</small>` : `${ITEMS[s.id].icon}<small>${s.age === pet.age ? '✨ ' : ''}🪙 ${s.price}</small>`}</button>`;
+      }).join('') || '<div class="ui-sub">You have everything! 🎉</div>'}</div>
+        <div class="ui-sub">🔒 🎂3 = comes to the shop on birthday 3. ✨ = new!</div>`;
     }
     const ov = overlay(`
       <div class="ui-title">🎁 Things</div>
@@ -401,7 +412,8 @@ export function mount(stage, info) {
     }));
     ov.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
       const s = SHOP.find(x => x.id === b.dataset.buy);
-      if (pet.coins < s.price) { sfx.no(); b.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], 250); return; }
+      if (s.age > pet.age) { sfx.no(); hint(`🔒 In the shop on birthday ${s.age} 🎂`, 2.5); return; }
+      if (pet.coins < s.price) { sfx.no(); hint(`Need ${s.price - pet.coins} more 🪙`, 2); b.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], 250); return; }
       pet.coins -= s.price;
       pet.owned.push(s.id);
       toggleThing(s.id);
@@ -447,25 +459,28 @@ export function mount(stage, info) {
 
       if (clothesTab()) {
         const ids = Object.keys(ITEMS).filter(id => ITEMS[id].kind === 'wear' && ITEMS[id].slot === cur);
-        ids.sort((a, b) => owns(b) - owns(a));
+        const rank = id => owns(id) ? -1 : WARDROBE[id] ? WARDROBE[id].age : 99;
+        ids.sort((a, b) => rank(a) - rank(b));
         body.innerHTML = `<div class="axie-grid">${ids.map(id => {
-          const price = WARDROBE[id];
+          const w = WARDROBE[id];
           const have = owns(id);
-          return tile(ITEMS[id].icon, {
-            on: pet.wear[cur] === id, poor: !have && (price == null || pet.coins < price), data: `data-w="${id}"`,
-            tag: have ? '' : price == null ? '🎂' : `🪙${price}`,
+          const locked = !have && (!w || w.age > pet.age);
+          return tile(locked ? `<span style="filter:grayscale(1) brightness(.6)">${ITEMS[id].icon}</span>` : ITEMS[id].icon, {
+            on: pet.wear[cur] === id, poor: !have && (locked || pet.coins < w.price), data: `data-w="${id}"`,
+            tag: have ? '' : !w ? '🎁 present' : w.age > pet.age ? `🔒 🎂${w.age}` : `${w.age === pet.age ? '✨' : ''}🪙${w.price}`,
           });
-        }).join('')}</div><div class="ui-sub">Tap to wear. Tap again to take off – it stays in your wardrobe. 🎂 = birthday present.</div>`;
+        }).join('')}</div><div class="ui-sub">Tap to wear. Tap again to take off – it stays in your wardrobe.<br>🔒 🎂5 = in the shop on birthday 5. 🎁 = a birthday present.</div>`;
       } else if (cur === 'pattern') {
         body.innerHTML = `<div class="axie-grid">${tile('🚫', { on: !pet.pattern, data: 'data-p=""' })}${Object.entries(PATTERNS).map(([id, pt]) => {
           const have = owns('pat-' + id);
-          return tile(pt.icon, { on: pet.pattern === id, poor: !have && pet.coins < pt.price, data: `data-p="${id}"`, tag: have ? '' : `🪙${pt.price}` });
+          const locked = !have && pt.age > pet.age;
+          return tile(locked ? `<span style="filter:grayscale(1) brightness(.6)">${pt.icon}</span>` : pt.icon, { on: pet.pattern === id, poor: !have && (locked || pet.coins < pt.price), data: `data-p="${id}"`, tag: have ? '' : locked ? `🔒 🎂${pt.age}` : `🪙${pt.price}` });
         }).join('')}</div>`;
       } else if (cur === 'colour') {
         body.innerHTML = `<div class="axie-grid">${COLOURS.map(c => {
           const have = pet.colours.includes(c.id);
           return tile(`<div class="axie-swatch" style="width:40px;height:40px;margin:0 0 14px;background:radial-gradient(circle at 35% 30%, #fff, ${c.body} 45%, ${c.gill})"></div>`,
-            { on: pet.colour === c.id, poor: !have && pet.coins < COLOUR_PRICE, data: `data-c="${c.id}"`, tag: have ? c.name : `🪙${COLOUR_PRICE}` });
+            { on: pet.colour === c.id, poor: !have && (pet.age < COLOUR_AGE || pet.coins < COLOUR_PRICE), data: `data-c="${c.id}"`, tag: have ? c.name : pet.age < COLOUR_AGE ? `🔒 🎂${COLOUR_AGE}` : `🪙${COLOUR_PRICE}` });
         }).join('')}</div>`;
       } else {
         const desc = o => {
@@ -497,9 +512,10 @@ export function mount(stage, info) {
       if (b.dataset.w) {
         const id = b.dataset.w, slot = ITEMS[id].slot;
         if (!owns(id)) {
-          const price = WARDROBE[id];
-          if (price == null) { sfx.no(); shake(b); hint('🎂 Comes on a birthday!', 2); return; }
-          if (!pay(price, b)) return;
+          const w = WARDROBE[id];
+          if (!w) { sfx.no(); shake(b); hint('🎁 A birthday present!', 2); return; }
+          if (w.age > pet.age) { sfx.no(); shake(b); hint(`🔒 In the shop on birthday ${w.age} 🎂`, 2.5); return; }
+          if (!pay(w.price, b)) return;
           pet.owned.push(id);
           sound.win();
         }
@@ -508,6 +524,7 @@ export function mount(stage, info) {
       }
       if (b.dataset.p !== undefined) {
         const id = b.dataset.p;
+        if (id && !owns('pat-' + id) && PATTERNS[id].age > pet.age) { sfx.no(); shake(b); hint(`🔒 In the shop on birthday ${PATTERNS[id].age} 🎂`, 2.5); return; }
         if (id && !owns('pat-' + id)) { if (!pay(PATTERNS[id].price, b)) return; pet.owned.push('pat-' + id); sound.win(); }
         pet.pattern = id && pet.pattern !== id ? id : null;
         if (pet.pattern) happy(); else sfx.click();
@@ -515,6 +532,7 @@ export function mount(stage, info) {
       }
       if (b.dataset.c) {
         const id = b.dataset.c;
+        if (!pet.colours.includes(id) && pet.age < COLOUR_AGE) { sfx.no(); shake(b); hint(`🔒 New colours on birthday ${COLOUR_AGE} 🎂`, 2.5); return; }
         if (!pet.colours.includes(id)) { if (!pay(COLOUR_PRICE, b)) return; pet.colours.push(id); sound.win(); }
         pet.colour = id; happy();
         changed(); return;
@@ -669,6 +687,7 @@ export function mount(stage, info) {
         pet.coins += 20;
         partyEl.innerHTML = `🪙 20<small>A bag of coins!</small>`;
       }
+      pet.coins += COINS.birthday;
       setFace('joy', 3);
       setTimeout(() => { if (party) snap(); }, 900);
       setTimeout(endParty, 2600);
@@ -676,13 +695,17 @@ export function mount(stage, info) {
   }
   function endParty() {
     if (!party) return;
+    const age = party.age;
     pet.gifts.shift();
     party = null;
     partyEl?.remove(); partyEl = null;
     if (bar) bar.style.visibility = '';
     layout();
     const st = stageOf(pet.age), prev = stageOf(pet.age - 1);
-    if (st.name !== prev.name) toast(`${st.icon}<br>${esc(pet.name)} is a ${st.name} now!`, 3);
+    const fresh = newAt(age);
+    const shopMsg = fresh.length ? `<br><small style="font-size:18px">🛒 New in the shop:<br>${fresh.join(' ')}</small>` : '';
+    if (st.name !== prev.name) toast(`${st.icon}<br>${esc(pet.name)} is a ${st.name} now!${shopMsg}`, 4);
+    else if (shopMsg) toast(`🎂 +${COINS.birthday} 🪙${shopMsg}`, 4);
     save();
     refreshHud();
   }
@@ -694,16 +717,21 @@ export function mount(stage, info) {
     closeTray();
     game = { t: 25, score: 0, spawn: 0, list: [] };
     bar.style.visibility = 'hidden';
-    hint('🫧 Pop the bubbles! Gold = 3 🪙', 2.5);
+    const left = COINS.gamesPaid - today(pet).games;
+    hint(left > 0 ? `🫧 Pop the bubbles! (${left} 🪙 game${left > 1 ? 's' : ''} left today)` : '🫧 Pop the bubbles! Just for fun now', 2.5);
   }
   function endGame() {
-    const n = game.score;
+    const score = game.score;
     game = null;
+    const d = today(pet);
+    const paid = d.games < COINS.gamesPaid;
+    const n = paid ? Math.min(COINS.gameMax, Math.ceil(score / 3)) : 0;
+    d.games++;
     bar.style.visibility = '';
     pet.fun = clamp(pet.fun + 25);
     pet.energy = clamp(pet.energy - 5);
     if (n) addCoins(n, W / 2, H / 2);
-    toast(`🫧 ${n}<br>+${n} 🪙`, 2.5);
+    toast(paid ? `🫧 ${score}<br>+${n} 🪙` : `🫧 ${score}<br><small style="font-size:18px">Just for fun now.<br>More 🪙 tomorrow 🌙</small>`, 3);
     sound.win();
     setFace('joy', 2);
     refreshHud();
@@ -801,6 +829,11 @@ export function mount(stage, info) {
         setTimeout(() => toast(`${esc(pet.name)} missed you! 💖`), 300);
       }
       if (sulky(pet)) setTimeout(() => sayIt(mood(pet).say, 3), 1500);
+      const d = today(pet);
+      if (!d.bonus) {
+        d.bonus = true;
+        setTimeout(() => { addCoins(COINS.daily, W / 2, H / 2); hint(`☀️ Hello! +${COINS.daily} 🪙`, 2.5); }, 1200);
+      }
       refreshHud();
     }
   }
@@ -855,7 +888,7 @@ export function mount(stage, info) {
         pet.poos.splice(i, 1);
         pet.clean = clamp(pet.clean + 8);
         sfx.plop();
-        addCoins(1, px, py - 30);
+        addCoins(1, px, py - 30, 'care');
         refreshHud();
         return;
       }
@@ -910,7 +943,7 @@ export function mount(stage, info) {
         drag.got += pet.clean - before;
         if (Math.random() < 0.3) sfx.scrub();
         if (Math.random() < 0.25) bubbles.push({ x: p.x + rand(-20, 20), y: p.y + rand(-20, 20), r: rand(5, 10), vy: -rand(30, 60), chase: false });
-        if (drag.got >= 20) { drag.got = 0; addCoins(1, p.x, p.y); }
+        if (drag.got >= 20) { drag.got = 0; addCoins(1, p.x, p.y, 'care'); }
         if (pet.clean >= 100) {
           mode = null; hint('✨ Sparkly clean!', 2); sound.win(); setFace('joy', 2);
           pop('✨', W / 2, H / 2, 8);

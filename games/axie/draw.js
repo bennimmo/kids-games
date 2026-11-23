@@ -443,7 +443,7 @@ export function drawAxolotl(ctx, x, y, s, a) {
     ctx.beginPath(); ctx.arc(sx, sy, col.spots ? 2 + w * 3 : 0.8 + w * 1.2, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
-  if (back === 'backpack') unflipEmoji(ctx, a.dir, '🎒', -26, -20, 38);
+  if (W.back && ITEMS[W.back] && (back === 'backpack' || !back)) unflipEmoji(ctx, a.dir, ITEMS[W.back].icon, -26, -20, 38);
   if (back === 'wings') drawWings(ctx, t, true);
   leg(-38, 16, 2.5, false); leg(16, 18, 1.6, false);
 
@@ -517,6 +517,7 @@ export function drawAxolotl(ctx, x, y, s, a) {
     else if (neck.drawn === 'bowtie') drawBowtie(ctx);
     else if (neck.drawn === 'pearls') drawPearls(ctx);
     else if (neck.drawn === 'medal') { drawRibbon(ctx); unflipEmoji(ctx, dir, '🏅', 30, 38, 26); }
+    else unflipEmoji(ctx, dir, neck.icon, 30, 30, 28);
   }
   const face = W.face && ITEMS[W.face];
   if (face) {
@@ -672,6 +673,30 @@ function drawPattern(ctx, id, col, t) {
     pts.forEach(([x, y, w], i) => {
       ctx.globalAlpha = Math.max(0, Math.sin(t * 3 + i * 1.7)) * 0.9;
       ctx.beginPath(); starPath(ctx, x, y, 2.5 + w * 3); ctx.fill();
+    });
+  } else if (id === 'zigzag') {
+    ctx.strokeStyle = '#ffd400'; ctx.globalAlpha = 0.6; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+    for (const y0 of [-12, 6]) {
+      ctx.beginPath();
+      for (let x = -70, k = 0; x <= 2; x += 9, k++) (k ? ctx.lineTo(x, y0 + (k % 2 ? -6 : 6)) : ctx.moveTo(x, y0));
+      ctx.stroke();
+    }
+  } else if (id === 'leopard') {
+    ctx.strokeStyle = mix(col.dark, '#3b2410', 0.5); ctx.lineWidth = 2.5; ctx.globalAlpha = 0.55;
+    for (const [x, y, w] of pts) {
+      if (x > 2 && x < 60 && y > -22 && y < 16) continue;
+      ctx.beginPath(); ctx.arc(x, y, 3 + w * 3, 0.4, TAU - 0.6); ctx.stroke();
+    }
+  } else if (id === 'galaxy') {
+    const g = ctx.createLinearGradient(-70, -30, 76, 30);
+    g.addColorStop(0, '#2a1b5c'); g.addColorStop(0.5, '#5b2a86'); g.addColorStop(1, '#1b3a6b');
+    ctx.fillStyle = g; ctx.globalAlpha = 0.5;
+    ctx.fillRect(-72, -40, 150, 70);
+    ctx.fillStyle = '#fff';
+    pts.forEach(([x, y, w], i) => {
+      if (x > 2 && x < 60 && y > -22 && y < 16) return;
+      ctx.globalAlpha = 0.5 + 0.5 * Math.max(0, Math.sin(t * 2 + i));
+      ctx.beginPath(); ctx.arc(x, y, 0.8 + w * 1.4, 0, TAU); ctx.fill();
     });
   } else if (id === 'rainbow') {
     const g = ctx.createLinearGradient(-70, 0, 76, 0);
