@@ -4,6 +4,11 @@
 import { ITEMS } from './items.js';
 
 const TAU = Math.PI * 2;
+function rad2(ctx, fx, fy, r0, x, y, r1, stops) {
+  const g = ctx.createRadialGradient(fx, fy, r0, x, y, r1);
+  stops.forEach(([o, c]) => g.addColorStop(o, c));
+  return g;
+}
 
 // Little seeded random so pebbles and weeds stay in the same place every frame.
 function rng(seed) {
@@ -364,7 +369,7 @@ export function drawAxolotl(ctx, x, y, s, a) {
   const sp = [];
   for (let i = 0; i <= N; i++) {
     const k = i / N;
-    sp.push({ k, x: 8 - k * 160, y: 4 + Math.sin(t * f - k * 3.2) * amp * Math.pow(k, 1.3) });
+    sp.push({ k, x: 8 - k * 142, y: 4 + Math.sin(t * f - k * 3.2) * amp * Math.pow(k, 1.3) });
   }
   sp.forEach((p, i) => {
     const q = sp[Math.max(0, i - 1)], r = sp[Math.min(N, i + 1)];
@@ -464,6 +469,7 @@ export function drawAxolotl(ctx, x, y, s, a) {
     ctx.beginPath(); ctx.arc(sx, sy, col.spots ? 2 + w * 3 : 0.8 + w * 1.2, 0, TAU); ctx.fill();
   }
   ctx.restore();
+  if (a.pattern) drawPattern(ctx, a.pattern, col, t, bodyPath);
   // shine along the back + outline
   ctx.save();
   const rim = new Path2D(); smooth(rim, sp.slice(1, Math.floor(N * 0.75)).map(p => at(p, p.w - 4)), true);
@@ -488,7 +494,7 @@ export function drawAxolotl(ctx, x, y, s, a) {
     const gc = far ? mix(col.gill, col.dark, 0.35) : col.gill;
     ctx.lineCap = 'round';
     // feathery filaments, lighter at the tips
-    for (let k = 0.14; k <= 1.001; k += 0.055) {
+    for (let k = 0.2; k <= 1.001; k += 0.07) {
       const [px, py] = P(k);
       const [qx, qy] = P(Math.min(1, k + 0.02));
       const tx = qx - px, ty = qy - py, tl = Math.hypot(tx, ty) || 1;
@@ -509,72 +515,92 @@ export function drawAxolotl(ctx, x, y, s, a) {
     ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(cx, cy, ...P(0.5)); ctx.stroke();
     ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(...P(0.45)); ctx.quadraticCurveTo(...P(0.75), ex, ey); ctx.stroke();
   };
-  [-2.5, -2.1, -1.75].forEach((ang, i) => gill(-4, -6 + i * 7, ang, 34 - i * 3, i, true));
-  [-0.64, -1.04, -1.39].forEach((ang, i) => gill(64, -6 + i * 7, ang, 34 - i * 3, i + 3, false));
+  // ---- Head: broad, flat and smooth, flowing out of the body (side-on, facing right) ----
+  const headPath = new Path2D();
+  headPath.moveTo(-6, -19);
+  headPath.bezierCurveTo(12, -33, 46, -36, 64, -27);   // top of the head
+  headPath.bezierCurveTo(80, -19, 86, -3, 81, 9);      // round snout
+  headPath.bezierCurveTo(76, 21, 56, 28, 32, 27);      // jaw
+  headPath.bezierCurveTo(14, 27, 0, 24, -8, 20);       // throat into the body
+  headPath.closePath();
+  const outlineHead = new Path2D();                    // the visible edge (not the neck side)
+  outlineHead.moveTo(4, -26);
+  outlineHead.bezierCurveTo(20, -34, 46, -36, 64, -27);
+  outlineHead.bezierCurveTo(80, -19, 86, -3, 81, 9);
+  outlineHead.bezierCurveTo(76, 21, 56, 28, 32, 27);
+  outlineHead.bezierCurveTo(20, 27, 10, 26, 2, 23);
 
-  // Head: wide and flat, lit from the top-left
-  const hg = ctx.createRadialGradient(16, -20, 4, 30, -3, 50);
-  hg.addColorStop(0, hi); hg.addColorStop(0.55, body); hg.addColorStop(1, lo);
+  // gills on the far side peek out over the top of the head
+  [[26, -28, -1.62, 30], [19, -25, -1.98, 32], [12, -21, -2.34, 30]].forEach(([bx, by, ang, len], i) => gill(bx, by, ang, len, i, true));
+
   ctx.save();
-  ctx.shadowColor = 'rgba(0,30,60,.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6;
-  ctx.fillStyle = hg;
-  ctx.beginPath(); ctx.ellipse(30, -3, 46, 33, 0, 0, TAU); ctx.fill();
+  ctx.shadowColor = 'rgba(0,30,60,.22)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6;
+  ctx.fillStyle = rad2(ctx, 38, -18, 4, 30, 0, 66, [[0, hi], [0.5, body], [1, lo]]);
+  ctx.fill(headPath);
   ctx.restore();
-  ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.45;
-  ctx.beginPath(); ctx.ellipse(30, -3, 46, 33, 0, 0, TAU); ctx.stroke();
-  ctx.globalAlpha = 1;
-  // chin/lip lighter
-  ctx.fillStyle = belly; ctx.globalAlpha = 0.6;
-  ctx.beginPath(); ctx.ellipse(30, 18, 30, 9, 0, 0, TAU); ctx.fill();
-  ctx.globalAlpha = 1;
-  // wet shine + rim light
-  const sh = ctx.createRadialGradient(16, -22, 0, 16, -22, 22);
-  sh.addColorStop(0, 'rgba(255,255,255,.75)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = sh;
-  ctx.beginPath(); ctx.ellipse(16, -22, 22, 11, -0.3, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.ellipse(30, -3, 42, 29, 0, Math.PI * 1.15, Math.PI * 1.55); ctx.stroke();
-  // nostrils
-  ctx.fillStyle = lo; ctx.globalAlpha = 0.5;
-  ctx.beginPath(); ctx.arc(25, 1, 1.3, 0, TAU); ctx.arc(35, 1, 1.3, 0, TAU); ctx.fill();
-  // head speckles
+  ctx.save();
+  ctx.clip(headPath);
+  // pale throat and lower lip
+  const tg = ctx.createLinearGradient(0, 6, 0, 30);
+  tg.addColorStop(0, 'rgba(255,255,255,0)'); tg.addColorStop(1, belly);
+  ctx.fillStyle = tg; ctx.fillRect(-10, 6, 100, 26);
+  // soft shade where the head meets the body
+  const ng = ctx.createLinearGradient(-8, 0, 18, 0);
+  ng.addColorStop(0, mix(lo, body, 0.3)); ng.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalAlpha = 0.35; ctx.fillStyle = ng; ctx.fillRect(-10, -40, 30, 70); ctx.globalAlpha = 1;
+  // speckles
   ctx.fillStyle = col.spots ? col.dark : lo;
-  for (const [u, v, w] of SPECKS.slice(0, 10)) {
-    ctx.globalAlpha = col.spots ? 0.7 : 0.2;
-    ctx.beginPath(); ctx.arc(4 + u * 52, -30 + v * 12, col.spots ? 1.5 + w * 2 : 0.7 + w, 0, TAU); ctx.fill();
+  for (const [u, v, w] of SPECKS.slice(0, 14)) {
+    ctx.globalAlpha = col.spots ? 0.7 : 0.18;
+    ctx.beginPath(); ctx.arc(6 + u * 64, -28 + v * 22, col.spots ? 1.5 + w * 2 : 0.7 + w, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
-  // cheeks
-  const ck = a.sick ? 'rgba(120,170,60,' : 'rgba(255,90,130,';
-  for (const cx of [3, 57]) {
-    const cg = ctx.createRadialGradient(cx, 9, 0, cx, 9, 10);
-    cg.addColorStop(0, ck + '.45)'); cg.addColorStop(1, ck + '0)');
-    ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.ellipse(cx, 9, 10, 7, 0, 0, TAU); ctx.fill();
-  }
+  if (a.pattern) drawPattern(ctx, a.pattern, col, t, bodyPath, headPath);
+  ctx.restore();
+  // wet shine on top of the head + rim light
+  const sh = ctx.createRadialGradient(40, -26, 0, 40, -26, 24);
+  sh.addColorStop(0, 'rgba(255,255,255,.7)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sh;
+  ctx.beginPath(); ctx.ellipse(40, -25, 24, 6, -0.08, 0, TAU); ctx.fill();
+  ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.globalAlpha = 0.45; ctx.stroke(outlineHead); ctx.globalAlpha = 1;
+  // nostril
+  ctx.fillStyle = lo; ctx.globalAlpha = 0.55;
+  ctx.beginPath(); ctx.ellipse(79, -6, 1.3, 1.8, 0.3, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  // blush under the eye
+  const ck = a.sick ? 'rgba(120,170,60,' : 'rgba(255,95,135,';
+  const cg = ctx.createRadialGradient(54, 6, 0, 54, 6, 11);
+  cg.addColorStop(0, ck + '.42)'); cg.addColorStop(1, ck + '0)');
+  ctx.fillStyle = cg; ctx.beginPath(); ctx.ellipse(54, 6, 11, 7, 0, 0, TAU); ctx.fill();
 
-  if (a.pattern) drawPattern(ctx, a.pattern, col, t, bodyPath);
-  drawFace(ctx, a);
+  ctx.save(); ctx.clip(headPath);
+  drawFace(ctx, a, { body, lo });
+  ctx.restore();
+
+  // near-side gills, sprouting from the back of the head
+  [[19, -18, -1.9, 38], [13, -6, -2.55, 36], [12, 7, -3.15, 31]].forEach(([bx, by, ang, len], i) => gill(bx, by, ang, len, i + 3, false));
 
   // Clothes
   const neck = W.neck && ITEMS[W.neck];
   if (neck) {
+    ctx.save(); ctx.translate(-12, -4);
     if (neck.drawn === 'scarf') drawScarf(ctx);
     else if (neck.drawn === 'bowtie') drawBowtie(ctx);
     else if (neck.drawn === 'pearls') drawPearls(ctx);
     else if (neck.drawn === 'medal') { drawRibbon(ctx); unflipEmoji(ctx, dir, '🏅', 30, 38, 26); }
     else unflipEmoji(ctx, dir, neck.icon, 30, 30, 28);
+    ctx.restore();
   }
   const face = W.face && ITEMS[W.face];
   if (face) {
     if (face.drawn === 'hearts') drawSpecs(ctx, 'heart');
     else if (face.drawn === 'stars') drawSpecs(ctx, 'star');
-    else unflipEmoji(ctx, dir, face.icon, 30, -12, 58);
+    else unflipEmoji(ctx, dir, face.icon, 62, -11, 46);
   }
   const hat = W.hat && ITEMS[W.hat];
   if (hat) {
-    if (hat.drawn === 'party') drawPartyHat(ctx, 30, -36);
-    else unflipEmoji(ctx, dir, hat.icon, 30, -48, 46);
+    if (hat.drawn === 'party') drawPartyHat(ctx, 40, -32);
+    else unflipEmoji(ctx, dir, hat.icon, 40, -46, 46);
   }
   ctx.restore();
 }
@@ -636,12 +662,13 @@ function drawSpecs(ctx, kind) {
   const col = kind === 'heart' ? '#ff4081' : '#ffc107';
   ctx.fillStyle = kind === 'heart' ? 'rgba(255,128,171,.55)' : 'rgba(255,224,130,.55)';
   ctx.strokeStyle = col; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
-  for (const x of [14, 46]) {
+  for (const [x, y, r] of [[74, -13, 7.5], [55, -9, 11]]) {
     ctx.beginPath();
-    kind === 'heart' ? heartPath(ctx, x, -10, 11) : starPath(ctx, x, -10, 13);
+    kind === 'heart' ? heartPath(ctx, x, y, r) : starPath(ctx, x, y, r * 1.2);
     ctx.fill(); ctx.stroke();
   }
-  ctx.beginPath(); ctx.moveTo(23, -12); ctx.quadraticCurveTo(30, -16, 37, -12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(64, -12); ctx.lineTo(68, -13); ctx.stroke();
+  ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(44, -10); ctx.lineTo(14, -12); ctx.stroke();
   ctx.restore();
 }
 function drawCape(ctx, t, swim) {
@@ -694,16 +721,13 @@ function drawBalloonBack(ctx, t) {
 
 // Patterns on the body and head (clipped to them).
 const PAT_R = (() => { const r = rng(77); return Array.from({ length: 36 }, () => [r(), r(), r()]); })();
-function drawPattern(ctx, id, col, t, bodyPath) {
+function drawPattern(ctx, id, col, t, bodyPath, headPath) {
   ctx.save();
-  const clip = new Path2D();
-  if (bodyPath) clip.addPath(bodyPath); else clip.ellipse(-18, 2, 52, 23, 0, 0, TAU);
-  clip.ellipse(30, -3, 46, 33, 0, 0, TAU);
-  ctx.clip(clip);
+  ctx.clip(headPath || bodyPath);
   const pts = PAT_R.map(([u, v, w]) => [-110 + u * 180, -34 + v * 58, w]);
   if (id === 'spots') {
     ctx.fillStyle = mix(col.gill, col.dark, 0.3); ctx.globalAlpha = 0.45;
-    for (const [x, y, w] of pts) { if (x > 2 && x < 60 && y > -22 && y < 16) continue; ctx.beginPath(); ctx.arc(x, y, 3 + w * 4, 0, TAU); ctx.fill(); }
+    for (const [x, y, w] of pts) { if (x > 38 && x < 90 && y > -24 && y < 22) continue; ctx.beginPath(); ctx.arc(x, y, 3 + w * 4, 0, TAU); ctx.fill(); }
   } else if (id === 'stripes') {
     ctx.strokeStyle = mix(col.gill, col.dark, 0.2); ctx.globalAlpha = 0.4; ctx.lineWidth = 6; ctx.lineCap = 'round';
     for (let x = -120; x < 0; x += 14) { ctx.beginPath(); ctx.moveTo(x, -26); ctx.quadraticCurveTo(x - 6, 2, x, 26); ctx.stroke(); }
@@ -711,7 +735,7 @@ function drawPattern(ctx, id, col, t, bodyPath) {
   } else if (id === 'hearts' || id === 'stars') {
     ctx.fillStyle = id === 'hearts' ? '#ff4f86' : '#ffc107'; ctx.globalAlpha = 0.6;
     for (const [x, y, w] of pts) {
-      if (x > 2 && x < 60 && y > -22 && y < 16) continue;
+      if (x > 38 && x < 90 && y > -24 && y < 22) continue;
       ctx.beginPath(); id === 'hearts' ? heartPath(ctx, x, y, 3 + w * 2.5) : starPath(ctx, x, y, 3.5 + w * 3); ctx.fill();
     }
   } else if (id === 'sparkle') {
@@ -730,7 +754,7 @@ function drawPattern(ctx, id, col, t, bodyPath) {
   } else if (id === 'leopard') {
     ctx.strokeStyle = mix(col.dark, '#3b2410', 0.5); ctx.lineWidth = 2.5; ctx.globalAlpha = 0.55;
     for (const [x, y, w] of pts) {
-      if (x > 2 && x < 60 && y > -22 && y < 16) continue;
+      if (x > 38 && x < 90 && y > -24 && y < 22) continue;
       ctx.beginPath(); ctx.arc(x, y, 3 + w * 3, 0.4, TAU - 0.6); ctx.stroke();
     }
   } else if (id === 'galaxy') {
@@ -740,7 +764,7 @@ function drawPattern(ctx, id, col, t, bodyPath) {
     ctx.fillRect(-175, -45, 260, 90);
     ctx.fillStyle = '#fff';
     pts.forEach(([x, y, w], i) => {
-      if (x > 2 && x < 60 && y > -22 && y < 16) return;
+      if (x > 38 && x < 90 && y > -24 && y < 22) return;
       ctx.globalAlpha = 0.5 + 0.5 * Math.max(0, Math.sin(t * 2 + i));
       ctx.beginPath(); ctx.arc(x, y, 0.8 + w * 1.4, 0, TAU); ctx.fill();
     });
@@ -774,77 +798,100 @@ function drawPartyHat(ctx, x, y) {
   ctx.restore();
 }
 
-function drawFace(ctx, a) {
+// Face, side-on: one big glossy eye near us, the far eye peeking past the snout, and the long axolotl smile.
+const EYE = { x: 55, y: -9, r: 7.6 }, EYE2 = { x: 74, y: -13, r: 5.2 };
+function eyeOpen(ctx, e, look, lid, lidCol) {
+  ctx.save();
+  // socket shadow
+  ctx.fillStyle = 'rgba(0,0,0,.12)';
+  ctx.beginPath(); ctx.ellipse(e.x, e.y + 1, e.r + 2, e.r + 1.6, 0, 0, TAU); ctx.fill();
+  const g = ctx.createRadialGradient(e.x - e.r * 0.3, e.y - e.r * 0.3, 0, e.x, e.y, e.r);
+  g.addColorStop(0, '#4b3f63'); g.addColorStop(0.55, '#1a1526'); g.addColorStop(1, '#07060c');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.fill();
+  // iris ring glint
+  ctx.strokeStyle = 'rgba(160,140,220,.35)'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(e.x + look, e.y + 0.5, e.r * 0.62, 0.2, Math.PI - 0.2); ctx.stroke();
+  // highlights
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.ellipse(e.x - e.r * 0.32 + look * 0.3, e.y - e.r * 0.38, e.r * 0.36, e.r * 0.3, -0.5, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 0.8;
+  ctx.beginPath(); ctx.arc(e.x + e.r * 0.38, e.y + e.r * 0.36, e.r * 0.14, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  if (lid > 0) { // eyelid coming down (sleepy / poorly)
+    ctx.fillStyle = lidCol;
+    ctx.beginPath(); ctx.rect(e.x - e.r - 2, e.y - e.r - 2, e.r * 2 + 4, (e.r * 2 + 2) * lid); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,20,30,.55)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(e.x - e.r, e.y - e.r - 1 + (e.r * 2 + 2) * lid); ctx.lineTo(e.x + e.r, e.y - e.r - 1 + (e.r * 2 + 2) * lid); ctx.stroke();
+  }
+  ctx.restore();
+}
+function eyeClosed(ctx, e, happy) {
+  ctx.save();
+  ctx.strokeStyle = '#2a2033'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (happy) ctx.arc(e.x, e.y + e.r * 0.5, e.r * 0.9, Math.PI * 1.15, Math.PI * 1.85);   // smiling eyes ◠
+  else ctx.arc(e.x, e.y - e.r * 0.4, e.r * 0.9, Math.PI * 0.15, Math.PI * 0.85);       // sleeping ◡
+  ctx.stroke();
+  // lashes
+  ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(e.x + e.r * 0.8, e.y + (happy ? -e.r * 0.05 : e.r * 0.1)); ctx.lineTo(e.x + e.r * 1.15, e.y + (happy ? -e.r * 0.35 : e.r * 0.35)); ctx.stroke();
+  ctx.restore();
+}
+
+function drawFace(ctx, a, c) {
   const f = a.face;
-  const ex1 = 14, ex2 = 46, ey = -10;
-  ctx.fillStyle = '#1d1b2c';
-  ctx.strokeStyle = '#1d1b2c';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  const closed = f === 'sleep' || f === 'giggle' || a.blink;
-  if (f === 'giggle' || f === 'joy') {
-    // happy ^ ^ eyes
-    for (const ex of [ex1, ex2]) {
-      ctx.beginPath(); ctx.arc(ex, ey + 3, 6, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
-    }
-  } else if (closed) {
-    for (const ex of [ex1, ex2]) {
-      ctx.beginPath(); ctx.arc(ex, ey - 2, 6, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
-    }
-  } else {
-    const r = f === 'wow' ? 7 : 6;
-    for (const ex of [ex1, ex2]) {
-      const eg = ctx.createRadialGradient(ex - 1, ey - 1, 0, ex, ey, r + 1);
-      eg.addColorStop(0, '#3a3550'); eg.addColorStop(0.7, '#15131f'); eg.addColorStop(1, '#000');
-      ctx.fillStyle = eg;
-      ctx.beginPath(); ctx.arc(ex, ey, r + 1, 0, TAU); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(ex, ey, r - 1.5, 0.3, 2.2); ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(ex - 2.2, ey - 2.6, 2.6, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.arc(ex + 2.4, ey + 2.4, 1.1, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#1d1b2c'; ctx.strokeStyle = '#1d1b2c'; ctx.lineWidth = 3;
-    }
-    if (f === 'sleepy' || f === 'sick') {
-      // heavy eyelids
-      ctx.fillStyle = a.sick ? mix(a.col.body, '#b6d98a', 0.35) : a.col.body;
-      for (const ex of [ex1, ex2]) { ctx.beginPath(); ctx.rect(ex - 8, ey - 9, 16, 8); ctx.fill(); }
-      ctx.fillStyle = '#1d1b2c';
-    }
-    if (f === 'sad' || f === 'yuck') {
-      // worried brows
-      ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(ex1 - 7, ey - 9); ctx.lineTo(ex1 + 5, ey - 12); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ex2 + 7, ey - 9); ctx.lineTo(ex2 - 5, ey - 12); ctx.stroke();
-      ctx.lineWidth = 3;
-    }
+  const happyShut = f === 'giggle';
+  const shut = f === 'sleep' || happyShut || a.blink;
+  const lid = f === 'sleepy' ? 0.45 : f === 'sick' ? 0.35 : 0;
+  const look = f === 'wow' || f === 'hungry' ? 0.8 : 0;
+  // far eye first (smaller, partly round the snout)
+  if (shut) eyeClosed(ctx, EYE2, happyShut); else eyeOpen(ctx, EYE2, look, lid, c.body);
+  if (shut) eyeClosed(ctx, EYE, happyShut); else eyeOpen(ctx, EYE, look, lid, c.body);
+  if (f === 'sad' || f === 'yuck') {
+    ctx.strokeStyle = 'rgba(40,25,35,.7)'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(EYE.x - 7, EYE.y - 10); ctx.quadraticCurveTo(EYE.x, EYE.y - 13, EYE.x + 7, EYE.y - 13); ctx.stroke();
   }
 
-  // Mouth
-  const mx = 30, my = 8;
-  if (f === 'eat') {
-    const o = 4 + Math.abs(Math.sin(a.t * 14)) * 8;
-    ctx.fillStyle = '#9b2c4a';
-    ctx.beginPath(); ctx.ellipse(mx, my + 2, 9, o, 0, 0, TAU); ctx.fill();
-  } else if (f === 'hungry' || f === 'wow') {
-    ctx.fillStyle = '#9b2c4a';
-    ctx.beginPath(); ctx.ellipse(mx, my + 3, 5, 6, 0, 0, TAU); ctx.fill();
-  } else if (f === 'sad' || f === 'yuck') {
-    ctx.beginPath(); ctx.arc(mx, my + 12, 9, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
-  } else if (f === 'sick') {
+  // Mouth: runs from the tip of the snout back under the eye
+  const lip = '#7a3346';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const front = [81, 9];
+  if (f === 'eat' || f === 'giggle') {
+    const o = f === 'eat' ? 3 + Math.abs(Math.sin(a.t * 14)) * 7 : 6;
+    ctx.fillStyle = '#8c2f48';
     ctx.beginPath();
-    ctx.moveTo(mx - 10, my + 4);
-    for (let i = 1; i <= 4; i++) ctx.lineTo(mx - 10 + i * 5, my + 4 + (i % 2 ? -3 : 3));
+    ctx.moveTo(...front);
+    ctx.quadraticCurveTo(64, 15, 44, 9);
+    ctx.quadraticCurveTo(60, 18 + o * 1.4, 79, 12 + o * 0.4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff8fa8';                                    // tongue
+    ctx.beginPath(); ctx.ellipse(64, 14 + o * 0.7, 9, Math.max(2, o * 0.45), 0.1, 0, TAU); ctx.fill();
+    ctx.strokeStyle = lip; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(...front); ctx.quadraticCurveTo(64, 15, 44, 9); ctx.stroke();
+  } else if (f === 'hungry' || f === 'wow') {
+    ctx.strokeStyle = lip; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(...front); ctx.quadraticCurveTo(66, 15, 50, 13); ctx.stroke();
+    ctx.fillStyle = '#8c2f48';
+    ctx.beginPath(); ctx.ellipse(74, 14, 4, 4.5, 0, 0, TAU); ctx.fill();
+  } else if (f === 'sad' || f === 'yuck') {
+    ctx.strokeStyle = lip; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(...front); ctx.quadraticCurveTo(64, 10, 46, 17); ctx.stroke();
+  } else if (f === 'sick') {
+    ctx.strokeStyle = lip; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(...front);
+    for (let i = 1; i <= 6; i++) ctx.lineTo(81 - i * 6, 11 + (i % 2 ? 3 : -1));
     ctx.stroke();
-  } else if (f === 'giggle') {
-    ctx.fillStyle = '#9b2c4a';
-    ctx.beginPath(); ctx.moveTo(mx - 13, my); ctx.quadraticCurveTo(mx, my + 20, mx + 13, my); ctx.closePath(); ctx.fill();
   } else if (f === 'sleep') {
-    ctx.beginPath(); ctx.arc(mx, my + 3, 3, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = lip; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(...front); ctx.quadraticCurveTo(66, 13, 50, 11); ctx.stroke();
   } else {
-    // smile (big when joy)
-    const k = f === 'joy' ? 1.3 : 1;
-    ctx.beginPath(); ctx.moveTo(mx - 13 * k, my); ctx.quadraticCurveTo(mx, my + 12 * k, mx + 13 * k, my); ctx.stroke();
+    // the classic axolotl smile: long, curling up at the back
+    const big = f === 'joy' ? 1 : 0;
+    ctx.strokeStyle = lip; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(...front); ctx.quadraticCurveTo(64, 16 + big * 2, 44 - big * 2, 7 - big); ctx.stroke();
+    ctx.lineWidth = 1.6;  // dimple
+    ctx.beginPath(); ctx.arc(44 - big * 2, 9 - big, 2.6, Math.PI * 0.9, Math.PI * 1.6); ctx.stroke();
   }
 }
 
