@@ -257,7 +257,8 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
 - Levels: 🐣 Easy = birthday every day, always grows. 🐥 Medium = every 2 days, grows only when needs are OK on average. 🦅 Hard = every 3 days, every need must be OK, needs drop 2× faster.
 - Feed (🪱 🦐 🟤 🧁). 3 cakes = tummy ache → 💊 medicine. Poo comes after eating: tap it to scoop. 🧽 rub the glass to clean. 💡/🌙 lights = sleep. Tap/stroke it to tickle. Tap the water for a bubble it chases.
 - Birthdays: cake (tap to blow), a present (`GIFTS` in `items.js`), auto photo. Grows: Baby → Little → Kid → Big kid → Grown-up.
-- 🪙 Coins from care and 🎮 bubble pop (25 s, gold = 3). 🎁 Things: put toys/decor in the tank, wear hats/glasses/scarf, 🛒 shop. 📸 album (last 24).
+- 🪙 Coins from care and 🎮 bubble pop (25 s, gold = 3). 🎁 Things: put toys/decor in the tank, 🛒 shop. 📸 album (last 24).
+- 👗 Wardrobe: live preview + tabs 🎩 hats, 👓 glasses, 🧣 neck, 🎒 back (cape, wings, backpack, balloon), ✨ patterns (spots, stripes, hearts, stars, sparkle, rainbow), 🎨 colour (30 🪙 each new colour), ⭐ 3 saved outfits. Buy → wear; tap again = take off (kept). Chips under the preview = what it's wearing (tap ✖). 🎂 = birthday-only. Prices in `WARDROBE` / `PATTERNS` (`items.js`). Friends see your outfit on playdates.
 - 👫 Playdate (`playdate.js`): tap 👫 → pick friends → they get the invite and their axolotl swims into your tank (name tag, colour, clothes, size). Visitors see the host's decor.
   - Each device moves its own axolotl (`live/<pid>.p`, ~7×/sec). Food, bubbles, tickles (tap a friend's axolotl) and 🎮 bubble pop (starts for everyone) are numbered events in `live/<pid>.ev`. Needs and coins never leave the device.
   - Friends make it happier (fun goes up), a 📸 playdate photo is taken after 5 s. 👫 again → End playdate / Go home.

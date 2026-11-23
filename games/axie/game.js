@@ -5,7 +5,7 @@
 import { createCanvas } from '../../js/engine/canvas.js';
 import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
-import { LEVELS, COLOURS, NAMES, FOODS, ITEMS, SHOP, stageOf } from './items.js';
+import { LEVELS, COLOURS, NAMES, FOODS, ITEMS, SHOP, SLOTS, WARDROBE, PATTERNS, COLOUR_PRICE, OUTFIT_SLOTS, stageOf } from './items.js';
 import {
   newPet, loadPet, savePet, forgetPet, catchUp, update as tickPet, addPoo, clamp,
   mood, sulky, nightNow, nextBirthday, birthdayProgress, isGrowing, giftFor,
@@ -45,6 +45,7 @@ const CSS = `
 .axie-hud { position:absolute; top:14px; left:84px; right:14px; display:flex; gap:8px; align-items:flex-start; justify-content:space-between; pointer-events:none; z-index:5; }
 .axie-hud > * { pointer-events:auto; }
 .axie-chip { display:flex; align-items:center; gap:6px; height:44px; padding:0 14px; border-radius:16px; background:rgba(16,18,38,.6); color:#fff; font-weight:800; font-size:17px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.18); white-space:nowrap; }
+.axie-chip[hidden] { display:none; }
 .axie-chip button { all:unset; cursor:pointer; font-size:22px; }
 .axie-needs { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; flex:1; }
 .axie-need { width:60px; height:44px; border-radius:14px; background:rgba(16,18,38,.6); border:1px solid rgba(255,255,255,.18); position:relative; overflow:hidden; display:grid; place-items:center; font-size:22px; -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
@@ -83,8 +84,23 @@ const CSS = `
   .axie-need { width:auto; flex:1; height:38px; font-size:19px; }
   .axie-chip { height:40px; padding:0 10px; font-size:15px; }
   .axie-bar { gap:5px; padding:6px; border-radius:22px; }
-  .axie-bar button, .axie-tray button { width:46px; height:50px; font-size:26px; border-radius:15px; }
+  .axie-bar button, .axie-tray button { width:40px; height:48px; font-size:24px; border-radius:14px; }
+  .axie-bar { gap:4px; }
+  .axie-wd canvas { height:170px; }
+  .axie-tabs button { width:42px; height:42px; font-size:22px; border-radius:13px; }
+  .axie-worn button { height:32px; font-size:18px; }
 }
+.axie-wd { width:100%; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.axie-wd canvas { width:100%; max-width:420px; height:210px; border-radius:22px; display:block; }
+.axie-worn { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; min-height:40px; align-items:center; }
+.axie-worn button { all:unset; cursor:pointer; height:38px; padding:0 10px; border-radius:14px; background:rgba(255,255,255,.14); font-size:22px; display:flex; align-items:center; gap:4px; }
+.axie-worn button::after { content:'✖'; font-size:12px; color:var(--ui-dim); }
+.axie-tabs { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+.axie-tabs button { all:unset; cursor:pointer; width:52px; height:48px; border-radius:16px; display:grid; place-items:center; font-size:26px; background:var(--ui-card); }
+.axie-tabs button.on { background:var(--accent); }
+.axie-item .tag { position:absolute; bottom:4px; font-size:13px; font-weight:800; color:var(--ui-dim); }
+.axie-outfit { width:100%; display:flex; align-items:center; gap:10px; padding:10px; border-radius:18px; background:var(--ui-card); }
+.axie-outfit .look { flex:1; font-size:26px; text-align:left; min-height:32px; }
 .axie-party { position:absolute; left:50%; top:16%; transform:translateX(-50%); text-align:center; color:#fff; font-weight:900; font-size:clamp(26px,5vw,44px); text-shadow:0 3px 0 rgba(0,0,0,.25), 0 0 20px rgba(0,0,0,.3); z-index:7; pointer-events:none; white-space:nowrap; }
 .axie-party small { display:block; font-size:.55em; }
 `;
@@ -176,6 +192,7 @@ export function mount(stage, info) {
         <button data-act="play" aria-label="Play">🎮</button>
         <button data-act="friends" aria-label="Playdate">👫</button>
         <button data-act="things" aria-label="Things">🎁</button>
+        <button data-act="wardrobe" aria-label="Wardrobe">👗</button>
         <button data-act="photo" aria-label="Photos">📸</button>
       </div>`;
     hud = ui.querySelector('.axie-hud');
@@ -264,6 +281,7 @@ export function mount(stage, info) {
       if (pet.sick) { sayIt('🤢'); hint('Give medicine first 💊'); return; }
       startGame();
     } else if (a === 'things') openThings('mine');
+    else if (a === 'wardrobe') openWardrobe('hat');
     else if (a === 'photo') openAlbum();
     else if (a === 'settings') openSettings();
     else if (a === 'friends') pd ? openPlaydate() : startPlaydate();
@@ -359,13 +377,13 @@ export function mount(stage, info) {
   }
 
   function openThings(tab) {
-    const mine = pet.owned.slice();
+    const mine = pet.owned.filter(id => ITEMS[id] && ITEMS[id].kind !== 'wear');
     const tabs = `<div class="ui-seg"><button data-tab="mine" class="${tab === 'mine' ? 'on' : ''}">🧸 Mine</button><button data-tab="shop" class="${tab === 'shop' ? 'on' : ''}">🛒 Shop</button></div>`;
     let body;
     if (tab === 'mine') {
       body = mine.length
         ? `<div class="axie-grid">${mine.map(id => `<button class="axie-item ${isOn(id) ? 'on' : ''}" data-id="${id}">${ITEMS[id].icon}</button>`).join('')}</div>
-           <div class="ui-sub">Tap to put in or take out. 🎩 = wear it!</div>`
+           <div class="ui-sub">Tap to put in or take out. Clothes are in the 👗 wardrobe.</div>`
         : `<div class="ui-sub">Nothing yet. Presents come on birthdays 🎂 or buy things in the 🛒 Shop.</div>`;
     } else {
       body = `<div class="axie-grid">${SHOP.filter(s => !pet.owned.includes(s.id)).map(s => `<button class="axie-item ${pet.coins < s.price ? 'poor' : ''}" data-buy="${s.id}">${ITEMS[s.id].icon}<small>🪙 ${s.price}</small></button>`).join('') || '<div class="ui-sub">You have everything! 🎉</div>'}</div>
@@ -391,6 +409,155 @@ export function mount(stage, info) {
       ov.close();
       toast(`${ITEMS[s.id].icon}<br>Yours!`);
     }));
+  }
+
+  // ---------- Wardrobe: buy, wear, take off (kept in the wardrobe), patterns, colours, outfits ----------
+  function openWardrobe(tab) {
+    let cur = tab;
+    let giggle = 0;
+    const ov = overlay(`
+      <div class="ui-title">👗 Wardrobe</div>
+      <div class="axie-wd"><canvas></canvas><div class="axie-worn"></div></div>
+      <div class="axie-tabs">${SLOTS.map(sl => `<button data-tab="${sl.id}" aria-label="${sl.name}">${sl.icon}</button>`).join('')}</div>
+      <div class="ui-chip" data-coins></div>
+      <div class="axie-body" style="width:100%"></div>
+      <div class="ui-row"><button class="ui-btn ghost" data-off>🧺 Take all off</button><button class="ui-btn primary" data-close>Done</button></div>`);
+    const body = ov.querySelector('.axie-body');
+    const worn = ov.querySelector('.axie-worn');
+    const coinsEl = ov.querySelector('[data-coins]');
+    const cv = ov.querySelector('canvas');
+    const owns = id => pet.owned.includes(id);
+    const happy = () => { giggle = 1.2; sfx.giggle(); };
+    const shake = el => el.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'none' }], 250);
+    const changed = () => { save(); pd?.updateInfo(); render(); };
+    const pay = (price, el) => {
+      if (pet.coins < price) { sfx.no(); shake(el); hint(`Need ${price - pet.coins} more 🪙`, 2); return false; }
+      pet.coins -= price; sfx.coin(); return true;
+    };
+    const tile = (inner, { on, poor, data, tag }) => `<button class="axie-item ${on ? 'on' : ''} ${poor ? 'poor' : ''}" ${data}>${inner}${tag ? `<span class="tag">${tag}</span>` : ''}</button>`;
+    const clothesTab = () => ['hat', 'face', 'neck', 'back'].includes(cur);
+
+    function render() {
+      coinsEl.textContent = `🪙 ${pet.coins}`;
+      ov.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === cur));
+      // What it's wearing now (tap to take off)
+      const bits = Object.entries(pet.wear).filter(([, id]) => id && ITEMS[id]).map(([slot, id]) => `<button data-off-slot="${slot}">${ITEMS[id].icon}</button>`);
+      if (pet.pattern) bits.push(`<button data-off-slot="pattern">${PATTERNS[pet.pattern].icon}</button>`);
+      worn.innerHTML = bits.join('') || '<span class="ui-sub">Nothing on. Pick something!</span>';
+
+      if (clothesTab()) {
+        const ids = Object.keys(ITEMS).filter(id => ITEMS[id].kind === 'wear' && ITEMS[id].slot === cur);
+        ids.sort((a, b) => owns(b) - owns(a));
+        body.innerHTML = `<div class="axie-grid">${ids.map(id => {
+          const price = WARDROBE[id];
+          const have = owns(id);
+          return tile(ITEMS[id].icon, {
+            on: pet.wear[cur] === id, poor: !have && (price == null || pet.coins < price), data: `data-w="${id}"`,
+            tag: have ? '' : price == null ? '🎂' : `🪙${price}`,
+          });
+        }).join('')}</div><div class="ui-sub">Tap to wear. Tap again to take off – it stays in your wardrobe. 🎂 = birthday present.</div>`;
+      } else if (cur === 'pattern') {
+        body.innerHTML = `<div class="axie-grid">${tile('🚫', { on: !pet.pattern, data: 'data-p=""' })}${Object.entries(PATTERNS).map(([id, pt]) => {
+          const have = owns('pat-' + id);
+          return tile(pt.icon, { on: pet.pattern === id, poor: !have && pet.coins < pt.price, data: `data-p="${id}"`, tag: have ? '' : `🪙${pt.price}` });
+        }).join('')}</div>`;
+      } else if (cur === 'colour') {
+        body.innerHTML = `<div class="axie-grid">${COLOURS.map(c => {
+          const have = pet.colours.includes(c.id);
+          return tile(`<div class="axie-swatch" style="width:40px;height:40px;margin:0 0 14px;background:radial-gradient(circle at 35% 30%, #fff, ${c.body} 45%, ${c.gill})"></div>`,
+            { on: pet.colour === c.id, poor: !have && pet.coins < COLOUR_PRICE, data: `data-c="${c.id}"`, tag: have ? c.name : `🪙${COLOUR_PRICE}` });
+        }).join('')}</div>`;
+      } else {
+        const desc = o => {
+          if (!o) return '<span class="ui-sub">Empty</span>';
+          const col = COLOURS.find(c => c.id === o.colour);
+          const icons = Object.values(o.wear || {}).filter(id => ITEMS[id]).map(id => ITEMS[id].icon);
+          if (o.pattern && PATTERNS[o.pattern]) icons.push(PATTERNS[o.pattern].icon);
+          return `${col ? `<span class="axie-swatch" style="display:inline-block;width:22px;height:22px;border-width:2px;vertical-align:middle;background:${col.body}"></span> ` : ''}${icons.join(' ')}`;
+        };
+        body.innerHTML = Array.from({ length: OUTFIT_SLOTS }, (_, i) => `
+          <div class="axie-outfit" style="margin-bottom:8px">
+            <b>${i + 1}</b><div class="look">${desc(pet.outfits[i])}</div>
+            <button class="ui-btn small" data-save="${i}">💾 Save</button>
+            <button class="ui-btn small primary" data-wear="${i}" ${pet.outfits[i] ? '' : 'disabled'}>👕 Wear</button>
+          </div>`).join('') + `<div class="ui-sub">💾 saves what it's wearing now. 👕 puts it back on.</div>`;
+      }
+    }
+
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b || b.hasAttribute('data-close')) return;
+      if (b.dataset.tab) { sfx.click(); cur = b.dataset.tab; render(); return; }
+      if (b.dataset.offSlot) {
+        sfx.click();
+        if (b.dataset.offSlot === 'pattern') pet.pattern = null; else delete pet.wear[b.dataset.offSlot];
+        changed(); return;
+      }
+      if (b.hasAttribute('data-off')) { sfx.click(); pet.wear = {}; pet.pattern = null; changed(); return; }
+      if (b.dataset.w) {
+        const id = b.dataset.w, slot = ITEMS[id].slot;
+        if (!owns(id)) {
+          const price = WARDROBE[id];
+          if (price == null) { sfx.no(); shake(b); hint('🎂 Comes on a birthday!', 2); return; }
+          if (!pay(price, b)) return;
+          pet.owned.push(id);
+          sound.win();
+        }
+        if (pet.wear[slot] === id) { delete pet.wear[slot]; sfx.click(); } else { pet.wear[slot] = id; happy(); }
+        changed(); return;
+      }
+      if (b.dataset.p !== undefined) {
+        const id = b.dataset.p;
+        if (id && !owns('pat-' + id)) { if (!pay(PATTERNS[id].price, b)) return; pet.owned.push('pat-' + id); sound.win(); }
+        pet.pattern = id && pet.pattern !== id ? id : null;
+        if (pet.pattern) happy(); else sfx.click();
+        changed(); return;
+      }
+      if (b.dataset.c) {
+        const id = b.dataset.c;
+        if (!pet.colours.includes(id)) { if (!pay(COLOUR_PRICE, b)) return; pet.colours.push(id); sound.win(); }
+        pet.colour = id; happy();
+        changed(); return;
+      }
+      if (b.dataset.save !== undefined) {
+        pet.outfits[+b.dataset.save] = { wear: { ...pet.wear }, pattern: pet.pattern, colour: pet.colour };
+        sfx.coin(); changed(); return;
+      }
+      if (b.dataset.wear !== undefined) {
+        const o = pet.outfits[+b.dataset.wear];
+        if (!o) return;
+        pet.wear = Object.fromEntries(Object.entries(o.wear || {}).filter(([, id]) => owns(id)));
+        pet.pattern = o.pattern && owns('pat-' + o.pattern) ? o.pattern : null;
+        if (pet.colours.includes(o.colour)) pet.colour = o.colour;
+        happy(); changed();
+      }
+    });
+
+    // Live preview: the axolotl swimming in a little window
+    let last = performance.now(), pt = 0;
+    const loop = now => {
+      if (!cv.isConnected) { refreshHud(); return; }
+      const dt = Math.min(0.05, (now - last) / 1000); last = now; pt += dt;
+      giggle = Math.max(0, giggle - dt);
+      const dpr = window.devicePixelRatio || 1;
+      const w = cv.clientWidth, h = cv.clientHeight;
+      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+      const c = cv.getContext('2d');
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#9be8ef'); g.addColorStop(1, '#2a8fb8');
+      c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#e8c58f'; c.fillRect(0, h - 20, w, 20);
+      for (let i = 0; i < 6; i++) drawBubble(c, (i * 73 + pt * 10) % w, h - ((pt * 30 + i * 40) % h), 3 + (i % 3) * 2, 0.6);
+      const s = Math.min(h / 200, w / 330);
+      drawAxolotl(c, w * 0.58, h * 0.6 + Math.sin(pt * 1.6) * 4, s, {
+        col: colOf(), dir: 1, t: pt, swim: 0.2, face: giggle > 0 ? 'giggle' : 'joy', blink: (pt % 4) < 0.15,
+        wear: pet.wear, pattern: pet.pattern, sick: false,
+      });
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    render();
   }
 
   // ---------- Photos ----------
@@ -1026,15 +1193,6 @@ export function mount(stage, info) {
     return 'ok';
   }
 
-  function wearIcons() {
-    const w = pet.wear;
-    return {
-      hat: w.hat ? ITEMS[w.hat].icon : null, partyHat: w.hat === 'party',
-      face: w.face ? ITEMS[w.face].icon : null,
-      neck: w.neck || null, neckBow: w.neck === 'tie',
-    };
-  }
-
   function draw() {
     layout();
     ctx.clearRect(0, 0, W, H);
@@ -1085,7 +1243,7 @@ export function mount(stage, info) {
       const w = m.pet.wear;
       drawAxolotl(ctx, m.x, m.y, m.s, {
         col, dir: m.dir, t: t + m.ph, swim: m.swim, face: m.face, blink: false, sick: m.face === 'sick',
-        wear: { hat: w.hat ? ITEMS[w.hat].icon : null, partyHat: w.hat === 'party', face: w.face ? ITEMS[w.face].icon : null, neck: w.neck || null, neckBow: w.neck === 'tie' },
+        wear: w, pattern: m.pet.pattern,
       });
       const label = `${m.who === m.pet.name ? '' : m.who + "'s "}${m.pet.name}`;
       ctx.save();
@@ -1109,7 +1267,7 @@ export function mount(stage, info) {
     ctx.rotate(pet.asleep ? 0 : tilt);
     drawAxolotl(ctx, 0, 0, S, {
       col: colOf(), dir, t, swim, face: faceNow(), blink: ax.blink > 0,
-      wear: wearIcons(), sick: pet.sick,
+      wear: pet.wear, pattern: pet.pattern, sick: pet.sick,
     });
     ctx.restore();
 
@@ -1172,7 +1330,7 @@ export function mount(stage, info) {
   }
 
   // ---------- Playdate ----------
-  const petInfo = () => ({ name: pet.name, colour: pet.colour, age: pet.age, wear: { ...pet.wear } });
+  const petInfo = () => ({ name: pet.name, colour: pet.colour, age: pet.age, wear: { ...pet.wear }, pattern: pet.pattern || null });
   function syncMates() {
     if (!pd) return;
     const list = pd.mates();

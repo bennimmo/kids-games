@@ -8,7 +8,7 @@
 import { createRoom, joinRoom } from '../../js/engine/net.js';
 import { playerInfo, playTogether, joined, leftRoom } from '../../js/engine/together.js';
 import { cleanName, cleanFace } from '../../js/engine/profile.js';
-import { COLOURS, FOODS, ITEMS } from './items.js';
+import { COLOURS, FOODS, ITEMS, PATTERNS } from './items.js';
 
 export const GAME_ID = 'axie';
 const SEND_EVERY = 140; // ms
@@ -23,7 +23,7 @@ function cleanPet(raw) {
   const p = raw && typeof raw === 'object' ? raw : {};
   const wear = {};
   const w = p.wear && typeof p.wear === 'object' ? p.wear : {};
-  for (const slot of ['hat', 'face', 'neck']) {
+  for (const slot of ['hat', 'face', 'neck', 'back']) {
     const id = w[slot];
     if (typeof id === 'string' && ITEMS[id] && ITEMS[id].kind === 'wear' && ITEMS[id].slot === slot) wear[slot] = id;
   }
@@ -32,6 +32,7 @@ function cleanPet(raw) {
     colour: COLOURS.some(c => c.id === p.colour) ? p.colour : 'pink',
     age: Math.round(num(p.age, 0, 99, 0)),
     wear,
+    pattern: typeof p.pattern === 'string' && PATTERNS[p.pattern] ? p.pattern : null,
   };
 }
 

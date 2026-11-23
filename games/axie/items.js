@@ -50,13 +50,24 @@ export const ITEMS = {
   tophat: { icon: '🎩', kind: 'wear', slot: 'hat' },
   crown: { icon: '👑', kind: 'wear', slot: 'hat' },
   cap: { icon: '🧢', kind: 'wear', slot: 'hat' },
-  party: { icon: '🥳', kind: 'wear', slot: 'hat', partyHat: true },
+  party: { icon: '🥳', kind: 'wear', slot: 'hat', drawn: 'party' },
+  sunhat: { icon: '👒', kind: 'wear', slot: 'hat' },
+  grad: { icon: '🎓', kind: 'wear', slot: 'hat' },
+  berry: { icon: '🍓', kind: 'wear', slot: 'hat' },
   bow: { icon: '🎀', kind: 'wear', slot: 'hat' },
   flower: { icon: '🌸', kind: 'wear', slot: 'hat' },
   shades: { icon: '🕶️', kind: 'wear', slot: 'face' },
   glasses: { icon: '👓', kind: 'wear', slot: 'face' },
-  scarf: { icon: '🧣', kind: 'wear', slot: 'neck' },
-  tie: { icon: '👔', kind: 'wear', slot: 'neck', bowtie: true },
+  heartspecs: { icon: '💗', kind: 'wear', slot: 'face', drawn: 'hearts' },
+  starspecs: { icon: '⭐', kind: 'wear', slot: 'face', drawn: 'stars' },
+  scarf: { icon: '🧣', kind: 'wear', slot: 'neck', drawn: 'scarf' },
+  tie: { icon: '🎀', kind: 'wear', slot: 'neck', drawn: 'bowtie' },
+  necklace: { icon: '📿', kind: 'wear', slot: 'neck', drawn: 'pearls' },
+  medal: { icon: '🏅', kind: 'wear', slot: 'neck', drawn: 'medal' },
+  cape: { icon: '🦸', kind: 'wear', slot: 'back', drawn: 'cape' },
+  wings: { icon: '🧚', kind: 'wear', slot: 'back', drawn: 'wings' },
+  backpack: { icon: '🎒', kind: 'wear', slot: 'back', drawn: 'backpack' },
+  balloonb: { icon: '🎈', kind: 'wear', slot: 'back', drawn: 'balloon' },
 };
 
 // One present per birthday, in this order. After the list: a bag of coins.
@@ -68,11 +79,6 @@ export const SHOP = [
   { id: 'rock', price: 10 },
   { id: 'coral', price: 15 },
   { id: 'mushroom', price: 15 },
-  { id: 'flower', price: 15 },
-  { id: 'cap', price: 20 },
-  { id: 'glasses', price: 20 },
-  { id: 'scarf', price: 25 },
-  { id: 'tie', price: 25 },
   { id: 'bubbler', price: 30 },
   { id: 'snail', price: 35 },
   { id: 'crab', price: 40 },
@@ -87,3 +93,38 @@ export function stageOf(age) {
   if (age < 9) return { name: 'Big kid', icon: '🧑', scale: 0.95 };
   return { name: 'Grown-up', icon: '⭐', scale: 1.05 };
 }
+
+// ---------- Wardrobe ----------
+// Tabs in the wardrobe.
+export const SLOTS = [
+  { id: 'hat', icon: '🎩', name: 'Hats' },
+  { id: 'face', icon: '👓', name: 'Glasses' },
+  { id: 'neck', icon: '🧣', name: 'Neck' },
+  { id: 'back', icon: '🎒', name: 'Back' },
+  { id: 'pattern', icon: '✨', name: 'Patterns' },
+  { id: 'colour', icon: '🎨', name: 'Colour' },
+  { id: 'outfits', icon: '⭐', name: 'Outfits' },
+];
+
+// Clothes and their prices. null = birthday present only 🎂.
+export const WARDROBE = {
+  tophat: null, crown: null, party: null, bow: null, shades: null,
+  cap: 20, flower: 15, sunhat: 20, grad: 25, berry: 15,
+  glasses: 20, heartspecs: 25, starspecs: 25,
+  scarf: 25, tie: 20, necklace: 30, medal: 30,
+  backpack: 30, balloonb: 20, cape: 35, wings: 45,
+};
+
+// Patterns painted on the body. Owned as 'pat-<id>'.
+export const PATTERNS = {
+  spots: { icon: '🔵', price: 20 },
+  stripes: { icon: '🦓', price: 20 },
+  hearts: { icon: '💕', price: 25 },
+  stars: { icon: '🌟', price: 25 },
+  sparkle: { icon: '✨', price: 35 },
+  rainbow: { icon: '🌈', price: 40 },
+};
+
+// Changing colour: each new colour costs this (owned colours are free to swap).
+export const COLOUR_PRICE = 30;
+export const OUTFIT_SLOTS = 3;

@@ -25,6 +25,7 @@ export function newPet({ name, colour, level }) {
     grow: 0, age: 0, gifts: [],   // gifts = birthdays not opened yet
     coins: 5, owned: [], placed: {}, wear: {},
     photos: [], hatched: false,
+    pattern: null, colours: [colour], outfits: [],
     pooAway: 0,
   };
 }
@@ -33,6 +34,11 @@ export function loadPet() {
   try {
     const p = JSON.parse(localStorage.getItem(KEY) || 'null');
     if (!p || p.v !== VERSION || !LEVELS[p.level]) return null;
+    // added later: fill in for older saves
+    p.wear = p.wear || {};
+    p.colours = Array.isArray(p.colours) ? p.colours : [p.colour];
+    p.outfits = Array.isArray(p.outfits) ? p.outfits : [];
+    if (p.pattern === undefined) p.pattern = null;
     return p;
   } catch (e) { return null; }
 }

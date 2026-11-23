@@ -1,6 +1,8 @@
 // Axie Pals – drawing: the tank, the axolotl, the egg, poo and things.
 // Everything is drawn on one 2D canvas. Sizes are in CSS pixels.
 
+import { ITEMS } from './items.js';
+
 const TAU = Math.PI * 2;
 
 // Little seeded random so pebbles and weeds stay in the same place every frame.
@@ -350,6 +352,11 @@ export function drawAxolotl(ctx, x, y, s, a) {
     return g;
   };
   ctx.lineJoin = 'round';
+  const W = a.wear || {};
+  const back = W.back && ITEMS[W.back] ? ITEMS[W.back].drawn : null;
+  if (back === 'balloon') drawBalloonBack(ctx, t);
+  if (back === 'cape') drawCape(ctx, t, a.swim);
+  if (back === 'wings') drawWings(ctx, t, false);
 
   // Tail: a long see-through fin with a fleshy middle
   const tailY = k => Math.sin(t * (4 + a.swim * 6) - k * 2.5) * (4 + a.swim * 8) * k;
@@ -436,6 +443,8 @@ export function drawAxolotl(ctx, x, y, s, a) {
     ctx.beginPath(); ctx.arc(sx, sy, col.spots ? 2 + w * 3 : 0.8 + w * 1.2, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  if (back === 'backpack') unflipEmoji(ctx, a.dir, '🎒', -26, -20, 38);
+  if (back === 'wings') drawWings(ctx, t, true);
   leg(-38, 16, 2.5, false); leg(16, 18, 1.6, false);
 
   // Gills: 3 feathery branches each side of the head
@@ -498,27 +507,177 @@ export function drawAxolotl(ctx, x, y, s, a) {
     ctx.beginPath(); ctx.ellipse(cx, 9, 10, 7, 0, 0, TAU); ctx.fill();
   }
 
+  if (a.pattern) drawPattern(ctx, a.pattern, col, t);
   drawFace(ctx, a);
 
   // Clothes
-  const w = a.wear || {};
-  if (w.neck) {
-    if (w.neckBow) drawEmoji(ctx, '🎀', 30, 30, 30);
-    else {
-      ctx.save();
-      ctx.fillStyle = '#e53935';
-      ctx.beginPath(); ctx.ellipse(28, 27, 36, 8, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = '#ffeb3b';
-      for (let i = -2; i <= 2; i++) ctx.fillRect(22 + i * 13, 21, 5, 12);
-      ctx.fillStyle = '#e53935';
-      ctx.beginPath(); ctx.moveTo(4, 26); ctx.lineTo(-6, 52); ctx.lineTo(8, 50); ctx.lineTo(14, 28); ctx.fill();
-      ctx.restore();
-    }
+  const neck = W.neck && ITEMS[W.neck];
+  if (neck) {
+    if (neck.drawn === 'scarf') drawScarf(ctx);
+    else if (neck.drawn === 'bowtie') drawBowtie(ctx);
+    else if (neck.drawn === 'pearls') drawPearls(ctx);
+    else if (neck.drawn === 'medal') { drawRibbon(ctx); unflipEmoji(ctx, dir, '🏅', 30, 38, 26); }
   }
-  if (w.face) unflipEmoji(ctx, dir, w.face, 30, -12, 58);
-  if (w.hat) {
-    if (w.partyHat) drawPartyHat(ctx, 30, -36);
-    else unflipEmoji(ctx, dir, w.hat, 30, -48, 46);
+  const face = W.face && ITEMS[W.face];
+  if (face) {
+    if (face.drawn === 'hearts') drawSpecs(ctx, 'heart');
+    else if (face.drawn === 'stars') drawSpecs(ctx, 'star');
+    else unflipEmoji(ctx, dir, face.icon, 30, -12, 58);
+  }
+  const hat = W.hat && ITEMS[W.hat];
+  if (hat) {
+    if (hat.drawn === 'party') drawPartyHat(ctx, 30, -36);
+    else unflipEmoji(ctx, dir, hat.icon, 30, -48, 46);
+  }
+  ctx.restore();
+}
+
+// ---------- Clothes (drawn in the axolotl's own coordinates, facing right) ----------
+function drawScarf(ctx) {
+  ctx.save();
+  ctx.fillStyle = '#e53935';
+  ctx.beginPath(); ctx.ellipse(28, 27, 36, 8, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#ffeb3b';
+  for (let i = -2; i <= 2; i++) ctx.fillRect(22 + i * 13, 21, 5, 12);
+  ctx.fillStyle = '#e53935';
+  ctx.beginPath(); ctx.moveTo(4, 26); ctx.lineTo(-6, 52); ctx.lineTo(8, 50); ctx.lineTo(14, 28); ctx.fill();
+  ctx.restore();
+}
+function drawBowtie(ctx) {
+  ctx.save();
+  ctx.translate(30, 29);
+  ctx.fillStyle = '#7c4dff'; ctx.strokeStyle = '#4a2ab0'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-16, -9); ctx.lineTo(-16, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(16, -9); ctx.lineTo(16, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#b39dff';
+  ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+function drawPearls(ctx) {
+  ctx.save();
+  for (let i = 0; i <= 10; i++) {
+    const k = i / 10, x = 4 + k * 52, y = 22 + Math.sin(k * Math.PI) * 9;
+    const g = ctx.createRadialGradient(x - 1.5, y - 1.5, 0, x, y, 4);
+    g.addColorStop(0, '#fff'); g.addColorStop(1, '#d9cfe8');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 3.6, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawRibbon(ctx) {
+  ctx.save();
+  ctx.fillStyle = '#1e88e5';
+  ctx.beginPath(); ctx.moveTo(14, 20); ctx.lineTo(22, 20); ctx.lineTo(32, 34); ctx.lineTo(26, 36); ctx.fill();
+  ctx.fillStyle = '#e53935';
+  ctx.beginPath(); ctx.moveTo(46, 20); ctx.lineTo(38, 20); ctx.lineTo(28, 34); ctx.lineTo(34, 36); ctx.fill();
+  ctx.restore();
+}
+function heartPath(ctx, x, y, r) {
+  ctx.moveTo(x, y + r * 0.9);
+  ctx.bezierCurveTo(x - r * 1.5, y - r * 0.1, x - r * 0.8, y - r * 1.3, x, y - r * 0.45);
+  ctx.bezierCurveTo(x + r * 0.8, y - r * 1.3, x + r * 1.5, y - r * 0.1, x, y + r * 0.9);
+}
+function starPath(ctx, x, y, r) {
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r;
+    i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+function drawSpecs(ctx, kind) {
+  ctx.save();
+  const col = kind === 'heart' ? '#ff4081' : '#ffc107';
+  ctx.fillStyle = kind === 'heart' ? 'rgba(255,128,171,.55)' : 'rgba(255,224,130,.55)';
+  ctx.strokeStyle = col; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
+  for (const x of [14, 46]) {
+    ctx.beginPath();
+    kind === 'heart' ? heartPath(ctx, x, -10, 11) : starPath(ctx, x, -10, 13);
+    ctx.fill(); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.moveTo(23, -12); ctx.quadraticCurveTo(30, -16, 37, -12); ctx.stroke();
+  ctx.restore();
+}
+function drawCape(ctx, t, swim) {
+  ctx.save();
+  const w = Math.sin(t * 5) * (4 + swim * 6);
+  const g = ctx.createLinearGradient(0, -20, -90, 20);
+  g.addColorStop(0, '#e53935'); g.addColorStop(1, '#b71c1c');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(14, -22);
+  ctx.quadraticCurveTo(-30, -40 + w, -92, -14 + w * 1.5);
+  ctx.lineTo(-84, 8 + w);
+  ctx.quadraticCurveTo(-40, -2, 10, -6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd54f';
+  ctx.beginPath(); ctx.arc(12, -14, 5, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+function drawWings(ctx, t, front) {
+  ctx.save();
+  const flap = Math.sin(t * 9) * 0.25;
+  ctx.translate(-22, -20);
+  ctx.globalAlpha = front ? 0.55 : 0.4;
+  for (const [ang, len] of front ? [[-1.9, 40], [-2.6, 30]] : [[-1.6, 36], [-2.3, 26]]) {
+    ctx.save();
+    ctx.rotate(ang + flap);
+    const g = ctx.createLinearGradient(0, 0, len, 0);
+    g.addColorStop(0, '#e1f5fe'); g.addColorStop(1, '#f8bbd0');
+    ctx.fillStyle = g; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(len / 2, 0, len / 2, len / 4, 0, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawBalloonBack(ctx, t) {
+  ctx.save();
+  const sx = Math.sin(t * 1.5) * 6;
+  ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-26, -18); ctx.quadraticCurveTo(-34 + sx, -60, -40 + sx, -96); ctx.stroke();
+  const g = ctx.createRadialGradient(-46 + sx, -126, 2, -40 + sx, -118, 24);
+  g.addColorStop(0, '#ff8a80'); g.addColorStop(1, '#e53935');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(-40 + sx, -118, 18, 22, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-43 + sx, -95); ctx.lineTo(-37 + sx, -95); ctx.lineTo(-40 + sx, -99); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.6)';
+  ctx.beginPath(); ctx.ellipse(-46 + sx, -126, 4, 7, 0.4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// Patterns on the body and head (clipped to them).
+const PAT_R = (() => { const r = rng(77); return Array.from({ length: 22 }, () => [r(), r(), r()]); })();
+function drawPattern(ctx, id, col, t) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(-18, 2, 52, 23, 0, 0, TAU);
+  ctx.ellipse(30, -3, 46, 33, 0, 0, TAU);
+  ctx.clip();
+  const pts = PAT_R.map(([u, v, w]) => [-68 + u * 140, -34 + v * 58, w]);
+  if (id === 'spots') {
+    ctx.fillStyle = mix(col.gill, col.dark, 0.3); ctx.globalAlpha = 0.45;
+    for (const [x, y, w] of pts) { if (x > 2 && x < 60 && y > -22 && y < 16) continue; ctx.beginPath(); ctx.arc(x, y, 3 + w * 4, 0, TAU); ctx.fill(); }
+  } else if (id === 'stripes') {
+    ctx.strokeStyle = mix(col.gill, col.dark, 0.2); ctx.globalAlpha = 0.4; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    for (let x = -66; x < 0; x += 14) { ctx.beginPath(); ctx.moveTo(x, -26); ctx.quadraticCurveTo(x - 6, 2, x, 26); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(14, -34); ctx.quadraticCurveTo(30, -38, 46, -34); ctx.stroke();
+  } else if (id === 'hearts' || id === 'stars') {
+    ctx.fillStyle = id === 'hearts' ? '#ff4f86' : '#ffc107'; ctx.globalAlpha = 0.6;
+    for (const [x, y, w] of pts) {
+      if (x > 2 && x < 60 && y > -22 && y < 16) continue;
+      ctx.beginPath(); id === 'hearts' ? heartPath(ctx, x, y, 3 + w * 2.5) : starPath(ctx, x, y, 3.5 + w * 3); ctx.fill();
+    }
+  } else if (id === 'sparkle') {
+    ctx.fillStyle = '#fff';
+    pts.forEach(([x, y, w], i) => {
+      ctx.globalAlpha = Math.max(0, Math.sin(t * 3 + i * 1.7)) * 0.9;
+      ctx.beginPath(); starPath(ctx, x, y, 2.5 + w * 3); ctx.fill();
+    });
+  } else if (id === 'rainbow') {
+    const g = ctx.createLinearGradient(-70, 0, 76, 0);
+    ['#ff5252', '#ffab40', '#ffee58', '#69f0ae', '#40c4ff', '#b388ff'].forEach((c, i) => g.addColorStop(i / 5, c));
+    ctx.fillStyle = g; ctx.globalAlpha = 0.38;
+    ctx.fillRect(-72, -40, 150, 70);
   }
   ctx.restore();
 }
