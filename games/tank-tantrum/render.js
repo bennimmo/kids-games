@@ -249,6 +249,17 @@ export function createRenderer() {
         }
       }
     }
+    // shots above the top of the screen: an arrow so you know where they are
+    for (const p of w.projectiles) {
+      if (sy(p.y) > 10) continue;
+      const x = Math.min(vw - 30, Math.max(30, sx(p.x)));
+      ctx.fillStyle = 'rgba(0,0,0,.45)';
+      ctx.beginPath(); ctx.arc(x, 92, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.moveTo(x, 64); ctx.lineTo(x - 9, 74); ctx.lineTo(x + 9, 74); ctx.fill();
+      ctx.font = emojiFont(20); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(WEAPON[p.kind] ? WEAPON[p.kind].icon : '💣', x, 93);
+    }
     for (const b of w.boots) {
       ctx.font = emojiFont(90 * z); ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
       ctx.fillText('🥾', sx(b.x), sy(b.y) + 6 * z);

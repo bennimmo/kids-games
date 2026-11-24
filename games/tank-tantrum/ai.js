@@ -1,7 +1,7 @@
 // Computer tanks. Tries lots of shots in its head and picks the closest,
 // then wobbles it a bit (a lot on easy). Runs on one device; the shot it
 // picks is sent like anyone else's, so trig is fine in here.
-import { WATER_Y, DT, MAX_SPEED } from './sim.js';
+import { WATER_Y, DT } from './sim.js';
 
 const FUN = ['chicken', 'cupcake', 'sock', 'mole', 'boot', 'firework', 'cloud', 'shrink', 'whoopee', 'magnet'];
 
@@ -47,7 +47,7 @@ export function planShot(world, level) {
   for (let deg = 10; deg <= 85; deg += 3) {
     const a = deg * Math.PI / 180;
     for (let p = 0.25; p <= 1.001; p += 0.04) {
-      const vx = Math.cos(a) * dir * p * MAX_SPEED, vy = -Math.sin(a) * p * MAX_SPEED;
+      const vx = Math.cos(a) * dir * p * world.vmax, vy = -Math.sin(a) * p * world.vmax;
       const hit = landing(world, sx + Math.cos(a) * dir * 30, sy - Math.sin(a) * 30, vx, vy, grav, me.i);
       let score = Math.hypot(hit.x - target.x, hit.y - target.y);
       if (hit.tank === target) score -= 30;
@@ -60,5 +60,5 @@ export function planShot(world, level) {
   const a = best.a + (Math.random() - 0.5) * 2 * wob.a;
   const p = Math.min(1, Math.max(0.15, best.p * (1 + (Math.random() - 0.5) * 2 * wob.p)));
   const r = n => Math.round(n * 100) / 100;
-  return { x: me.x, y: me.y, f: dir, w, vx: r(Math.cos(a) * dir * p * MAX_SPEED), vy: r(-Math.sin(a) * p * MAX_SPEED), picked: [] };
+  return { x: me.x, y: me.y, f: dir, w, vx: r(Math.cos(a) * dir * p * world.vmax), vy: r(-Math.sin(a) * p * world.vmax), picked: [] };
 }

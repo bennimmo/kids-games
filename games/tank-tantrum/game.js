@@ -8,7 +8,7 @@ import { startLoop } from '../../js/engine/loop.js';
 import { sound } from '../../js/engine/sound.js';
 import { icon } from '../../js/engine/icons.js';
 import { togetherButton, playTogether, takeJoinCode, joined as joinedRoom, leftRoom, people, lobbyHTML, waitHTML, readyButton, allReady, notReady, startLabel } from '../../js/engine/together.js';
-import { World, W, H, DT, MAX_SPEED, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
+import { World, W, H, DT, MAX_FUEL, MAPS, WATER_Y } from './sim.js';
 import { WEAPONS, WEAPON } from './weapons.js';
 import { planShot } from './ai.js';
 import { createRenderer, tankIcon, randomLook, sanitizeLook, TANK_COLORS, HATS, FLAGS } from './render.js';
@@ -203,7 +203,7 @@ export function mount(stage) {
     if (!WEAPON[wid].noAim && p < 0.08) return;
     fire({
       x: r2(t.x), y: r2(t.y), f: t.face, w: wid,
-      vx: aim ? r2(aim.dx * p * MAX_SPEED) : 0, vy: aim ? r2(aim.dy * p * MAX_SPEED) : 0,
+      vx: aim ? r2(aim.dx * p * w.vmax) : 0, vy: aim ? r2(aim.dy * p * w.vmax) : 0,
       picked: match.picked.slice(),
     });
   }
@@ -298,7 +298,7 @@ export function mount(stage) {
       if (match.plan) {
         const p = match.plan, sp = Math.hypot(p.vx, p.vy) || 1;
         const k = Math.min(1, 1 - (match.planAt - time) / 0.9);
-        if (!p.skip && !WEAPON[p.w].noAim) aim = { dx: p.vx / sp, dy: p.vy / sp, power: (sp / MAX_SPEED) * k };
+        if (!p.skip && !WEAPON[p.w].noAim) aim = { dx: p.vx / sp, dy: p.vy / sp, power: (sp / w.vmax) * k };
         if (time >= match.planAt) fire(p);
       }
     } else { // remote
@@ -393,8 +393,18 @@ export function mount(stage) {
   function camTarget() {
     const w = replay ? replay.world : match.world;
     if (overview && !replay && w.phase !== 'over') {
-      const z = fitZoom();   // whole map, with the sea line just above the buttons
-      return { x: mapW() / 2, y: WATER_Y + 30 - (view.height / 2 - 110) / z, z };
+      let z = fitZoom();   // whole map, with the sea line just above the buttons
+      let y = WATER_Y + 30 - (view.height / 2 - 110) / z;
+      // a shot flying up high: zoom out to keep it in view (bottom of the view stays put)
+      let high = Infinity;
+      for (const p of w.projectiles) high = Math.min(high, p.y);
+      for (const b of w.boots) high = Math.min(high, b.y - 90);
+      const bottom = y + view.height / 2 / z, top = y - view.height / 2 / z;
+      if (high - 160 < top) {
+        z = Math.max(fitZoom() * 0.4, view.height / (bottom - (high - 160)));
+        y = bottom - view.height / 2 / z;
+      }
+      return { x: mapW() / 2, y, z };
     }
     const z = baseZoom() * userZoom;
     if (w.projectiles.length) {
@@ -413,7 +423,7 @@ export function mount(stage) {
     const pad = overview ? 0 : 320;   // a bit of sea past each end, so edge tanks can be in the middle
     const MW = mapW();
     cam.x = MW + pad * 2 < hw * 2 ? MW / 2 : Math.min(MW + pad - hw, Math.max(hw - pad, cam.x));
-    const top = -500 + hh, bottom = H + (overview ? 400 : 200) - hh;
+    const top = (overview ? -4000 : -500) + hh, bottom = H + (overview ? 400 : 200) - hh;
     cam.y = bottom < top ? (top + bottom) / 2 : Math.min(bottom, Math.max(top, cam.y));
   }
   function updateCamera(dt) {
