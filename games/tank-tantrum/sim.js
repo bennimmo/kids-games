@@ -10,23 +10,20 @@ export const MAX_W = 4200;
 export const mapWidth = n => (n <= 3 ? 2000 : n === 4 ? 2600 : n === 5 ? 3000 : n === 6 ? 3400 : n === 7 ? 3800 : MAX_W);
 export const WATER_Y = 940;
 export const DT = 1 / 60;
-export const MAX_SPEED = 1300;   // the most any map allows (see shotSpeed)
-// Full-power speed: enough to reach a bit past the far side of the map, whatever the
-// gravity (so on the moon shots don't fly off into space, and big maps can be crossed).
-export const shotSpeed = (g, w) => Math.min(MAX_SPEED, Math.max(520, Math.sqrt(g * w * 1.15)));
+export const MAX_SPEED = 1100;   // full power, the same on every map (reaches across the biggest map)
 export const MAX_FUEL = 100;
 export const DRIVE_SPEED = 70;      // world units a second
 const FUEL_PER_UNIT = 0.4;          // 100 fuel = 250 units of driving
 const WIND_K = 7;
 const TANK_R = 18;
-const MID = 12;
-const MUZZLE_GRACE = 75;   // shots ignore the ground this close to the shooter  // tank middle is this far above its bottom
+const MID = 12;            // tank middle is this far above its bottom
+const MUZZLE_GRACE = 75;   // shots ignore the ground this close to the shooter
 
 export const MAPS = {
   grass: { name: 'Grass', icon: '🌳', g: 300 },
   snow: { name: 'Snow', icon: '❄️', g: 300 },
   candy: { name: 'Candy', icon: '🍭', g: 300 },
-  moon: { name: 'Moon', icon: '🌙', g: 130 },
+  moon: { name: 'Moon', icon: '🌙', g: 300 },   // same gravity everywhere, so shots feel the same
 };
 
 const CUPCAKE_V = [[-251, -67], [-184, -184], [-67, -251], [67, -251], [184, -184], [251, -67]];
@@ -45,7 +42,7 @@ export class World {
     this.map = MAPS[opts.map] ? opts.map : 'grass';
     this.windOn = !!opts.wind;   // off unless asked for
     this.g = MAPS[this.map].g;
-    this.vmax = shotSpeed(this.g, this.W);
+    this.vmax = MAX_SPEED;
     this.mask = new Uint8Array(this.cols * ROWS);
     this.projectiles = [];
     this.boots = [];
