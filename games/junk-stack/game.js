@@ -22,7 +22,7 @@ const STEP = 1 / 60;
 const SAVE_KEY = 'junk-stack:v2';
 const SEA = -2.2;          // sea level (platform top is y = 0)
 const BASE_CAM = -3.8;     // bottom of the view (world y)
-const PW = 5.6;            // rock platform width
+const PW = 4.4;            // rock platform width
 const ROT = Math.PI / 4;   // one turn of the rotate button
 const SLOTS = [-1.9, 0, 1.9]; // where junk sits on the boat
 const DECK = SEA + 0.35;   // boat deck height
@@ -53,6 +53,7 @@ export function mount(stage) {
   let held = null;           // { body, joint, slot, boatId, type, sc, r, pointerId, touch }
   let boat = null;           // { id, x, phase: 'in'|'docked'|'out', t, items: [{ type, sc } | null] }
   let boatN = 0;
+  let picks = 0;             // for the first-time hint
   let nextJunk = null;
   let rot = 0;               // turn for the next pick (steps of 45°)
   let acc = 0, time = 0;
@@ -425,50 +426,50 @@ export function mount(stage) {
   }
 
   // ---------- crane: pick up, move, turn, drop ----------
+  // Tap junk on the boat: the crane lifts it up above the tower and holds it there.
   function pick(slot, e) {
-    if (!canBuild() || held || !boat || boat.phase !== 'docked') return;
+    if (!canBuild() || !boat || boat.phase !== 'docked') return;
     const it = boat.items[slot];
     if (!it) return;
     e.preventDefault();
-    canvas.setPointerCapture?.(e.pointerId);
-    const p = pointerWorld(e);
+    if (held) { if (held.pointerId !== null) return; drop(true); } // swap: put the hanging one back
     const r = itemR(it.type, it.sc);
-    const top = towerTop();
-    const x = clampX(p.x, p.l, r);
-    const y = Math.max(top + r + 1, 1 + r);
+    const x = 0;
+    const y = Math.max(towerTop() + r + 1, 1 + r);
     const body = makeBody(world, it.type, x, y, rot * ROT, it.sc);
     body.setFixedRotation(true);
     const joint = world.createJoint(new planck.MouseJoint(
       { maxForce: 70 * body.getMass(), frequencyHz: 3.5, dampingRatio: 0.85 }, ground, body, Vec2(x, y)));
-    held = { body, joint, slot, boatId: boat.id, type: it.type, sc: it.sc, r, pointerId: e.pointerId, touch: e.pointerType === 'touch', spawnY: y, caught: false };
+    held = { body, joint, slot, boatId: boat.id, type: it.type, sc: it.sc, r, pointerId: null, target: { x, y }, grab: null };
     boat.items[slot] = null;
     sound.pop();
+    if (picks++ < 2) toast('Now drag it onto the tower! 👆');
+  }
+  // Then press anywhere and drag: the item moves with your finger. Let go to drop it.
+  function grab(e) {
+    e.preventDefault();
+    canvas.setPointerCapture?.(e.pointerId);
+    const p = pointerWorld(e);
+    held.pointerId = e.pointerId;
+    held.grab = { dx: held.target.x - p.x, dy: held.target.y - p.y };
   }
   function clampX(x, l, r) {
     const lim = Math.max(1, l.viewW / 2 - r * 0.6);
     return Math.max(-lim, Math.min(lim, x));
   }
-  const nearBoat = p => p.y < 0.4;  // finger down by the boat
 
   function onMove(e) {
-    if (!held || e.pointerId !== held.pointerId) return;
+    if (!held || held.pointerId === null || e.pointerId !== held.pointerId) return;
     const p = pointerWorld(e);
     const r = held.r;
-    const x = clampX(p.x, p.l, r);
-    let y = p.y + (held.touch ? r + 0.4 : 0); // keep it above your finger
-    // the item waits up on the crane until your finger reaches it, then follows your finger
-    if (!held.caught) {
-      if (y >= held.spawnY) held.caught = true;
-      else y = held.spawnY;
-    }
-    y = Math.max(0.3 + r * 0.5, Math.min(y, camY + p.l.viewH - r * 0.5));
+    const x = clampX(p.x + held.grab.dx, p.l, r);
+    const y = Math.max(0.3 + r * 0.5, Math.min(p.y + held.grab.dy, camY + p.l.viewH - r * 0.5));
+    held.target = { x, y };
     held.joint.setTarget(Vec2(x, y));
   }
   function onUp(e) {
-    if (!held || e.pointerId !== held.pointerId) return;
-    const p = pointerWorld(e);
-    const backOk = !held.caught && nearBoat(p) && boat && boat.id === held.boatId && boat.phase === 'docked' && !boat.items[held.slot];
-    drop(backOk);
+    if (!held || held.pointerId === null || e.pointerId !== held.pointerId) return;
+    drop(false);
   }
   // let go. back=true puts it back on the boat.
   function drop(back) {
@@ -501,9 +502,10 @@ export function mount(stage) {
 
   function onCanvasDown(e) {
     if (e.target !== canvas) return;
-    if (held) { if (e.pointerId !== held.pointerId) { e.preventDefault(); turn(1); } return; } // 2nd finger = turn
     const slot = slotAt(e);
-    if (slot >= 0) pick(slot, e);
+    if (held && held.pointerId !== null) { if (e.pointerId !== held.pointerId) { e.preventDefault(); turn(1); } return; } // 2nd finger = turn
+    if (slot >= 0) { pick(slot, e); return; }
+    if (held) grab(e);
   }
   function onWheel(e) {
     if (!held) return;

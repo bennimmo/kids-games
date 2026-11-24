@@ -272,7 +272,7 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
 - Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl, clothes), `art.js` (tank things), `minigames.js`, `playdate.js`, `game.js` (screens, input, UI).
 
 ## Junk Stack (`games/junk-stack/`)
-- A boat brings 3 bits of junk. Drag one up with the crane, drop it on the rock. Keep stacking.
+- A boat brings 3 bits of junk. Tap one: the crane lifts it above the tower. Then press anywhere and drag to move it; let go to drop. Keep stacking.
 - Anything in the sea = game over. Score = tallest height reached. Windier above 8 m.
 - Every item is a slightly different size; trickier shapes the more you stack (`junkSequence` in `items.js`).
 - Turn: ↻ button, second finger, mouse wheel or R.
