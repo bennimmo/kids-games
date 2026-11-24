@@ -10,7 +10,10 @@ export const MAX_W = 4200;
 export const mapWidth = n => (n <= 3 ? 2000 : n === 4 ? 2600 : n === 5 ? 3000 : n === 6 ? 3400 : n === 7 ? 3800 : MAX_W);
 export const WATER_Y = 940;
 export const DT = 1 / 60;
-export const MAX_SPEED = 800;
+export const MAX_SPEED = 1300;   // the most any map allows (see shotSpeed)
+// Full-power speed: enough to reach a bit past the far side of the map, whatever the
+// gravity (so on the moon shots don't fly off into space, and big maps can be crossed).
+export const shotSpeed = (g, w) => Math.min(MAX_SPEED, Math.max(520, Math.sqrt(g * w * 1.15)));
 export const MAX_FUEL = 100;
 export const DRIVE_SPEED = 70;      // world units a second
 const FUEL_PER_UNIT = 0.4;          // 100 fuel = 250 units of driving
@@ -42,6 +45,7 @@ export class World {
     this.map = MAPS[opts.map] ? opts.map : 'grass';
     this.windOn = !!opts.wind;   // off unless asked for
     this.g = MAPS[this.map].g;
+    this.vmax = shotSpeed(this.g, this.W);
     this.mask = new Uint8Array(this.cols * ROWS);
     this.projectiles = [];
     this.boots = [];
@@ -263,7 +267,7 @@ export class World {
     let vx = Number(shot.vx) || 0, vy = Number(shot.vy) || 0;
     let sp = len(vx, vy);
     if (sp < 1) { vx = t.face * 100; vy = -100; sp = len(vx, vy); }
-    if (sp > MAX_SPEED) { vx = vx / sp * MAX_SPEED; vy = vy / sp * MAX_SPEED; sp = MAX_SPEED; }
+    if (sp > this.vmax) { vx = vx / sp * this.vmax; vy = vy / sp * this.vmax; sp = this.vmax; }
     t.aimX = vx / sp; t.aimY = vy / sp;
     const k = t.shrink > 0 ? 0.5 : 1;
     const p = {
