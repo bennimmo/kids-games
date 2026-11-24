@@ -8,6 +8,14 @@ export const AGES = [
 // To add a game: make a folder in /games with a game.js, then add it here.
 export const GAMES = [
   {
+    id: 'junk-stack',
+    age: 'big',
+    name: 'Junk Stack',
+    icon: '🚩',
+    color: '#ffb300',
+    load: () => import('../games/junk-stack/game.js'),
+  },
+  {
     id: 'axie',
     age: 'big',
     name: 'Axie Pals',
