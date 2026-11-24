@@ -1,6 +1,6 @@
 # Kids Games 🎮
 
-Simple browser games for kids (aimed at ages 4–6).
+Simple browser games for kids (aimed at ages 4–12).
 
 ## Play
 Live at GitHub Pages: https://bennimmo.github.io/kids-games/
@@ -270,3 +270,11 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
 - Next: walks.
 - Art: the axolotl is drawn along a wavy spine (body + see-through fins bend as it swims). Main tank things, tank friends, food and the ball are hand-drawn in `art.js` (100×100 box, floor at y=50); anything without a drawing falls back to its emoji.
 - Files: `items.js` (data), `pet.js` (state + time, no drawing), `draw.js` (tank, axolotl, clothes), `art.js` (tank things), `minigames.js`, `playdate.js`, `game.js` (screens, input, UI).
+
+## Junk Stack (`games/junk-stack/`)
+- A boat brings 3 bits of junk. Drag one up with the crane, drop it on the rock. Keep stacking.
+- Anything in the sea = game over. Score = tallest height reached. Windier above 8 m.
+- Every item is a slightly different size; trickier shapes the more you stack (`junkSequence` in `items.js`).
+- Turn: ↻ button, second finger, mouse wheel or R.
+- Race friends (`online.js`): same seed = same junk for all, 3 minutes, splash = out, tallest wins. Friends' towers show live down the left.
+- Needs `junk-stack` in the game list in `database.rules.json` (paste the rules into Firebase).

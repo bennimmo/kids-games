@@ -80,7 +80,7 @@
         }
       },
       "$game": {
-        ".validate": "$game.matches(/^(axie|sky-pilot|kits-karts|raffy-race|star-dash|tank-tantrum|paint|beautiful-bells|mountain-rush|choo-choo|balloon-pop|draw-a-road)$/)",
+        ".validate": "$game.matches(/^(axie|sky-pilot|kits-karts|raffy-race|star-dash|tank-tantrum|paint|beautiful-bells|mountain-rush|choo-choo|balloon-pop|draw-a-road|junk-stack)$/)",
         "pub": {
           "$area": {
             "$uid": {

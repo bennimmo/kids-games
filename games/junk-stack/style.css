@@ -83,3 +83,28 @@
   .js-item canvas, .js-flag canvas { width: 54px; height: 54px; }
   .js-tray { height: 84px; }
 }
+
+/* racing */
+.js-menu .tg-btn { margin: 4px auto 0; }
+.js-msg { margin: 6px 0 0; min-height: 1em; text-align: center; color: var(--ui-dim); font-weight: 700; }
+.js-time { min-width: 76px; justify-content: center; font-variant-numeric: tabular-nums; }
+.js-time.hurry { background: rgba(239,68,68,.85) !important; animation: js-pulse .5s ease-in-out infinite; }
+.js-rank { margin-left: auto; }
+.js-ranks { display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 4px 0 8px; }
+.js-rk {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px;
+  background: var(--ui-card); font-size: 18px; color: var(--ui-text);
+}
+.js-rk.me { background: rgba(255,179,0,.22); border: 1px solid rgba(255,179,0,.5); }
+.js-rk .pl { width: 28px; text-align: center; font-weight: 900; }
+.js-rk .fc { font-size: 24px; }
+.js-rk b { flex: 1; color: var(--ui-text); font-weight: 800; }
+.js-rk .hh { font-weight: 900; font-variant-numeric: tabular-nums; }
+
+/* endless mode */
+.js-hud .js-pause { margin-left: auto; }
+.js-rot { position: absolute; right: 14px; top: 46%; pointer-events: auto; width: 60px; height: 60px; }
+.js-best { margin: 0; text-align: center; font-size: 18px; color: var(--ui-text); }
+.js-best b { color: #facc15; font-weight: 900; }
+.js-menu .ui-panel > .ui-row { margin-top: 6px; }
+.js-rk .stt { font-size: 18px; }

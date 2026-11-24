@@ -187,7 +187,8 @@ for (const def of Object.values(ITEMS)) {
   def.r = r;
 }
 
-export function makeBody(world, type, x, y, angle = 0) {
+// sc = { x, y }: this item's size (1 = normal). Every item is a bit different.
+export function makeBody(world, type, x, y, angle = 0, sc = { x: 1, y: 1 }) {
   const def = ITEMS[type];
   const body = world.createBody({
     type: 'dynamic', position: Vec2(x, y), angle,
@@ -195,27 +196,18 @@ export function makeBody(world, type, x, y, angle = 0) {
   });
   const fd = { density: def.density ?? 1, friction: def.friction ?? 0.7, restitution: 0.02 };
   def.shapes.forEach(sh => {
-    if (sh.circle) body.createFixture(planck.Circle(sh.circle), fd);
-    if (sh.box) { const [hw, hh, cx = 0, cy = 0] = sh.box; body.createFixture(planck.Box(hw, hh, Vec2(cx, cy), 0), fd); }
-    if (sh.poly) body.createFixture(planck.Polygon(sh.poly.map(([px, py]) => Vec2(px, py))), fd);
+    if (sh.circle) body.createFixture(planck.Circle(sh.circle * sc.x), fd);
+    if (sh.box) { const [hw, hh, cx = 0, cy = 0] = sh.box; body.createFixture(planck.Box(hw * sc.x, hh * sc.y, Vec2(cx * sc.x, cy * sc.y), 0), fd); }
+    if (sh.poly) body.createFixture(planck.Polygon(sh.poly.map(([px, py]) => Vec2(px * sc.x, py * sc.y))), fd);
   });
   body.setUserData({ type });
   return body;
 }
 
-// Draw an item onto a little canvas (tray buttons).
-export function drawIcon(canvas, type, angle = 0) {
-  const dpr = window.devicePixelRatio || 1;
-  const size = canvas.clientWidth || 56;
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  const ctx = canvas.getContext('2d');
-  const def = ITEMS[type];
-  const k = (size * 0.44) / def.r;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.translate(size / 2, size / 2);
-  ctx.rotate(-angle);
-  ctx.scale(k, -k);
-  def.draw(ctx);
+// Draw an item (metres, y up) at its size.
+export function drawItem(ctx, type, sc) {
+  ctx.scale(sc.x, sc.y);
+  ITEMS[type].draw(ctx);
 }
 
 function mulberry32(a) {
@@ -227,25 +219,24 @@ function mulberry32(a) {
   };
 }
 
-export const STAGE_COUNT = 20;
+const EASY = ['crate', 'plank', 'barrel', 'fridge', 'bathtub', 'crate'];
+const MID = [...EASY, 'cheese', 'cone', 'sofa'];
+const HARD = [...MID, 'tyre', 'ball', 'cheese', 'cone', 'sofa'];
 
-// Each stage: what junk you get, how wide the rock is, how windy it is.
-// Same stage = same junk every time.
-export function stageInfo(n) {
-  const rnd = mulberry32(n * 9973 + 7);
-  const easy = ['crate', 'plank', 'barrel', 'fridge', 'bathtub', 'crate'];
-  const mid = [...easy, 'cheese', 'cone', 'sofa'];
-  const hard = [...mid, 'tyre', 'ball', 'cheese', 'cone', 'sofa'];
-  let items;
-  if (n === 1) items = ['crate', 'crate', 'plank', 'barrel', 'fridge'];
-  else {
-    const pool = n <= 3 ? easy : n <= 7 ? mid : hard;
-    const count = Math.min(4 + n, 14);
-    items = [];
-    for (let i = 0; i < count; i++) items.push(pool[Math.floor(rnd() * pool.length)]);
-  }
-  const platformW = Math.max(3.2, 7 - (n - 1) * 0.3);
-  const wind = n < 5 ? 0 : Math.min(2.4, (n - 4) * 0.3);
-  const flat = items.reduce((a, t) => a + Math.min(ITEMS[t].w, ITEMS[t].h), 0);
-  return { items, platformW, wind, star2: +(flat * 0.6).toFixed(1), star3: +(flat * 0.9).toFixed(1) };
+// Endless junk. Same seed = same junk, same sizes, same order (fair races).
+// Gets harder the more you stack: trickier shapes, and sizes vary more.
+export function junkSequence(seed) {
+  const rnd = mulberry32(seed);
+  let n = 0;
+  return () => {
+    const pool = n < 6 ? EASY : n < 14 ? MID : HARD;
+    const type = pool[Math.floor(rnd() * pool.length)];
+    const v = Math.min(0.35, 0.15 + n * 0.01);       // how much sizes vary
+    const k = 1 + (rnd() * 2 - 1) * v;               // overall size
+    const round = ITEMS[type].shapes.some(sh => sh.circle);
+    const sx = +(k * (round ? 1 : 1 + (rnd() * 2 - 1) * v * 0.6)).toFixed(2);
+    const sy = round ? sx : +(k * (1 + (rnd() * 2 - 1) * v * 0.6)).toFixed(2);
+    n++;
+    return { type, sc: { x: sx, y: sy } };
+  };
 }
