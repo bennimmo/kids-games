@@ -440,7 +440,7 @@ export function mount(stage) {
     body.setFixedRotation(true);
     const joint = world.createJoint(new planck.MouseJoint(
       { maxForce: 70 * body.getMass(), frequencyHz: 3.5, dampingRatio: 0.85 }, ground, body, Vec2(x, y)));
-    held = { body, joint, slot, boatId: boat.id, type: it.type, sc: it.sc, r, pointerId: e.pointerId, touch: e.pointerType === 'touch' };
+    held = { body, joint, slot, boatId: boat.id, type: it.type, sc: it.sc, r, pointerId: e.pointerId, touch: e.pointerType === 'touch', spawnY: y, caught: false };
     boat.items[slot] = null;
     sound.pop();
   }
@@ -456,15 +456,18 @@ export function mount(stage) {
     const r = held.r;
     const x = clampX(p.x, p.l, r);
     let y = p.y + (held.touch ? r + 0.4 : 0); // keep it above your finger
-    if (p.y > 0.5) held.up = true;    // lifted away from the boat
-    if (!held.up) y = Math.max(y, towerTop() + r + 0.8);
+    // the item waits up on the crane until your finger reaches it, then follows your finger
+    if (!held.caught) {
+      if (y >= held.spawnY) held.caught = true;
+      else y = held.spawnY;
+    }
     y = Math.max(0.3 + r * 0.5, Math.min(y, camY + p.l.viewH - r * 0.5));
     held.joint.setTarget(Vec2(x, y));
   }
   function onUp(e) {
     if (!held || e.pointerId !== held.pointerId) return;
     const p = pointerWorld(e);
-    const backOk = !held.up && nearBoat(p) && boat && boat.id === held.boatId && boat.phase === 'docked' && !boat.items[held.slot];
+    const backOk = !held.caught && nearBoat(p) && boat && boat.id === held.boatId && boat.phase === 'docked' && !boat.items[held.slot];
     drop(backOk);
   }
   // let go. back=true puts it back on the boat.
