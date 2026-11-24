@@ -91,6 +91,11 @@ Then open http://localhost:8000
 - Keys (always pilot style: ↑ = nose down, ↓ = nose up): W S / ↑ ↓ nose, A D / ← → roll, Q E rudder, R F / Shift Ctrl power, G wheels, V flaps ([ ]), Space brakes, C camera, X smoke, M map, Esc pause, Backspace restart. Gamepads work.
 - Touch: stick (left), power slider (right), ⚙️ 🪶 🛑 💨 buttons, 📱 tilt to fly (one tap on 👆).
 - 👫 Fly with friends (child safety: you only ever see saved friends, never strangers): friends who are flying show up in your sky (planes + name tags, no chat). Each device writes its plane to its own area (`games/sky-pilot/rooms/public_<uid>/live/<uid>_p0`) and only listens to its saved friends' areas (`kg-friends`); a plane shows only if both have saved each other. Time and weather come from the server clock. Tap the 👫 chip (or T) for the list of friends flying: tap one to jump in just behind them with the same speed and angles. Turn off in the menu.
+- 🎯 Missions (menu, 🎯 chip or pause): solo, or with friends in a "Play with friends" room (never strangers). The host picks; everyone gets a 3-2-1 countdown on the server clock.
+  - ⭕ Ring Race: a course of target rings past island places (made from a seed, same for everyone). Points for how close to the middle you fly (10 / 6 / 3 / 1); miss one and you just carry on.
+  - 🔥 Fire Fight (team): everyone flies the Splash water bomber (tank + doors + scoop probes). Skim the water to fill up, press 💧 / B over a fire; a blue ring shows where the water lands. The host counts every drop and puts fires out for all.
+  - 🛬 Landing Contest: three approaches (Sunny Bay, Desert Strip, Forest Farm). Score /100 each: soft 40, on the green box 30, in the middle 20, straight 10, bounce -10.
+  - Sync: room meta `mission = { id, n, seed, at, who, fires?, over? }`; each plane sends `ms = { n, sc, k, dn, t, h, dr }`. Best stars saved on the device.
 - 🔑 Friends: picture-code rooms, just you and your friends (8×/sec).
 - Missions: ready for later (`missions.js` explains the hooks). The 🎯 menu button appears once `MISSIONS` has some.
 - Test params: `?sptime=<seconds>` fixes the time of day (0–900), `?spq=low|mid|high` quality, `?spdebug` adds `window.__sp()`.

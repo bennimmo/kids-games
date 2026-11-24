@@ -328,6 +328,7 @@ function airContact(s, opts) {
   if (lowest > ground) return;
   const vs = s.vel.y;
   readouts(s);
+  s.touch = { vs, x: s.pos.x, z: s.pos.z, bank: s.bank, hdg: s.heading, kind: g.kind };   // for missions (landing contest)
   const bankOk = Math.abs(s.bank) < 18 * D;
   const pitchOk = s.pitchAng > -6 * D && s.pitchAng < P.tailStrike + 3 * D;
   const surfaceOk = g.kind === 'water' ? P.gear === 'floats' : P.gear !== 'floats' || g.kind === 'runway' || g.kind === 'grass' || g.kind === 'land' || g.kind === 'deck';
@@ -418,6 +419,7 @@ function stepHeli(s, dt, opts) {
   if (s.pos.y - P.gearH * up.y <= g.h) {
     readouts(s);
     const ok = s.vel.y > -(opts.easy ? 5 : 3) && Math.abs(s.bank) < 15 * D && Math.abs(s.pitchAng) < 15 * D && s.speed < 12 && g.kind !== 'water';
+    s.touch = { vs: s.vel.y, x: s.pos.x, z: s.pos.z, bank: s.bank, hdg: s.heading, kind: g.kind };
     if (ok) {
       const vs = s.vel.y;
       s.onGround = true; s.pos.y = g.h + P.gearH; s.vel.set(0, 0, 0);

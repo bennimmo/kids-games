@@ -7,7 +7,7 @@
 //
 // Files: island.js (land shape, airports, physics ground), terrain.js (3D ground + sea), sky.js (sky, weather),
 // scenery.js (airports, towns, trees, landmarks), life.js (boats, cars, planes, birds, whales),
-// planes.js (aircraft data + models), cockpit.js (inside view), physics.js (flight model), missions.js (later).
+// planes.js (aircraft data + models), cockpit.js (inside view), physics.js (flight model), missions.js (Ring Race, Fire Fight, Landing Contest).
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
@@ -21,7 +21,7 @@ import { createLife } from './life.js';
 import { PLANES, PLANE_ORDER, LIVERIES, buildPlane, animatePlane } from './planes.js';
 import { buildCockpit } from './cockpit.js';
 import { newPlaneState, placePlane, stepPlane, netState } from './physics.js';
-import { MISSIONS } from './missions.js';
+import { MISSIONS, createMissions } from './missions.js';
 import { clamp, lerp, smooth } from './noise.js';
 import { icon } from '../../js/engine/icons.js';
 
@@ -121,6 +121,7 @@ export function mount(stage) {
       const life = createLife(scene, sky, quality, DPR);
       const fx = createEffects(scene);
       world = { sky, terrain, scenery, life, fx, mapImg: makeMapImage() };
+      missions = createMissions(missionCtx(fx));
       prog(1, 1)(1);
       menuCam.position.set(AIRPORTS[0].x - 900, AIRPORTS[0].elev + 220, AIRPORTS[0].z + 700);
       renderer.compile(scene, menuCam);
@@ -446,6 +447,8 @@ export function mount(stage) {
     if (prefs.shared && !net.room) goPublic();
     keepAwake(true);
     render();
+    if (missions) { missions.setFlying(true); if (S.openMis) missions.openPicker(); }
+    S.openMis = false;
   }
 
   // pick a start spot nobody else is sitting on (shared sky: planes don't bump into each other)
@@ -458,7 +461,8 @@ export function mount(stage) {
     return spotFor(choice, Math.floor(Math.random() * 4), type);
   }
   function respawn(p) {
-    p.spot = freeSpot(p.choice, p.type);
+    const ms = missions && missions.respawnSpot();
+    p.spot = ms || freeSpot(p.choice, p.type);
     placePlane(p.s, p.spot);
     p.camInit = false;
     flash(p, '🛫');
@@ -692,11 +696,52 @@ export function mount(stage) {
       } else if (e === 'splash') { sound.splash(); for (let i = 0; i < 10; i++) fx.puff(s.pos.clone().setY(0.5), 0xffffff, 2, 1.2, new THREE.Vector3((Math.random() - 0.5) * 8, 4 + Math.random() * 4, (Math.random() - 0.5) * 8)); }
       else if (e === 'wire') { flash(p, '⚓ Caught the wire!'); sound.tone(200, 0.5, 'sawtooth', 0.1, 80); }
       else if (e === 'offdeck') { flash(p, '🚀 Off the deck!'); }
-      mission && mission.event(e.split(':')[0], { quality: e.split(':')[1], airport: s.surface });
+      if (missions) missions.event(e.split(':')[0], p);
     }
     s.events.length = 0;
   }
-  let mission = null;
+  let missions = null;
+  // what missions.js may use
+  function missionCtx(fx) {
+    return {
+      scene, fx, root, before: ui, sound,
+      me: () => players[0],
+      easy: () => prefs.easy,
+      now: () => (net.room ? net.room.now() : Date.now()),
+      myUid: () => (net.room ? net.room.uid : 'me'),
+      inRoom: () => !!net.room,
+      isHost: () => !net.room || !!net.room.isHost,
+      setMeta: m => { if (net.room) net.room.setMeta({ mission: m || null }).catch(() => {}); else missions.onMeta(m); },
+      others: () => {
+        if (!net.room) return [];
+        const out = [], uid = net.room.uid, now = net.room.now();
+        for (const [pid, d] of Object.entries(net.live || {})) {
+          if (pid.startsWith(uid + '_') || !d || typeof d !== 'object' || typeof d.t !== 'number' || now - d.t > 12000) continue;
+          out.push({ uid: pid.split('_')[0], name: displayName(d.n, d.ty), color: d.c, ms: d.ms && typeof d.ms === 'object' ? d.ms : null });
+        }
+        return out;
+      },
+      myName: () => myName(),
+      hostName: () => { const e = Object.entries(net.players || {}).find(([pid]) => pid.startsWith((net.hostUid || '?') + '_')); return (e && cleanName(e[1].name)) || 'The host'; },
+      placeMe: (spot, type) => {
+        const p = players[0]; if (!p) return;
+        if (type && p.type !== type) swapPlane(p, type);
+        placePlane(p.s, spot); p.s.crashed = 0; p.crashAt = 0; p.camInit = false; p.said = {};
+      },
+      flash: t => players[0] && flash(players[0], t),
+      invite: () => hostRoomFlying(),
+    };
+  }
+  // change plane while flying (missions): keep the same player, HUD and controls
+  function swapPlane(p, type) {
+    scene.remove(p.model.group); scene.remove(p.tag);
+    p.model.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    if (p.engine) p.engine.stop();
+    const np = makePlayer(p.slot, type, p.colorIdx);
+    Object.assign(p, { s: np.s, model: np.model, cockpit: np.cockpit, tag: np.tag, type, color: np.color });
+    p.engine = makeEngine(type, players.length);
+    flash(p, PLANES[type].icon + ' ' + PLANES[type].name);
+  }
 
   // ---------------------------------------------------------------- easy-mode helpers + warnings
   function helpers(p, dt) {
@@ -768,7 +813,7 @@ export function mount(stage) {
         <div class="sp-tl">
           <div class="sp-read"><span>💨</span><b class="sp-spd">0</b><small>kt</small></div>
           <div class="sp-read"><span>⛰️</span><b class="sp-alt">0</b><small>ft</small><i class="sp-vsi"></i></div>
-          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><button class="sp-c-net"></button></div>
+          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><button class="sp-c-net"></button><button class="sp-c-mis" aria-label="Missions">🎯</button></div>
         </div>
         <div class="sp-pilots"></div>
         <div class="sp-place"></div>
@@ -783,13 +828,14 @@ export function mount(stage) {
         <div class="sp-thrbar"><i></i><span>⚡</span></div>
         ${p.touch ? `<div class="sp-stick"><i></i></div>
           <div class="sp-thr"><div class="sp-thr-fill"></div><div class="sp-thr-knob">⚡</div></div>
-          <div class="sp-tbtns"><button data-a="gear">⚙️</button><button data-a="flaps">🪶</button><button data-a="brake" class="sp-hold">🛑</button><button data-a="smoke">💨</button>${players.length === 1 ? '<button data-a="tilt" class="sp-tilt">👆</button>' : ''}</div>` : ''}
+          <div class="sp-tbtns"><button data-a="gear">⚙️</button><button data-a="flaps">🪶</button><button data-a="brake" class="sp-hold">🛑</button><button data-a="smoke">💨</button><button data-a="drop" class="sp-dropbtn">💧</button>${players.length === 1 ? '<button data-a="tilt" class="sp-tilt">👆</button>' : ''}</div>` : ''}
       </div>`);
       hudEl.appendChild(v);
       const q = s => v.querySelector(s);
       p.hud = { v, spd: q('.sp-spd'), alt: q('.sp-alt'), vsi: q('.sp-vsi'), gear: q('.sp-c-gear'), flaps: q('.sp-c-flaps'), brake: q('.sp-c-brake'), net: q('.sp-c-net'), place: q('.sp-place'), msg: q('.sp-msg'), warn: q('.sp-warn'), hint: q('.sp-hint'), map: q('.sp-map'), near: q('.sp-near'), nearTxt: q('.sp-near-txt'), nearArrow: q('.sp-near-arrow'), sky: q('.sp-sky'), cam: q('.sp-cam'), thr: q('.sp-thrbar i'), acc: 0 };
       click(q('.sp-cam'), () => cycleView(p));
       tap(q('.sp-c-net'), () => togglePilots(p));
+      tap(q('.sp-c-mis'), () => { sound.pop(); if (missions) missions.openPicker(); });
       click(q('.sp-pause'), () => pause(true));
       click(q('.sp-map'), () => { p.mapBig = !p.mapBig; v.classList.toggle('sp-bigmap', p.mapBig); });
       if (p.touch) wireTouch(p, v);
@@ -858,6 +904,8 @@ export function mount(stage) {
   function flash(p, text) { if (!p.hud) return; p.hud.msg.textContent = text; p.hud.msg.classList.add('show'); p.msgT = 2.2; }
 
   function updateHud(p, dt) {
+    const firing = !!missions && missions.kind === 'fire';
+    if (p.hud.firing !== firing) { p.hud.firing = firing; p.hud.v.classList.toggle('sp-firing', firing); }
     const s = p.s, P = s.P, h = p.hud;
     if (!h) return;
     if (p.msgT > 0) { p.msgT -= dt; if (p.msgT <= 0) h.msg.classList.remove('show'); }
@@ -945,6 +993,7 @@ export function mount(stage) {
     };
     for (const r of remotes.values()) dot(r.pos.x, r.pos.z, '#' + new THREE.Color(r.color).getHexString(), r.name);
     for (const q of players) if (q !== p) dot(q.s.pos.x, q.s.pos.z, '#' + new THREE.Color(q.color).getHexString(), '');
+    if (missions) for (const m of missions.mapPoints()) { const pt = toS(m.x, m.z); if (!inside(pt, 3)) continue; g.fillStyle = m.c; g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.5; g.beginPath(); g.arc(pt[0], pt[1], m.r * fs * (big ? 0.8 : 1.4), 0, 7); g.fill(); g.stroke(); }
     g.restore();
     // me (in the middle of the small map)
     g.save(); g.translate(...(big ? toS(s.pos.x, s.pos.z) : [W / 2, W / 2])); if (big) g.rotate(s.heading);
@@ -1024,7 +1073,8 @@ export function mount(stage) {
       net.sendAcc = 0;
       for (const p of players) {
         const name = p.slot === 0 ? myName() : '';
-        api.setLive(`${uid}_p${p.slot}`, { t: api.now(), ty: p.type, c: p.color, n: name, ...netState(p.s) });
+        const ms = net.room && missions && p.slot === 0 ? missions.status() : null;
+        api.setLive(`${uid}_p${p.slot}`, { t: api.now(), ty: p.type, c: p.color, n: name, ...netState(p.s), ...(ms ? { ms } : {}) });
       }
     }
     // friends' planes
@@ -1103,7 +1153,18 @@ export function mount(stage) {
   }
   const stripHtml = () => lobbyHTML(people(net.players, net.hostUid).map(p => ({ ...p, host: true })), { hostDoing: 'flying', myUid: net.room && net.room.uid });
   const updateStrip = () => ui.querySelectorAll('.sp-strip').forEach(e => { e.innerHTML = stripHtml(); });
-  function goRoom(room) {
+  async function hostRoomFlying() {
+    if (net.room) return;
+    try {
+      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'fly' }));
+      if (!room) { if (players[0]) flash(players[0], '👫 Add friends on the main menu first'); return; }
+      if (!alive) { room.leave(); return; }
+      room.setMeta({ hostUid: room.uid }).catch(() => {});
+      goRoom(room, true);
+      if (players[0]) flash(players[0], '👫 Friends invited! Tap 🎯 when they arrive');
+    } catch (e) { console.warn(e); if (players[0]) flash(players[0], '😢 Could not invite'); }
+  }
+  function goRoom(room, stay = false) {
     leavePublic();
     net.room = room; net.code = room.code; net.hostUid = room.isHost ? room.uid : '';
     room.setPlayer(room.uid + '_p0', { joined: room.now(), ...playerInfo(true) });
@@ -1112,9 +1173,10 @@ export function mount(stage) {
     net.unsubs.push(room.onMeta(m => {
       if (!m && net.room === room) { leaveRoom(true); return; }
       if (m && m.hostUid && m.hostUid !== net.hostUid) { net.hostUid = m.hostUid; updateStrip(); }
+      if (missions && net.room === room) missions.onMeta(m ? m.mission : null);
     }));
     if (room.onStatus) net.unsubs.push(room.onStatus(st => { net.status = st; }));
-    S.phase = 'hangar';
+    if (!stay) S.phase = 'hangar';
     render();
   }
   function leaveRoom(gone = false) {
@@ -1123,6 +1185,7 @@ export function mount(stage) {
     leftRoom();
     net.unsubs.forEach(u => u && u()); net.unsubs = [];
     r.leave(); net.live = {}; clearRemotes();
+    if (missions) missions.onMeta(null);
     if (gone) { S.sad = clock + 2; }
     if (S.phase === 'fly' && prefs.shared) goPublic();
     render();
@@ -1165,6 +1228,7 @@ export function mount(stage) {
           if (a === 'cam') cycleView(p);
           if (a === 'smoke') { s.smoke = !s.smoke; sound.pop(); flash(p, s.smoke ? '💨 Smoke on' : '💨 Smoke off'); }
           if (a === 'pause') pause(true);
+          if (a === 'drop' && missions) missions.drop();
         }
       }
       if (pressed.includes('Escape')) pause(true);
@@ -1175,12 +1239,14 @@ export function mount(stage) {
       // split this frame into equal small steps (smooth: every frame moves the plane by exactly its frame time)
       const opts = physOpts; opts.easy = prefs.easy; opts.noDie = prefs.noDie; opts.wind = sky.state.wind;
       const n = Math.min(14, Math.max(1, Math.ceil(dt / STEP))), h = dt / n;
-      for (let k = 0; k < n; k++) for (const p of players) { p.s.T = T; stepPlane(p.s, h, opts); }
+      const hold = missions && missions.frozen();      // waiting on the start line
+      if (!hold) for (let k = 0; k < n; k++) for (const p of players) { p.s.T = T; stepPlane(p.s, h, opts); }
       for (const p of players) {
         handleEvents(p);
         helpers(p, dt);
         if (p.s.crashed && p.crashAt && clock > p.crashAt) { p.crashAt = 0; respawn(p); }
       }
+      if (missions && pressed.includes('KeyB')) missions.drop();
     } else if (S.phase === 'fly' && S.paused) pressed.includes('Escape') && pause(false);
     pressed.length = 0;
 
@@ -1197,6 +1263,7 @@ export function mount(stage) {
       updateHud(p, dt);
     }
     if (flying) {
+      if (missions && !S.paused) missions.update(dt);
       netTick(dt); updateRemotes(dt);
       // shared sky dropped or never connected: keep trying
       if (prefs.shared && !net.pub && !net.room && !net.connecting && clock > (net.retryAt || 0)) { net.retryAt = clock + 5; goPublic(); }
@@ -1305,7 +1372,7 @@ export function mount(stage) {
       <p class="ui-sub">Fly anywhere on the island</p>
       <div class="ui-row sp-play">
         <button class="ui-btn primary big sp-go" data-m="solo">${icon('play')}<span>Fly</span></button>
-        ${MISSIONS.length ? '<button class="ui-btn big sp-go" data-m="missions">🎯<span>Missions</span></button>' : ''}
+        <button class="ui-btn big sp-go" data-m="missions">🎯<span>Missions</span></button>
         ${togetherButton()}
       </div>
       ${S.busy ? '<p class="ui-sub">Joining… ⏳</p>' : ''}${S.sad > clock ? '<p class="ui-sub">Couldn\'t join that game 😢</p>' : ''}${S.gone > clock ? '<p class="ui-sub">That game has finished 👋</p>' : ''}
@@ -1317,6 +1384,7 @@ export function mount(stage) {
     box.querySelectorAll('.sp-go').forEach(b => click(b, () => {
       sound.pop();
       S.mode = 'solo';
+      S.openMis = b.dataset.m === 'missions';
       if (TOUCH && prefs.tilt) askTilt();
       S.phase = 'hangar'; S.who = 0; render();
     }));
@@ -1335,6 +1403,7 @@ export function mount(stage) {
         <tr><td>↪️ Rudder</td><td>Q E</td></tr>
         <tr><td>⚡ Power</td><td>R F &nbsp;or&nbsp; Shift Ctrl</td></tr>
         <tr><td>⚙️ Wheels</td><td>G</td></tr>
+        <tr><td>💧 Drop water (Fire Fight)</td><td>B</td></tr>
         <tr><td>🪶 Flaps</td><td>V &nbsp;( [ ] )</td></tr>
         <tr><td>🛑 Brakes</td><td>Space</td></tr>
         <tr><td>🎥 Camera</td><td>C</td></tr>
@@ -1394,6 +1463,7 @@ export function mount(stage) {
         <button class="ui-btn primary big sp-resume" aria-label="Keep flying">${icon('play')}<span>Resume</span></button>
         <button class="ui-btn sp-respawn" aria-label="Start again">${icon('retry')}<span>Start again</span></button>
         <button class="ui-btn sp-plane">🛩️<span>Change plane</span></button>
+        <button class="ui-btn sp-pmis">🎯<span>Missions</span></button>
       </div>
       <div class="ui-label">Settings</div>
       ${settingsHTML(['easy', 'noDie', 'shared', 'guide', 'sound'])}
@@ -1411,6 +1481,7 @@ export function mount(stage) {
       render();
     });
     click(box.querySelector('.sp-resume'), () => pause(false));
+    click(box.querySelector('.sp-pmis'), () => { pause(false); if (missions) missions.openPicker(); });
     click(box.querySelector('.sp-respawn'), () => { players.forEach(respawn); pause(false); });
     click(box.querySelector('.sp-plane'), () => { stopFlying(); S.phase = 'hangar'; render(); });
     click(box.querySelector('.sp-helpb'), () => helpUI());
@@ -1419,6 +1490,7 @@ export function mount(stage) {
     ui.appendChild(box);
   }
   function stopFlying() {
+    if (missions) missions.setFlying(false);
     removePlayers(); leavePublic(); clearRemotes(); S.paused = false; keepAwake(false);
     for (const set of world.fx.ringSets) set.forEach(r => { r.visible = false; });
     rainSound(0);
@@ -1434,12 +1506,13 @@ export function mount(stage) {
   const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); };
   document.addEventListener('visibilitychange', onVisible);
 
-  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
+  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, missions, hostTest: async () => { const r = await createRoom(GAME, { state: 'fly' }); r.setMeta({ hostUid: r.uid }); goRoom(r, true); return r.code; }, joinTest: c => tryJoin(c), players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
 
   return () => {
     alive = false;
     cancelAnimationFrame(raf);
     try { if (world) stopFlying(); } catch (e) { /* */ }
+    try { if (missions) missions.dispose(); } catch (e) { /* */ }
     if (net.room) leaveRoom();
     removeEventListener('keydown', onKeyDown);
     removeEventListener('keyup', onKeyUp);

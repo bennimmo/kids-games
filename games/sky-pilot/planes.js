@@ -361,6 +361,19 @@ export function buildPlane(type, color = PLANES[type].color) {
       g.add(mesh(new THREE.BoxGeometry(0.03, 0.25, 0.2), M.grey, s * 1.4, -2.25, -3.72));
       for (const z of [3.6, -2.6]) g.add(mesh(new THREE.BoxGeometry(0.06, 0.05, 0.14), M.metal, s * 1.4, -1.58, z + 0.3));
     }
+    // water bomber kit: belly tank with two doors (open when dropping) + scoop probes under the floats
+    const tankM = paint(0xffb300);
+    outer.add(mesh(new THREE.BoxGeometry(1.05, 0.42, 2.4), tankM, 0, -0.92, 0.5));
+    outer.add(mesh(new THREE.BoxGeometry(0.9, 0.3, 0.5).translate(0, 0, 0), tankM, 0, -0.86, 1.85));
+    parts.doors = [];
+    for (const sx of [1, -1]) {
+      const d = pivot(outer, sx * 0.5, -1.13, 0.5);
+      d.add(mesh(new THREE.BoxGeometry(0.5, 0.04, 2.3), M.grey, -sx * 0.25, 0, 0));
+      parts.doors.push(d);
+    }
+    for (const sx of [1, -1]) {
+      const pr = mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.5, 8), M.metal, sx * 1.4, -2.42, 0.9); pr.rotation.x = 0.7; outer.add(pr);
+    }
     parts.lights = { left: [3, 1.6, 0.6], right: [-3, 1.6, 0.6], wingL: [7.4, 1.58, 0.6], wingR: [-7.4, 1.58, 0.6], tail: [0, 2.3, -5.9], beacon: [0, 1.0, -1.0], land: [0, -0.4, 3.4] };
   }
 
