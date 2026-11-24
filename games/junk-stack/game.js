@@ -456,14 +456,15 @@ export function mount(stage) {
     const r = held.r;
     const x = clampX(p.x, p.l, r);
     let y = p.y + (held.touch ? r + 0.4 : 0); // keep it above your finger
-    if (nearBoat(p)) y = Math.max(y, towerTop() + r + 0.8);
+    if (p.y > 0.5) held.up = true;    // lifted away from the boat
+    if (!held.up) y = Math.max(y, towerTop() + r + 0.8);
     y = Math.max(0.3 + r * 0.5, Math.min(y, camY + p.l.viewH - r * 0.5));
     held.joint.setTarget(Vec2(x, y));
   }
   function onUp(e) {
     if (!held || e.pointerId !== held.pointerId) return;
     const p = pointerWorld(e);
-    const backOk = nearBoat(p) && boat && boat.id === held.boatId && boat.phase === 'docked' && !boat.items[held.slot];
+    const backOk = !held.up && nearBoat(p) && boat && boat.id === held.boatId && boat.phase === 'docked' && !boat.items[held.slot];
     drop(backOk);
   }
   // let go. back=true puts it back on the boat.
