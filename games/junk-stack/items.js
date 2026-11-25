@@ -1,6 +1,7 @@
 // Junk Stack – the junk you can stack, and the stages.
 // Shapes are in metres, y up, centred on the body. draw(ctx) also uses metres, y up.
 import * as planck from '../../js/vendor/planck.mjs';
+import { ART } from './art.js';
 
 const { Vec2 } = planck;
 
@@ -288,10 +289,32 @@ export function makeBody(world, type, x, y, angle = 0, sc = { x: 1, y: 1 }) {
   return body;
 }
 
-// Draw an item (metres, y up) at its size.
+// Nicer drawings from art.js
+for (const [k, fn] of Object.entries(ART)) if (ITEMS[k]) ITEMS[k].draw = fn;
+
+// Draw an item (metres, y up). Each kind is drawn once into a picture, then the
+// picture is reused every frame (much faster, so the drawings can be detailed).
+const PX = 160;   // picture pixels per metre
+const sprites = new Map();
+function sprite(type) {
+  let sp = sprites.get(type);
+  if (sp) return sp;
+  const def = ITEMS[type];
+  const R = def.r + 0.3;                       // room for bits that stick out
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.ceil(R * 2 * PX);
+  const g = c.getContext('2d');
+  g.translate(c.width / 2, c.height / 2);
+  g.scale(PX, PX);                             // no y flip: the y-flipped game view flips it back
+  def.draw(g);
+  sp = { c, R };
+  sprites.set(type, sp);
+  return sp;
+}
 export function drawItem(ctx, type, sc) {
   ctx.scale(sc.x, sc.y);
-  ITEMS[type].draw(ctx);
+  const sp = sprite(type);
+  ctx.drawImage(sp.c, -sp.R, -sp.R, sp.R * 2, sp.R * 2);
 }
 
 function mulberry32(a) {

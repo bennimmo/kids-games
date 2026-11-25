@@ -279,7 +279,7 @@ Look after your own axolotl (like a Tamagotchi). Saved on this device (`kg-axie`
 ## Junk Stack (`games/junk-stack/`)
 - A boat brings 3 bits of junk. Tap one: the crane lifts it above the tower. Then press anywhere and drag to move it; let go to drop. Keep stacking.
 - Anything in the sea = game over. Score = tallest height reached. Windier above 8 m.
-- Every item is a slightly different size; trickier shapes the more you stack (`junkSequence` in `items.js`).
+- Each kind of junk is always the same size; trickier shapes the more you stack (`junkSequence` in `items.js`). Drawings in `art.js` (drawn once into a picture, then reused). Sea creatures, sky things and the UFO: `scenery.js` (looks only).
 - Turn: ↻ button, second finger, mouse wheel or R.
 - Race friends (`online.js`): same seed = same junk for all, 3 minutes, splash = out, tallest wins. Friends' towers show live down the left.
 - Needs `junk-stack` in the game list in `database.rules.json` (paste the rules into Firebase).
