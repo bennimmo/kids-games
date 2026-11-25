@@ -15,13 +15,14 @@ import {
   lobbyHTML, waitHTML, notReady, startLabel,
 } from '../../js/engine/together.js';
 import { ITEMS, makeBody, drawItem, junkSequence } from './items.js';
+import { createScenery } from './scenery.js';
 import { GAME_ID, RACE_SECONDS, makeRoom, findRoom, connect } from './online.js';
 
 const { Vec2 } = planck;
 const STEP = 1 / 60;
 const SAVE_KEY = 'junk-stack:v2';
 const SEA = -2.2;          // sea level (platform top is y = 0)
-const BASE_CAM = -3.8;     // bottom of the view (world y)
+const BASE_CAM = -5.0;     // bottom of the view (world y)
 const PW = 4.4;            // rock platform width
 const ROT = Math.PI / 4;   // one turn of the rotate button
 const SLOTS = [-1.9, 0, 1.9]; // where junk sits on the boat
@@ -64,6 +65,7 @@ export function mount(stage) {
   let lost = false;
   let wind = 0;
   let closed = false;
+  const scenery = createScenery();
   // racing
   let net = null, race = null, myFinal = null, lastLobbyHtml = '', lastCount = -1, resultAt = 0;
 
@@ -113,7 +115,7 @@ export function mount(stage) {
       <div class="ui-overlay js-menu"><div class="ui-panel">
         <div class="ui-kicker">Junk Stack</div>
         <h2 class="ui-title">How high can you go?</h2>
-        <p class="ui-sub">The boat brings junk. Drag it onto the rock and stack it up. Don't let anything fall in the sea!</p>
+        <p class="ui-sub">The rubbish barge is here! Tap some junk, drag it onto the platform and stack it up. Don't let any fall in the sea!</p>
         ${data.best ? `<p class="js-best">🏆 Best: <b>${data.best.toFixed(2)} m</b></p>` : ''}
         <div class="ui-row"><button class="ui-btn primary big" data-a="play">${icon('play')} Play</button></div>
         ${togetherButton('Race friends')}
@@ -159,7 +161,7 @@ export function mount(stage) {
     newWorld(Math.floor(Math.random() * 1e9));
     mode = 'play';
     buildUI();
-    toast('Here comes the boat! 🚤');
+    toast('Here comes the junk barge! 🚢');
   }
 
   function buildUI() {
@@ -571,6 +573,7 @@ export function mount(stage) {
       if (hEl) hEl.textContent = `${(myFinal ?? maxTop).toFixed(1)} m`;
     }
     if (mode === 'race-result' && Math.floor(time) !== Math.floor(time - dt)) showRaceResult();
+    scenery.update(dt, sceneView(L()));
     particles.forEach(p => { p.vy -= 12 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; });
     particles = particles.filter(p => p.life > 0);
 
@@ -613,6 +616,13 @@ export function mount(stage) {
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
 
+  function sceneView(l) {
+    return {
+      ctx, w: l.w, playH: l.playH, s: l.s, time, sx: x => sx(l, x), sy: y => sy(l, y),
+      seaY: sy(l, SEA), topY: sy(l, Math.max(0, towerTop())),
+    };
+  }
+
   function draw() {
     const l = L();
     const { w, h, playH, s } = l;
@@ -632,19 +642,10 @@ export function mount(stage) {
       ctx.globalAlpha = 1;
     }
 
-    // clouds
-    for (let k = 0; k < 40; k++) {
-      const cy = 3 + k * 3.2;
-      const cx = ((rnd(k) * 40 + time * (0.15 + rnd(k + 7) * 0.2)) % 44) - 22;
-      const px = sx(l, cx), py = sy(l, cy);
-      if (py < -60 || py > playH + 60) continue;
-      const cs = (0.8 + rnd(k + 3)) * s;
-      ctx.fillStyle = 'rgba(255,255,255,.75)';
-      ctx.beginPath();
-      ctx.ellipse(px, py, cs * 1.6, cs * 0.45, 0, 0, Math.PI * 2);
-      ctx.ellipse(px + cs * 0.5, py - cs * 0.3, cs * 0.8, cs * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // clouds, and things flying about
+    const v = sceneView(l);
+    scenery.drawClouds(v, camY);
+    scenery.drawSky(v);
 
     // wind streaks
     const g = wind * gust(time);
@@ -736,12 +737,16 @@ export function mount(stage) {
     };
     bodies.forEach(it => drawBody(it.body, it.type, it.sc));
 
+    // things poking out of the sea (behind the barge)
+    scenery.drawSea(v, false);
+
     // boat (in front of the rock)
     if (boat) drawBoat(l);
 
     // crane
     if (mode === 'play' || mode === 'paused' || mode === 'race' || mode === 'race-wait') drawCrane(l);
     if (held) drawBody(held.body, held.type, held.sc);
+    scenery.drawUfo(v);
 
     // sea (front, so things sink in)
     const wave = t => Math.sin(t) * 0.08 * s;
@@ -759,6 +764,11 @@ export function mount(stage) {
     }
     ctx.stroke();
 
+    // sea creatures: under the water (a bit faded), then the ones poking out
+    ctx.globalAlpha = 0.85;
+    scenery.drawSea(v, true);
+    ctx.globalAlpha = 1;
+
     // splash drops
     ctx.fillStyle = '#e3f4ff';
     particles.forEach(p => {
@@ -774,21 +784,30 @@ export function mount(stage) {
     const { cx, deckY, k } = boatPlace(l);
     ctx.save();
     ctx.translate(cx, deckY);
-    // hull
-    ctx.fillStyle = '#e53935';
+    // rusty rubbish barge, with tyres hung on the side
+    ctx.fillStyle = '#4e6b4a';
     ctx.beginPath();
-    ctx.moveTo(-3.3 * k, -0.05 * k); ctx.lineTo(3.6 * k, -0.05 * k);
-    ctx.quadraticCurveTo(3.4 * k, 0.9 * k, 2.6 * k, 1.0 * k);
-    ctx.lineTo(-2.9 * k, 1.0 * k); ctx.quadraticCurveTo(-3.3 * k, 0.6 * k, -3.3 * k, -0.05 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillRect(-3.25 * k, 0.12 * k, 6.75 * k, 0.14 * k);
-    ctx.fillStyle = '#263238';
-    [-2.2, -1.2, 1.3, 2.3].forEach(x => { ctx.beginPath(); ctx.arc(x * k, 0.55 * k, 0.12 * k, 0, Math.PI * 2); ctx.fill(); });
-    // deck + little cabin at the back
-    ctx.fillStyle = '#8d6e63'; ctx.fillRect(-3.3 * k, -0.12 * k, 6.9 * k, 0.12 * k);
-    ctx.fillStyle = '#eceff1'; ctx.fillRect(-3.25 * k, -1.0 * k, 0.75 * k, 0.9 * k);
-    ctx.fillStyle = '#4fc3f7'; ctx.fillRect(-3.1 * k, -0.85 * k, 0.45 * k, 0.32 * k);
-    ctx.fillStyle = '#37474f'; ctx.fillRect(-3.0 * k, -1.45 * k, 0.22 * k, 0.45 * k);
+    ctx.moveTo(-3.4 * k, -0.05 * k); ctx.lineTo(3.6 * k, -0.05 * k);
+    ctx.lineTo(3.2 * k, 1.0 * k); ctx.lineTo(-3.1 * k, 1.0 * k); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#a0522d'; ctx.globalAlpha = 0.6;
+    [[-2.6, 0.1, 0.12, 0.6], [-0.4, 0.05, 0.1, 0.5], [1.7, 0.1, 0.14, 0.7], [2.9, 0.05, 0.08, 0.4]].forEach(([x, y, w, h]) => ctx.fillRect(x * k, y * k, w * k, h * k));
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffca28'; ctx.fillRect(-3.35 * k, 0.05 * k, 6.9 * k, 0.1 * k);
+    ctx.fillStyle = '#212121';
+    [-2.0, 0.1, 2.2].forEach(x => { ctx.beginPath(); ctx.arc(x * k, 0.5 * k, 0.22 * k, 0, Math.PI * 2); ctx.fill(); });
+    ctx.fillStyle = '#4e6b4a';
+    [-2.0, 0.1, 2.2].forEach(x => { ctx.beginPath(); ctx.arc(x * k, 0.5 * k, 0.1 * k, 0, Math.PI * 2); ctx.fill(); });
+    // deck, tug cabin at the back, chimney puffing smoke
+    ctx.fillStyle = '#6d5a4b'; ctx.fillRect(-3.4 * k, -0.14 * k, 7.0 * k, 0.14 * k);
+    ctx.fillStyle = '#f5f5f5'; ctx.fillRect(-3.35 * k, -1.0 * k, 0.8 * k, 0.88 * k);
+    ctx.fillStyle = '#e53935'; ctx.fillRect(-3.4 * k, -1.08 * k, 0.9 * k, 0.12 * k);
+    ctx.fillStyle = '#4fc3f7'; ctx.fillRect(-3.2 * k, -0.85 * k, 0.5 * k, 0.32 * k);
+    ctx.fillStyle = '#37474f'; ctx.fillRect(-3.1 * k, -1.55 * k, 0.24 * k, 0.48 * k);
+    for (let i = 0; i < 3; i++) {
+      const t = (time * 0.5 + i / 3) % 1;
+      ctx.fillStyle = `rgba(200,200,200,${0.6 * (1 - t)})`;
+      ctx.beginPath(); ctx.arc((-2.98 - t * 0.6) * k, (-1.6 - t * 1.2) * k, (0.12 + t * 0.25) * k, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
     // junk on deck (shown smaller if it's big)
     const glow = boat.phase === 'docked' && canBuild() && !held;
@@ -899,6 +918,7 @@ export function mount(stage) {
     // tests: make / join a room without friends, and peek inside
     window.__jsHost = async () => { const r = await makeRoom(); enterRoom(r); return r.code; };
     window.__jsJoin = code => joinFromInvite(code);
+    window.__jsScene = scenery._debug;
     window.__js = () => {
       const l = L();
       const bp = boat ? boatPlace(l) : null;

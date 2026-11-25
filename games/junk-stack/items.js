@@ -47,7 +47,7 @@ export const ITEMS = {
     },
   },
   barrel: {
-    name: 'Barrel', w: 0.9, h: 1.3,
+    name: 'Oil drum', w: 0.9, h: 1.3,
     shapes: [{ box: [0.45, 0.65] }],
     friction: 0.7,
     draw(ctx) {
@@ -59,7 +59,7 @@ export const ITEMS = {
     },
   },
   fridge: {
-    name: 'Fridge', w: 1.0, h: 1.8,
+    name: 'Old fridge', w: 1.0, h: 1.8,
     shapes: [{ box: [0.5, 0.9] }],
     density: 1.1, friction: 0.6,
     draw(ctx) {
@@ -91,17 +91,6 @@ export const ITEMS = {
       ctx.fillStyle = '#ffd54f'; circle(ctx, -0.98, 0.42, 0.07); ctx.fill(); circle(ctx, 0.98, 0.42, 0.07); ctx.fill();
     },
   },
-  cheese: {
-    name: 'Cheese', w: 1.6, h: 1.1,
-    shapes: [{ poly: [[-0.8, -0.5], [0.8, -0.5], [-0.8, 0.6]] }],
-    friction: 0.8,
-    draw(ctx) {
-      poly(ctx, [[-0.8, -0.5], [0.8, -0.5], [-0.8, 0.6]]); ctx.fillStyle = '#ffcf33'; ctx.fill();
-      ctx.lineWidth = 0.05; ctx.strokeStyle = '#c99400'; ctx.stroke();
-      ctx.fillStyle = '#e6a800';
-      [[-0.5, -0.2, 0.12], [-0.1, -0.3, 0.08], [-0.55, 0.22, 0.07], [0.25, -0.35, 0.06]].forEach(([x, y, r]) => { circle(ctx, x, y, r); ctx.fill(); });
-    },
-  },
   cone: {
     name: 'Cone', w: 1.0, h: 1.2,
     shapes: [{ poly: [[-0.5, -0.6], [0.5, -0.6], [0.14, 0.6], [-0.14, 0.6]] }],
@@ -127,33 +116,128 @@ export const ITEMS = {
     },
   },
   tyre: {
-    name: 'Tyre', w: 1.2, h: 1.2,
-    shapes: [{ circle: 0.6 }],
-    friction: 0.95, angularDamping: 1.5,
+    name: 'Flat tyre', w: 1.3, h: 0.7,
+    shapes: [{ poly: [[-0.45, -0.35], [0.45, -0.35], [0.65, -0.12], [0.62, 0.15], [0.42, 0.35], [-0.42, 0.35], [-0.62, 0.15], [-0.65, -0.12]] }],
+    friction: 1, density: 1.1,
     draw(ctx) {
-      circle(ctx, 0, 0, 0.6); ctx.fillStyle = '#2b2b2b'; ctx.fill();
-      ctx.strokeStyle = '#4a4a4a'; ctx.lineWidth = 0.07;
-      for (let i = 0; i < 12; i++) {
-        const a = i * Math.PI / 6;
-        ctx.beginPath(); ctx.moveTo(Math.cos(a) * 0.45, Math.sin(a) * 0.45); ctx.lineTo(Math.cos(a) * 0.57, Math.sin(a) * 0.57); ctx.stroke();
-      }
-      circle(ctx, 0, 0, 0.3); ctx.fillStyle = '#b0bec5'; ctx.fill();
-      ctx.fillStyle = '#607d8b';
-      for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; circle(ctx, Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0.04); ctx.fill(); }
+      poly(ctx, [[-0.45, -0.35], [0.45, -0.35], [0.66, -0.12], [0.62, 0.15], [0.42, 0.35], [-0.42, 0.35], [-0.62, 0.15], [-0.66, -0.12]]);
+      ctx.fillStyle = '#2b2b2b'; ctx.fill();
+      ctx.strokeStyle = '#4a4a4a'; ctx.lineWidth = 0.06;
+      for (let x = -0.5; x <= 0.5; x += 0.2) { ctx.beginPath(); ctx.moveTo(x, 0.3); ctx.lineTo(x + 0.06, 0.36); ctx.stroke(); }
+      ctx.beginPath(); ctx.ellipse(0, -0.02, 0.3, 0.13, 0, 0, Math.PI * 2); ctx.fillStyle = '#8d9aa1'; ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -0.04, 0.16, 0.06, 0, 0, Math.PI * 2); ctx.fillStyle = '#555'; ctx.fill();
+      ctx.fillStyle = '#ffeb3b'; poly(ctx, [[0.3, 0.12], [0.38, 0.22], [0.42, 0.1]]); ctx.fill();
     },
   },
-  ball: {
-    name: 'Ball', w: 0.9, h: 0.9,
-    shapes: [{ circle: 0.45 }],
-    density: 0.5, friction: 0.6, angularDamping: 1,
+  pallet: {
+    name: 'Pallet', w: 1.8, h: 0.32,
+    shapes: [{ box: [0.9, 0.16] }],
+    density: 0.7, friction: 0.85,
     draw(ctx) {
-      const cols = ['#ef5350', '#fff', '#42a5f5', '#fff', '#ffca28', '#fff'];
-      cols.forEach((c, i) => {
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 0.45, i * Math.PI / 3, (i + 1) * Math.PI / 3); ctx.closePath();
-        ctx.fillStyle = c; ctx.fill();
-      });
-      circle(ctx, 0, 0, 0.45); ctx.lineWidth = 0.04; ctx.strokeStyle = '#90a4ae'; ctx.stroke();
-      circle(ctx, 0, 0, 0.08); ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.fillStyle = '#c9a26b'; ctx.strokeStyle = OUT; ctx.lineWidth = 0.03;
+      rr(ctx, -0.9, 0.04, 1.8, 0.12, 0.02); ctx.fill(); ctx.stroke();
+      rr(ctx, -0.9, -0.16, 1.8, 0.1, 0.02); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#a57d47';
+      [-0.8, -0.08, 0.64].forEach(x => { ctx.fillRect(x, -0.06, 0.16, 0.1); });
+    },
+  },
+  tv: {
+    name: 'Old telly', w: 1.1, h: 0.9,
+    shapes: [{ box: [0.55, 0.45] }],
+    density: 1.1, friction: 0.7,
+    draw(ctx) {
+      rr(ctx, -0.55, -0.45, 1.1, 0.9, 0.12); ctx.fillStyle = '#8d6e63'; ctx.fill();
+      ctx.lineWidth = 0.04; ctx.strokeStyle = OUT; ctx.stroke();
+      rr(ctx, -0.45, -0.33, 0.7, 0.66, 0.1); ctx.fillStyle = '#90a4ae'; ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      for (let i = 0; i < 14; i++) ctx.fillRect(-0.42 + ((i * 37) % 60) / 100, -0.3 + ((i * 53) % 58) / 100, 0.05, 0.03);
+      ctx.fillStyle = '#ffca28'; circle(ctx, 0.4, 0.15, 0.05); ctx.fill();
+      ctx.fillStyle = '#5d4037'; circle(ctx, 0.4, -0.05, 0.05); ctx.fill();
+      ctx.strokeStyle = '#37474f'; ctx.lineWidth = 0.03;
+      ctx.beginPath(); ctx.moveTo(-0.05, 0.45); ctx.lineTo(-0.2, 0.62); ctx.moveTo(0.05, 0.45); ctx.lineTo(0.25, 0.6); ctx.stroke();
+    },
+  },
+  washer: {
+    name: 'Washing machine', w: 1.0, h: 1.05,
+    shapes: [{ box: [0.5, 0.525] }],
+    density: 1.2, friction: 0.65,
+    draw(ctx) {
+      rr(ctx, -0.5, -0.525, 1.0, 1.05, 0.08); ctx.fillStyle = '#f5f5f5'; ctx.fill();
+      ctx.lineWidth = 0.04; ctx.strokeStyle = '#78909c'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-0.5, 0.3); ctx.lineTo(0.5, 0.3); ctx.stroke();
+      ctx.fillStyle = '#42a5f5'; circle(ctx, 0.3, 0.41, 0.05); ctx.fill();
+      ctx.fillStyle = '#ef5350'; circle(ctx, 0.15, 0.41, 0.04); ctx.fill();
+      circle(ctx, 0, -0.1, 0.3); ctx.fillStyle = '#b0bec5'; ctx.fill();
+      circle(ctx, 0, -0.1, 0.22); ctx.fillStyle = '#4fc3f7'; ctx.fill();
+      ctx.fillStyle = '#ff8a80'; circle(ctx, -0.07, -0.16, 0.06); ctx.fill();
+      ctx.fillStyle = '#fff59d'; circle(ctx, 0.08, -0.05, 0.05); ctx.fill();
+    },
+  },
+  bin: {
+    name: 'Wheelie bin', w: 1.0, h: 1.4,
+    shapes: [{ poly: [[-0.4, -0.7], [0.4, -0.7], [0.5, 0.62], [-0.5, 0.62]] }],
+    friction: 0.75,
+    draw(ctx) {
+      poly(ctx, [[-0.4, -0.7], [0.4, -0.7], [0.5, 0.58], [-0.5, 0.58]]); ctx.fillStyle = '#43a047'; ctx.fill();
+      ctx.lineWidth = 0.04; ctx.strokeStyle = '#1b5e20'; ctx.stroke();
+      rr(ctx, -0.54, 0.56, 1.08, 0.1, 0.03); ctx.fillStyle = '#2e7d32'; ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,.2)'; ctx.lineWidth = 0.05;
+      [-0.2, 0, 0.2].forEach(x => { ctx.beginPath(); ctx.moveTo(x, -0.55); ctx.lineTo(x * 1.15, 0.45); ctx.stroke(); });
+      ctx.fillStyle = '#212121'; circle(ctx, -0.32, -0.66, 0.1); ctx.fill();
+    },
+  },
+  mattress: {
+    name: 'Mattress', w: 2.4, h: 0.4,
+    shapes: [{ box: [1.2, 0.2] }],
+    density: 0.45, friction: 1,
+    draw(ctx) {
+      rr(ctx, -1.2, -0.2, 2.4, 0.4, 0.14); ctx.fillStyle = '#e3f2fd'; ctx.fill();
+      ctx.lineWidth = 0.04; ctx.strokeStyle = '#64b5f6'; ctx.stroke();
+      ctx.fillStyle = '#90caf9';
+      for (let x = -1.05; x < 1.1; x += 0.3) ctx.fillRect(x, -0.18, 0.12, 0.36);
+      ctx.fillStyle = '#c8b273'; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.ellipse(0.5, 0.02, 0.22, 0.1, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    },
+  },
+  suitcase: {
+    name: 'Suitcase', w: 1.2, h: 0.8,
+    shapes: [{ box: [0.6, 0.4] }],
+    density: 0.8, friction: 0.7,
+    draw(ctx) {
+      ctx.strokeStyle = '#4e342e'; ctx.lineWidth = 0.06;
+      ctx.beginPath(); ctx.moveTo(-0.16, 0.4); ctx.lineTo(-0.16, 0.5); ctx.lineTo(0.16, 0.5); ctx.lineTo(0.16, 0.4); ctx.stroke();
+      rr(ctx, -0.6, -0.4, 1.2, 0.8, 0.1); ctx.fillStyle = '#ff7043'; ctx.fill();
+      ctx.lineWidth = 0.04; ctx.strokeStyle = '#8d3a1c'; ctx.stroke();
+      ctx.fillStyle = '#8d3a1c'; ctx.fillRect(-0.4, -0.4, 0.08, 0.8); ctx.fillRect(0.32, -0.4, 0.08, 0.8);
+      ctx.fillStyle = '#fff176'; ctx.save(); ctx.translate(-0.05, 0.05); ctx.rotate(0.2); ctx.fillRect(-0.15, -0.1, 0.3, 0.2); ctx.restore();
+      ctx.fillStyle = '#4fc3f7'; circle(ctx, 0.15, -0.18, 0.09); ctx.fill();
+    },
+  },
+  toilet: {
+    name: 'Toilet', w: 1.0, h: 1.2,
+    shapes: [{ box: [0.38, 0.25, 0.1, -0.35] }, { box: [0.17, 0.38, -0.32, 0.22] }],
+    friction: 0.7, density: 1.1,
+    draw(ctx) {
+      ctx.fillStyle = '#fafafa'; ctx.strokeStyle = '#90a4ae'; ctx.lineWidth = 0.04;
+      rr(ctx, -0.49, -0.16, 0.34, 0.76, 0.06); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-0.28, -0.1); ctx.lineTo(0.48, -0.1); ctx.quadraticCurveTo(0.45, -0.45, 0.2, -0.5);
+      ctx.lineTo(0.15, -0.6); ctx.lineTo(-0.1, -0.6); ctx.lineTo(-0.12, -0.45); ctx.quadraticCurveTo(-0.28, -0.35, -0.28, -0.1);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#4fc3f7'; ctx.fillRect(-0.24, -0.14, 0.68, 0.05);
+      ctx.fillStyle = '#b0bec5'; ctx.fillRect(-0.4, 0.45, 0.12, 0.05);
+    },
+  },
+  boot: {
+    name: 'Welly boot', w: 0.9, h: 1.2,
+    shapes: [{ box: [0.22, 0.45, -0.18, 0.15] }, { box: [0.45, 0.15, 0.05, -0.45] }],
+    density: 0.8, friction: 0.9,
+    draw(ctx) {
+      ctx.fillStyle = '#ffeb3b'; ctx.strokeStyle = '#a68b00'; ctx.lineWidth = 0.04;
+      ctx.beginPath();
+      ctx.moveTo(-0.4, 0.6); ctx.lineTo(0.04, 0.6); ctx.lineTo(0.04, -0.2);
+      ctx.quadraticCurveTo(0.45, -0.22, 0.5, -0.45); ctx.lineTo(0.5, -0.6); ctx.lineTo(-0.4, -0.6); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#5d4037'; ctx.fillRect(-0.4, -0.6, 0.9, 0.1);
+      ctx.fillStyle = '#fff'; ctx.fillRect(-0.4, 0.5, 0.44, 0.06);
     },
   },
   flag: {
@@ -219,24 +303,18 @@ function mulberry32(a) {
   };
 }
 
-const EASY = ['crate', 'plank', 'barrel', 'fridge', 'bathtub', 'crate'];
-const MID = [...EASY, 'cheese', 'cone', 'sofa'];
-const HARD = [...MID, 'tyre', 'ball', 'cheese', 'cone', 'sofa'];
+const EASY = ['crate', 'pallet', 'barrel', 'fridge', 'washer', 'tv', 'crate', 'mattress'];
+const MID = [...EASY, 'bathtub', 'sofa', 'suitcase', 'bin', 'plank'];
+const HARD = [...MID, 'tyre', 'cone', 'toilet', 'boot', 'plank', 'bin'];
 
-// Endless junk. Same seed = same junk, same sizes, same order (fair races).
-// Gets harder the more you stack: trickier shapes, and sizes vary more.
+// Endless junk. Same seed = same junk in the same order (fair races).
+// Each kind of junk is always the same size. Trickier shapes turn up the more you stack.
 export function junkSequence(seed) {
   const rnd = mulberry32(seed);
   let n = 0;
   return () => {
     const pool = n < 6 ? EASY : n < 14 ? MID : HARD;
-    const type = pool[Math.floor(rnd() * pool.length)];
-    const v = Math.min(0.35, 0.15 + n * 0.01);       // how much sizes vary
-    const k = 1 + (rnd() * 2 - 1) * v;               // overall size
-    const round = ITEMS[type].shapes.some(sh => sh.circle);
-    const sx = +(k * (round ? 1 : 1 + (rnd() * 2 - 1) * v * 0.6)).toFixed(2);
-    const sy = round ? sx : +(k * (1 + (rnd() * 2 - 1) * v * 0.6)).toFixed(2);
     n++;
-    return { type, sc: { x: sx, y: sy } };
+    return { type: pool[Math.floor(rnd() * pool.length)], sc: { x: 1, y: 1 } };
   };
 }
