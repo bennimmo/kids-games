@@ -1329,7 +1329,7 @@ export function mount(stage) {
       if (pressed.includes('KeyM')) for (const p of players) { p.mapBig = !p.mapBig; p.hud.v.classList.toggle('sp-bigmap', p.mapBig); }
       // physics (fixed steps)
       // split this frame into equal small steps (smooth: every frame moves the plane by exactly its frame time)
-      const opts = physOpts; opts.easy = prefs.easy; opts.noDie = prefs.noDie; opts.wind = sky.state.wind;
+      const opts = physOpts; opts.easy = prefs.easy; opts.noDie = prefs.noDie; opts.wind = prefs.easy ? null : sky.state.wind;   // easy: no crosswind (no crabbing sideways)
       const n = Math.min(14, Math.max(1, Math.ceil(dt / STEP))), h = dt / n;
       const hold = missions && missions.frozen();      // waiting on the start line
       if (!hold) for (let k = 0; k < n; k++) for (const p of players) { p.s.T = T; stepPlane(p.s, h, opts); }

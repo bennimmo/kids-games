@@ -166,7 +166,7 @@
 .sp-mtitle { font-size: 14px; font-weight: 800; opacity: .85; text-transform: uppercase; letter-spacing: .06em; }
 .sp-mline { font-size: 20px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* where to go: a big see-through arrow above the plane, lying flat like a compass needle */
-.sp-mgo { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; }
+.sp-mgo { position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; pointer-events: none; }
 .sp-mtilt { width: 104px; height: 104px; perspective: 260px; filter: drop-shadow(0 4px 8px rgba(0,0,0,.35)); }
 .sp-marrow { width: 100%; height: 100%; display: block; transition: transform .18s linear; transform-origin: 50% 55%; opacity: .85; }
 .sp-mgo.ahead .sp-marrow { opacity: .5; }
@@ -202,7 +202,7 @@
 .sp-tbtns .sp-dropbtn { display: none; }
 .sp-firing .sp-tbtns .sp-dropbtn { display: grid; background: rgba(30,136,229,.85); }
 @media (max-height: 560px) {
-  .sp-mtilt { width: 72px; height: 72px; } .sp-mgo { top: 30%; } .sp-mdist { font-size: 13px; }
+  .sp-mtilt { width: 72px; height: 72px; } .sp-mgo { bottom: 42px; } .sp-mdist { font-size: 13px; }
   .sp-mpanel { top: 6px; padding: 4px 10px 6px; min-width: 0; }
   .sp-mline { font-size: 16px; } .sp-mtitle { display: none; }
   .sp-mboard div { font-size: 13px; }
