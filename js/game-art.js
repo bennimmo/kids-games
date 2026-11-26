@@ -2,6 +2,20 @@
 // gameArt(id) -> SVG string, or '' if there's no drawing (then the emoji icon is used).
 
 const ART = {
+  'junk-stack': `
+    <rect x="0" y="78" width="100" height="22" fill="#2f8fd8"/>
+    <path d="M38 66h24l6 14H32z" fill="#7b6a5d"/>
+    <rect x="30" y="61" width="40" height="6" fill="#455a64"/><rect x="30" y="61" width="40" height="2.4" fill="#ffca28"/>
+    <rect x="40" y="47" width="14" height="14" rx="1.5" fill="#c98a45" stroke="#3b2a1e" stroke-width="1.2"/>
+    <path d="M42 49l10 10" stroke="#8d5a25" stroke-width="2"/>
+    <rect x="33" y="43" width="34" height="4" rx="1" fill="#e0aa66" stroke="#3b2a1e" stroke-width="1"/>
+    <rect x="49" y="27" width="10" height="16" rx="3" fill="#e53935" stroke="#3b2a1e" stroke-width="1"/>
+    <rect x="49" y="30" width="10" height="1.6" fill="#b0bec5"/><rect x="49" y="38" width="10" height="1.6" fill="#b0bec5"/>
+    <path d="M10 8h80" stroke="#f9a825" stroke-width="5"/>
+    <path d="M30 10v6" stroke="#263238" stroke-width="1.6"/>
+    <path d="M30 16a3 3 0 1 1-3 3" stroke="#263238" stroke-width="1.8" fill="none"/>
+    <path d="M10 80h34l-3 8H14z" fill="#e53935"/><rect x="12" y="71" width="6" height="9" fill="#eceff1"/>
+    <path d="M0 80q12-3 25 0t25 0 25 0 25 0" stroke="#fff" stroke-width="1.6" fill="none" opacity=".7"/>`,
   'axie': `
     <circle cx="20" cy="26" r="4" fill="#fff" opacity=".7"/><circle cx="80" cy="20" r="3" fill="#fff" opacity=".7"/><circle cx="74" cy="34" r="2" fill="#fff" opacity=".7"/>
     <path d="M30 66c-10 2-18 10-22 18 10-2 20-6 26-12z" fill="#ffb8cc"/>
