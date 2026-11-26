@@ -219,6 +219,7 @@
 .sp-paper .sp-thrbar i { background: linear-gradient(0deg, #ff7a2f, #ffd54f); }
 .sp-paper .sp-thrbar i.low { background: #e53935; }
 .sp-small .sp-boostbtn { width: 76px; height: 76px; right: 14px; bottom: 14px; font-size: 32px; }
-.sp-wind { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; opacity: .85; }
-.sp-wind i { font-style: normal; font-size: 15px; display: inline-block; transition: transform .3s; }
+.sp-chips .sp-wind { display: inline-flex; align-items: center; gap: 3px; font-size: 15px; }
+.sp-wind b { font-size: 16px; display: inline-block; transition: transform .3s; }
+.sp-wind small { font-size: 13px; font-weight: 700; }
 .sp-wind small::after { content: 'kt'; opacity: .7; margin-left: 1px; }

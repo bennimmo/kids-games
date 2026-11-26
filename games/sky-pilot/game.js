@@ -217,7 +217,7 @@ export function mount(stage) {
             q.max = q.life = 1.6 + Math.random() * 2.4;
           }
           q.p.addScaledVector(wind, dt * 1.4);
-          const a = Math.min(1, (q.max - q.life) * 3, q.life * 1.5) * 0.6 * (0.45 + 0.55 * k) * (night ? 0.5 : 1);
+          const a = Math.min(1, (q.max - q.life) * 3, q.life * 1.5) * 0.75 * (0.6 + 0.4 * k) * (night ? 0.55 : 1);
           toCam.copy(cam.position).sub(q.p);
           side.crossVectors(dir, toCam);
           if (side.lengthSq() < 1e-6) side.set(0, 1, 0);
@@ -945,7 +945,7 @@ export function mount(stage) {
         <div class="sp-tl">
           <div class="sp-read"><span>💨</span><b class="sp-spd">0</b><small>kt</small></div>
           <div class="sp-read"><span>⛰️</span><b class="sp-alt">0</b><small>ft</small><i class="sp-vsi"></i></div>
-          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><button class="sp-c-net"></button><button class="sp-c-mis" aria-label="Missions">🎯</button></div>
+          <div class="sp-chips"><i class="sp-c-gear"></i><i class="sp-c-flaps"></i><i class="sp-c-brake">🅿️</i><button class="sp-c-net"></button><button class="sp-c-mis" aria-label="Missions">🎯</button><i class="sp-wind">🌬️<b>➜</b><small></small></i></div>
         </div>
         <div class="sp-pilots"></div>
         <div class="sp-place"></div>
@@ -954,7 +954,7 @@ export function mount(stage) {
         <div class="sp-hint"></div>
         <div class="sp-tr">
           <canvas class="sp-map" width="320" height="320"></canvas>
-          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b><span class="sp-wind"><i>➜</i><small></small></span></div>
+          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
           <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause" aria-label="Pause">${icon('pause')}</button></div>
         </div>
         <div class="sp-thrbar"><i></i><span class="sp-thricon">⚡</span></div>
@@ -1157,7 +1157,7 @@ export function mount(stage) {
       if (we) {
         // arrow = where the wind blows, turned to your heading (up = pushing you along)
         const rel = (Math.atan2(w.x, -w.z) - s.heading) * 180 / Math.PI - 90;
-        we.firstChild.style.transform = `rotate(${Math.round(rel)}deg)`;
+        we.querySelector('b').style.transform = `rotate(${Math.round(rel)}deg)`;
         we.lastChild.textContent = Math.round(wsp * 1.944) + '';
         we.style.display = wsp > 1.5 ? '' : 'none';
         we.title = prefs.easy ? 'Wind (easy mode: it does not push you)' : 'Wind';
