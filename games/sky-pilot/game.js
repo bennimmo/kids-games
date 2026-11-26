@@ -120,6 +120,7 @@ export function mount(stage) {
       await new Promise(r => setTimeout(r, 0));
       const life = createLife(scene, sky, quality, DPR);
       const fx = createEffects(scene);
+      fx.wind = createWindStreaks(scene);
       world = { sky, terrain, scenery, life, fx, mapImg: makeMapImage() };
       missions = createMissions(missionCtx(fx));
       prog(1, 1)(1);
@@ -179,6 +180,57 @@ export function mount(stage) {
         }
       },
       ringSets,
+    };
+  }
+
+  // faint streaks of air drifting past with the wind (very light: just enough to see which way it blows).
+  // Thin ribbons that face the camera, tapering to nothing at the tail.
+  function createWindStreaks(scn) {
+    const N = 60, R = 45;
+    const pos = new Float32Array(N * 4 * 3), col = new Float32Array(N * 4 * 4), idx = [];
+    for (let i = 0; i < N; i++) { const a = i * 4; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+    geo.setIndex(idx);
+    const lines = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    lines.frustumCulled = false; lines.renderOrder = 4; scn.add(lines);
+    const P = Array.from({ length: N }, () => ({ p: new THREE.Vector3(), life: 0, max: 1 }));
+    const dir = new THREE.Vector3(), fwd = new THREE.Vector3(), toCam = new THREE.Vector3(), side = new THREE.Vector3();
+    return {
+      lines,
+      update(cam, wind, dt, night) {
+        const sp = wind.length(), k = clamp((sp - 1.5) / 6, 0, 1);
+        lines.visible = k > 0.01;
+        if (!lines.visible) return;
+        dir.copy(wind).divideScalar(sp);
+        const len = 5 + sp * 1.1;
+        cam.getWorldDirection(fwd);
+        for (let i = 0; i < N; i++) {
+          const q = P[i];
+          q.life -= dt;
+          toCam.copy(q.p).sub(cam.position);
+          if (q.life <= 0 || toCam.dot(fwd) < -4 || toCam.length() > R * 3) {
+            // ahead of the camera (you fly towards them), spread left/right and a little up/down
+            q.p.copy(cam.position).addScaledVector(fwd, 25 + Math.random() * 90);
+            q.p.x += (Math.random() - 0.5) * 90; q.p.y += (Math.random() - 0.5) * 30; q.p.z += (Math.random() - 0.5) * 90;
+            q.max = q.life = 1.6 + Math.random() * 2.4;
+          }
+          q.p.addScaledVector(wind, dt * 1.4);
+          const a = Math.min(1, (q.max - q.life) * 3, q.life * 1.5) * 0.6 * (0.45 + 0.55 * k) * (night ? 0.5 : 1);
+          toCam.copy(cam.position).sub(q.p);
+          side.crossVectors(dir, toCam);
+          if (side.lengthSq() < 1e-6) side.set(0, 1, 0);
+          side.normalize().multiplyScalar(clamp(toCam.length() * 0.008, 0.05, 0.7));
+          const tx = q.p.x - dir.x * len, tz = q.p.z - dir.z * len, o = i * 12, c = i * 16;
+          pos[o] = q.p.x + side.x; pos[o + 1] = q.p.y + side.y; pos[o + 2] = q.p.z + side.z;
+          pos[o + 3] = q.p.x - side.x; pos[o + 4] = q.p.y - side.y; pos[o + 5] = q.p.z - side.z;
+          pos[o + 6] = tx; pos[o + 7] = q.p.y; pos[o + 8] = tz;
+          pos[o + 9] = tx; pos[o + 10] = q.p.y; pos[o + 11] = tz;
+          for (let v = 0; v < 4; v++) { col[c + v * 4] = col[c + v * 4 + 1] = col[c + v * 4 + 2] = 1; col[c + v * 4 + 3] = v < 2 ? a : 0; }
+        }
+        geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true;
+      },
     };
   }
 
@@ -902,7 +954,7 @@ export function mount(stage) {
         <div class="sp-hint"></div>
         <div class="sp-tr">
           <canvas class="sp-map" width="320" height="320"></canvas>
-          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
+          <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b><span class="sp-wind"><i>➜</i><small></small></span></div>
           <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause" aria-label="Pause">${icon('pause')}</button></div>
         </div>
         <div class="sp-thrbar"><i></i><span class="sp-thricon">⚡</span></div>
@@ -1101,6 +1153,15 @@ export function mount(stage) {
     if (p.hud.near) {
       p.hud.nearTxt.textContent = `${near.icon} ${near.name} · ${nd < 1000 ? Math.round(nd) + ' m' : (nd / 1000).toFixed(1) + ' km'}`;
       p.hud.nearArrow.style.transform = `rotate(${brg}rad)`;
+      const w = st.wind, wsp = w.length(), we = p.hud.v.querySelector('.sp-wind');
+      if (we) {
+        // arrow = where the wind blows, turned to your heading (up = pushing you along)
+        const rel = (Math.atan2(w.x, -w.z) - s.heading) * 180 / Math.PI - 90;
+        we.firstChild.style.transform = `rotate(${Math.round(rel)}deg)`;
+        we.lastChild.textContent = Math.round(wsp * 1.944) + '';
+        we.style.display = wsp > 1.5 ? '' : 'none';
+        we.title = prefs.easy ? 'Wind (easy mode: it does not push you)' : 'Wind';
+      }
       p.hud.sky.textContent = (st.night > 0.6 ? '🌙' : st.dusk > 0.4 ? '🌅' : '') + (st.weather.rainbow > 0.3 ? '🌈' : (WEATHER_ICON[st.weather.kind] || ''));
     }
   }
@@ -1382,6 +1443,7 @@ export function mount(stage) {
     scenery.update(dt, T, sky.state, cams.map(c => c.position));
     life.update(T, dt, cams.map(c => c.position));
     fx.update(dt, sky);
+    if (flying) fx.wind.update(cams[0], sky.state.wind, dt, sky.state.night > 0.6); else fx.wind.update(cams[0], new THREE.Vector3(), dt, false);
     renderer.toneMappingExposure = lerp(1.0, 1.4, sky.state.night) + sky.state.weather.haze * 0.1;
     if (sky.state.thunder) thunder(sky.state.thunder);
     musicTick(dt);
