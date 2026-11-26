@@ -41,7 +41,7 @@ export function placePlane(s, spot) {
   // model forward is +z; heading 0 = north = -z, so turn by PI
   s.quat.copy(hq);
   s.omega.set(0, 0, 0); s.crashed = 0; s.hookCaught = false; s.catapult = 0;
-  s.events.length = 0;
+  s.events.length = 0; s.boostE = 1; s.pv = 0;
   if (spot.air) {
     const v = spot.speed || (P.kind === 'heli' ? 0 : P.vref * 1.5);
     s.pos.set(spot.x, spot.y, spot.z);
@@ -114,6 +114,7 @@ export function stepPlane(s, dt, opts) {
   s.brakes = inp.brake || s.parking ? 1 : 0;
 
   if (P.kind === 'heli') stepHeli(s, dt, opts);
+  else if (P.kind === 'paper') stepPaper(s, dt, opts);
   else stepFixed(s, dt, opts);
 
   // turn back at the edge of the world
@@ -124,7 +125,7 @@ export function stepPlane(s, dt, opts) {
   readouts(s);
   // warnings
   const groundAhead = terrainHeight(s.pos.x + s.vel.x * 8, s.pos.z + s.vel.z * 8);
-  s.pullUp = !s.onGround && s.vel.y < -3 && (s.pos.y + s.vel.y * 6 < groundAhead + 20) && s.agl > 15 && !(s.gearDown && s.flapPos > 0.4 && s.vel.y > -8 && s.landingNear);
+  s.pullUp = P.kind !== 'paper' && !s.onGround && s.vel.y < -3 && (s.pos.y + s.vel.y * 6 < groundAhead + 20) && s.agl > 15 && !(s.gearDown && s.flapPos > 0.4 && s.vel.y > -8 && s.landingNear);
   s.gearWarn = !s.onGround && P.gear === 'retract' && !s.gearDown && s.agl < 120 && s.vel.y < -1 && s.ias < P.vref * 1.5;
   if (!s.onGround) s.airTime += dt;
 }
@@ -353,6 +354,66 @@ function airContact(s, opts) {
   const why = !gearOk ? 'gear' : !surfaceOk ? (g.kind === 'water' ? 'water' : 'surface') : !bankOk ? 'wing' : !softEnough ? 'hard' : 'ground';
   if (crash(s, why, opts) === 'bounce') bounceUp(s, ground);
   else s.pos.y = Math.max(s.pos.y, ground + 0.5);
+}
+
+// ---------------------------------------------------------------- paper plane
+// No engine: height turns into speed. Nose down = faster, nose up = slower (and too slow, the nose drops).
+// Bank to turn. Boost (input.boost) pushes forward while the bar lasts; it refills when you let go.
+// Touching anything (ground, roof, water) ends the glide: s.onGround + event 'paperdown'.
+function stepPaper(s, dt, opts) {
+  const P = s.P, inp = s.input, q = s.quat, easy = opts.easy;
+  if (s.boostE === undefined) s.boostE = 1;
+  const boosting = !!inp.boost && !s.onGround && s.boostE > 0.005;
+  if (boosting) { s.boostE = Math.max(0, s.boostE - dt / (easy ? 3.5 : 2.5)); s.boostIdle = 0; }
+  else { s.boostIdle = (s.boostIdle || 0) + dt; if (s.boostIdle > 0.8) s.boostE = Math.min(1, s.boostE + dt / (easy ? 14 : 24)); }
+  s.ab = boosting ? 1 : 0; s.rpm = s.ab; s.throttle = 0; s.gear = 1;
+  if (s.onGround) { s.vel.set(0, 0, 0); s.omega.set(0, 0, 0); readouts(s); return; }
+  readouts(s);
+  if (!(s.pv > 0)) s.pv = s.vel.length() || P.vref;                                  // speed along the nose
+  const v0 = Math.max(3, s.pv);
+  const pathY = s.vel.y / Math.max(3, s.vel.length());                                                         // going down the real path (with sinking) speeds you up
+  const [rr, pr, yr] = P.rates;
+  let tx = inp.pitch * pr * D, tz = inp.roll * rr * D;
+  const ty = inp.yaw * yr * D;
+  if (easy) {
+    tz = (inp.roll * 50 * D - s.bank) * 3;                                            // stick sets the bank, let go = wings level
+    if (Math.abs(inp.pitch) < 0.1) tx = (-6 * D - s.pitchAng) * 1.5;                   // settle into a gentle glide
+    if (s.pitchAng > 40 * D && tx > 0) tx = 0;
+    if (s.pitchAng < -45 * D && tx < 0) tx = 0;
+  } else tx -= (1 - Math.cos(s.bank)) * 0.4;                                          // turns sink the nose a little
+  if (v0 < P.vstall) tx -= (P.vstall - v0) * 0.12 * (1 + Math.abs(s.pitchAng));        // too slow: nose drops
+  s.omega.x += (tx - s.omega.x) * Math.min(1, dt * 6);
+  s.omega.y += (ty - s.omega.y) * Math.min(1, dt * 4);
+  s.omega.z += (tz - s.omega.z) * Math.min(1, dt * 6);
+  tq.setFromAxisAngle(LEFT, -s.omega.x * dt); q.multiply(tq);
+  tq.setFromAxisAngle(UPV, -s.omega.y * dt); q.multiply(tq);
+  tq.setFromAxisAngle(FWD, s.omega.z * dt); q.multiply(tq);
+  // banked = turning
+  const turn = G * Math.tan(clamp(s.bank, -1.2, 1.2)) / Math.max(v0, 8);
+  tq.setFromAxisAngle(UPV, -turn * dt); q.premultiply(tq);
+  q.normalize();
+  // speed: gravity along the path, drag (more in a turn), boost
+  const fwd = tv1.copy(FWD).applyQuaternion(q);
+  const turnDrag = 1 + 0.6 * (1 / Math.max(0.35, Math.cos(s.bank)) - 1);
+  let v = v0 + (-G * pathY - P.drag * v0 * v0 * turnDrag + (boosting ? P.boost : 0)) * dt;
+  v = clamp(v, 3, P.vno); s.pv = v;
+  s.vel.copy(fwd).multiplyScalar(v);
+  s.vel.y -= Math.max(0, P.vtrim - v) * 1.0;                                            // slower than its happy speed = sinking
+  if (opts.wind) s.vel.addScaledVector(opts.wind, 0.3);
+  s.pos.addScaledVector(s.vel, dt);
+  // touch anything = landed
+  const g = surfaceAt(s.pos.x, s.pos.z);
+  const left = tv3.copy(LEFT).applyQuaternion(q);
+  const low = s.pos.y - 0.45 - Math.abs(left.y) * P.span * 0.5;
+  s.aoa = 0; s.stall = v < P.vstall; s.gload = 1;
+  if (low <= g.h) {
+    readouts(s);
+    s.touch = { vs: s.vel.y, x: s.pos.x, z: s.pos.z, bank: s.bank, hdg: s.heading, kind: g.kind };
+    s.onGround = true; s.surface = g.kind; s.stall = false;
+    s.pos.y = g.h + P.gearH; s.vel.set(0, 0, 0); s.omega.set(0, 0, 0);
+    s.quat.setFromAxisAngle(UPV, -s.heading + Math.PI);                              // lies flat where it lands
+    s.events.push(g.kind === 'water' ? 'paperwet' : 'paperdown');
+  }
 }
 
 // ---------------------------------------------------------------- helicopter

@@ -48,8 +48,16 @@ export const PLANES = {
     flaps: [0], flapDrag: [0], maxG: 3.5,
     eye: [0.35, 0.95, 1.2], camDist: 20, length: 12, span: 10.6, panel: 'analog', engine: 'heli', color: 0x43a047,
   },
+  // a giant paper plane: no engine, it glides. Boost (Space / 🚀) runs out and refills.
+  paper: {
+    name: 'Paper Plane', icon: '📄', stars: 1, desc: 'No engine, glides',
+    kind: 'paper', mass: 40, rates: [90, 60, 30], vstall: 11, vtrim: 22, drag: 0.0025, boost: 8, vr: 0, vref: 25, vno: 70,
+    gear: 'none', gearH: 0.35, groundPitch: 0, tailStrike: 30 * D, wheelbase: 1,
+    flaps: [0], flapDrag: [0], maxG: 6,
+    eye: [0, 0.55, 1.6], camDist: 12, length: 5.6, span: 5.2, panel: 'none', engine: 'paper', color: 0xffffff,
+  },
 };
-export const PLANE_ORDER = ['cub', 'splash', 'whirly', 'jumbo', 'zoom'];
+export const PLANE_ORDER = ['cub', 'splash', 'whirly', 'jumbo', 'zoom', 'paper'];
 
 export const LIVERIES = [0xe53935, 0x1e88e5, 0xffb300, 0x43a047, 0x8e24aa, 0xff7043, 0x00acc1, 0xf5f5f5];
 
@@ -564,6 +572,30 @@ export function buildPlane(type, color = PLANES[type].color) {
     parts.smoke.set(0, 0.5, -6.5);
   }
 
+  if (type === 'paper') {
+    // folded white paper: two wings meeting at the nose, a keel folded down the middle, a coloured stripe on each wing
+    const paper = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, side: THREE.DoubleSide, flatShading: true });
+    const shade = new THREE.MeshStandardMaterial({ color: 0xe9eef4, roughness: 0.9, side: THREE.DoubleSide, flatShading: true });
+    const stripe = new THREE.MeshStandardMaterial({ color, roughness: 0.8, side: THREE.DoubleSide });
+    const tri = (pts, m) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3)); g.computeVertexNormals(); return new THREE.Mesh(g, m); };
+    const N = [0, 0.02, 2.8], TL = [2.6, 0.32, -2.7], TR = [-2.6, 0.32, -2.7], RL = [0.12, 0.02, -2.75], RR = [-0.12, 0.02, -2.75], K = [0, -0.62, -2.5], KB = [0, -0.05, -2.8];
+    outer.add(tri([N, TL, RL], paper), tri([N, RR, TR], paper));
+    body.add(tri([N, RL, K], shade), tri([N, K, RR], shade), tri([RL, KB, K], shade), tri([RR, K, KB], shade));
+    // stripe near the trailing edge of each wing (tells friends apart)
+    const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+    for (const [tip, root] of [[TL, RL], [TR, RR]]) {
+      const a = lerp3(N, tip, 0.78), b = lerp3(N, root, 0.78), c = lerp3(N, root, 0.9), d = lerp3(N, tip, 0.9);
+      const up = p => [p[0], p[1] + 0.01, p[2]];
+      outer.add(tri([up(a), up(b), up(c), up(a), up(c), up(d)], stripe));
+    }
+    // the centre crease
+    const crease = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 5.5), new THREE.MeshBasicMaterial({ color: 0xb8c4d0 }));
+    crease.position.set(0, 0.03, 0.02); outer.add(crease);
+    parts.tips = [new THREE.Vector3(...TL), new THREE.Vector3(...TR)];
+    parts.lights = { left: [0.5, 0.1, 0], right: [-0.5, 0.1, 0], wingL: TL, wingR: TR, tail: [0, 0, -2.8], beacon: [0, -0.3, -1], land: [0, 0, 2.5] };
+    parts.smoke.set(0, -0.2, -2.8);
+  }
+
   // nav lights (red left, green right, white tail), strobes, beacon
   const L = parts.lights;
   parts.nav = [
@@ -612,7 +644,7 @@ export function animatePlane(pl, st, dt) {
     else p.rotor.visible = true;
   }
   // lights: nav steady, strobes double-flash, beacon pulse
-  const on = st.lights;
+  const on = st.lights && P.kind !== 'paper';
   const t = st.t;
   p.nav.forEach(s => { s.visible = on; });
   const sf = (t % 1.2);

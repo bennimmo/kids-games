@@ -18,6 +18,7 @@ import { rng, clamp } from './noise.js';
 export const MISSIONS = [
   { id: 'rings', name: 'Ring Race', icon: '⭕', tag: '🏁 Race', desc: 'Fly through the middle of each ring. Closer to the middle = more points. Missed one? Keep going!' },
   { id: 'fire', name: 'Fire Fight', icon: '🔥', tag: '👫 Team', desc: 'Skim the lake in the Splash to fill up with water, then drop it on the forest fires.' },
+  { id: 'paper', name: 'Paper Plane', icon: '📄', tag: '🕊️ Glide', desc: 'No engine! Glide through the hoops as far as you can. Space / 🚀 = boost. Hoops refill it.' },
   { id: 'land', name: 'Landing Contest', icon: '🛬', tag: '🏁 Contest', desc: 'Three landings. Soft, on the green box, in the middle and straight wins.' },
 ];
 const DEF = Object.fromEntries(MISSIONS.map(m => [m.id, m]));
@@ -226,7 +227,7 @@ export function createMissions(ctx) {
     const part = who.includes(me) || m.id === 'fire';
     run = { m, def, n: m.n, who, idx, part, phase: 'count', sc: 0, k: 0, dn: 0, t: 0, h: 0, dr: [], drId: 0, group: new THREE.Group(), lastSec: -1, endCheck: 0, pushT: 0, fx: [] };
     scene.add(run.group);
-    if (m.id === 'rings') setupRings(); else if (m.id === 'fire') setupFire(); else setupLand();
+    if (m.id === 'rings') setupRings(); else if (m.id === 'fire') setupFire(); else if (m.id === 'paper') setupPaper(); else setupLand();
     if (!part) ctx.flash('👀 Watching. Join the next one!');
     H.panel.classList.add('show');
     box.classList.toggle('sp-mfire', m.id === 'fire');
@@ -237,7 +238,9 @@ export function createMissions(ctx) {
     run.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material !== dropMat && !o.material._shared) o.material.dispose(); });
     const p = ctx.me();
     if (p && p.model.parts.doors) p.model.parts.doors.forEach(d => { d.rotation.z = 0; });
+    const paperDown = run.def.id === 'paper' && p && p.s.P.kind === 'paper' && p.s.onGround;
     run = null;
+    if (paperDown) ctx.respawnMe();               // back up into the sky for free flying
     H.panel.classList.remove('show'); H.count.textContent = ''; H.card.classList.remove('show');
     box.classList.remove('sp-mfire');
   }
@@ -316,6 +319,109 @@ export function createMissions(ctx) {
     return ringTarget();
   }
   const ringTarget = () => { const g = run.rings[Math.min(run.k, run.rings.length - 1)]; return g ? { x: g.c.x, z: g.c.z } : null; };
+
+  // ------------------------------------------------------------ Paper Plane: endless hoops, glide as far as you can
+  const PAPER = { gap: 240, drop: 22, rise: 18 };
+  function setupPaper() {
+    const r = rng(run.m.seed ^ 0x9a9e7);
+    run.prng = r;
+    // start somewhere over the island, high up
+    let sx = 0, sz = 0, sh = 0;
+    for (let i = 0; i < 40; i++) {
+      const a = r() * Math.PI * 2, d = r.range(1500, 7000);
+      sx = Math.cos(a) * d; sz = 1500 + Math.sin(a) * d; sh = r() * Math.PI * 2;
+      if (terrainHeight(sx, sz) < 400) break;
+    }
+    let top = 0;
+    for (let i = 0; i < 6; i++) top = Math.max(top, terrainHeight(sx + Math.sin(sh) * i * 150, sz - Math.cos(sh) * i * 150));
+    run.cur = { x: sx, z: sz, y: Math.max(0, top) + 380, hdg: sh };
+    run.hoops = []; run.dist = 0; run.hpts = 0;
+    const mk = (color, op) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    run.mat = { next: mk(0xffd54f, 0.95), far: mk(0xffffff, 0.55), discNext: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }), discFar: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }) };
+    run.geo = { torus: new THREE.TorusGeometry(1, 0.08, 8, 40), disc: new THREE.CircleGeometry(1, 40) };
+    const c0 = run.cur, n2 = run.who.length, side = (run.idx - (n2 - 1) / 2) * 30;
+    run.spot = { x: c0.x - Math.cos(c0.hdg) * side, z: c0.z - Math.sin(c0.hdg) * side, y: c0.y + 10, hdg: c0.hdg, air: true, speed: 24 };
+    paperFill();
+    if (run.part) ctx.placeMe(run.spot, 'paper');
+    run.prev = ctx.me().s.pos.clone();
+  }
+  // the next hoop: wander gently, keep over the island, never into a hill
+  function paperGen() {
+    const r = run.prng, c = run.cur, easy = ctx.easy();
+    const away = Math.hypot(c.x, c.z - 1500) > 11000;
+    const toC = Math.atan2(-c.x, -(1500 - c.z));
+    let best = null;
+    for (let k = 0; k < 5; k++) {
+      let h = c.hdg + r.range(-0.42, 0.42);
+      if (away) h = c.hdg + clamp(Math.atan2(Math.sin(toC - c.hdg), Math.cos(toC - c.hdg)), -0.5, 0.5) + r.range(-0.1, 0.1);
+      const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
+      let top = 0;
+      for (let i = 0; i <= 6; i++) for (const sd of [-60, 0, 60]) {
+        const px = c.x + (x - c.x) * i / 6 + Math.cos(h) * sd, pz = c.z + (z - c.z) * i / 6 + Math.sin(h) * sd;
+        top = Math.max(top, terrainHeight(px, pz));
+      }
+      top = Math.max(top, 0);
+      if (!best || top < best.top - 15) best = { h, x, z, top };
+    }
+    const clr = easy ? 45 : 35;
+    let y = Math.max(c.y - PAPER.drop, best.top + clr);
+    y = Math.min(y, c.y + PAPER.rise, 1100);
+    y = Math.max(y, best.top + 15);
+    const i = run.hoops.length;
+    const R = (easy ? 26 : 18) * Math.max(0.65, 1 - i * 0.006);
+    const a = new THREE.Vector3(c.x, c.y, c.z), b = new THREE.Vector3(best.x, y, best.z);
+    const g = { c: b, n: b.clone().sub(a).normalize(), R };
+    run.cur = { x: best.x, z: best.z, y, hdg: best.h };
+    run.hoops.push(g);
+    return g;
+  }
+  function paperFill() {
+    while (run.hoops.length < run.k + 9) paperGen();
+    run.hoops.forEach((g, i) => {
+      const want = i >= run.k && i < run.k + 9;
+      if (want && !g.obj) {
+        const grp = new THREE.Group();
+        g.torus = new THREE.Mesh(run.geo.torus, run.mat.far); g.disc = new THREE.Mesh(run.geo.disc, run.mat.discFar);
+        grp.add(g.torus, g.disc); grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).add(g.n)); grp.scale.setScalar(g.R);
+        run.group.add(grp); g.obj = grp;
+      } else if (!want && g.obj) { run.group.remove(g.obj); g.obj = null; }
+      if (g.obj) { g.torus.material = i === run.k ? run.mat.next : run.mat.far; g.disc.material = i === run.k ? run.mat.discNext : run.mat.discFar; }
+    });
+  }
+  function updatePaper(dt, p) {
+    const s = p.s, pos = s.pos;
+    const step = Math.hypot(pos.x - run.prev.x, pos.z - run.prev.z);
+    if (run.part && !run.dn && run.phase === 'go' && !s.onGround && step < 40) run.dist += step;   // (jumps don't count)
+    const g = run.hoops[run.k];
+    if (run.part && !run.dn && g) {
+      const d0 = v1.copy(run.prev).sub(g.c).dot(g.n), d1 = v2.copy(pos).sub(g.c).dot(g.n);
+      if (d0 < 0 && d1 >= 0) {
+        const hit = v1.copy(run.prev).lerp(pos, d0 / (d0 - d1));
+        const lat = hit.distanceTo(g.c);
+        if (lat < 900) {
+          const fr = lat / g.R;
+          const pts = fr < 0.25 ? 10 : fr < 0.5 ? 6 : fr < 0.75 ? 3 : fr < 1 ? 1 : 0;
+          const refill = { 10: 0.35, 6: 0.25, 3: 0.15, 1: 0.08 }[pts] || 0;
+          run.hpts += pts; run.k++;
+          if (refill && s.P.kind === 'paper') s.boostE = Math.min(1, (s.boostE || 0) + refill);
+          if (pts === 10) { ctx.flash('🎯 10! +🚀'); ctx.sound.win(); }
+          else if (pts) { ctx.flash(`⭕ ${pts} +🚀`); ctx.sound.tone(400 + pts * 60, 0.15, 'triangle', 0.1, 700 + pts * 60); }
+          else { ctx.flash('❌ Missed! Keep going ➡️'); ctx.sound.bump(); }
+          paperFill();
+        }
+      }
+    }
+    run.sc = Math.round(run.dist / 10) + run.hpts;
+    run.prev.copy(pos);
+    const nx = run.hoops[run.k];
+    if (nx && nx.torus) nx.torus.scale.setScalar(1 + Math.sin(performance.now() / 180) * 0.05);
+    return nx ? { x: nx.c.x, z: nx.c.z } : null;
+  }
+  function paperEvent(name, p) {
+    if (!run.part || run.dn || (name !== 'paperdown' && name !== 'paperwet')) return;
+    run.dn = 1; run.t = elapsed();
+    ctx.flash(`📄 Landed! ${(run.dist / 1000).toFixed(1)} km · ⭐ ${run.sc}`);
+  }
 
   // ------------------------------------------------------------ Fire Fight
   function setupFire() {
@@ -551,6 +657,7 @@ export function createMissions(ctx) {
     let target = null;
     if (run.def.id === 'rings') target = updateRings(dt, p);
     else if (run.def.id === 'fire') target = updateFire(dt, p);
+    else if (run.def.id === 'paper') target = updatePaper(dt, p);
     else target = updateLand(dt, p);
     hud(p, target);
     // host: is it over?
@@ -565,7 +672,7 @@ export function createMissions(ctx) {
         else {
           const all = [run.dn, ...others.map(done)];
           if (all.every(Boolean)) over = true;
-          if (all.some(Boolean)) { run.firstDone = run.firstDone || now; if (now - run.firstDone > 120000) over = true; }
+          if (all.some(Boolean)) { run.firstDone = run.firstDone || now; if (now - run.firstDone > (run.def.id === 'paper' ? 240000 : 120000)) over = true; }
         }
         if (over) { const mm = { ...m, over: now }; if (run.def.id === 'fire') mm.fires = run.hp.slice(); ctx.setMeta(mm); if (!ctx.inRoom()) { /* solo: onMeta already ran */ } }
       }
@@ -578,6 +685,7 @@ export function createMissions(ctx) {
     let line = '';
     if (def.id === 'rings') line = run.dn ? `🏁 ${run.sc} points · ${fmtT(run.t)}` : `Ring ${Math.min(run.k + 1, run.rings.length)}/${run.rings.length} · ⭐ ${run.sc}`;
     else if (def.id === 'fire') line = `🔥 ${run.left ?? run.fires.length} left · 💧 ${Math.round(run.tank * 100)}% · ${fmtT(run.dn ? run.t : elapsed())}`;
+    else if (def.id === 'paper') line = `📏 ${(run.dist / 1000).toFixed(2)} km · ⭕ ${run.k} · ⭐ ${run.sc}`;
     else line = run.dn ? `🏁 ${run.sc} points` : `Landing ${run.round + 1}/${ROUNDS.length} · ⭐ ${run.sc}`;
     if (!run.part) line = '👀 ' + line;
     setText(H.line, line);
@@ -601,10 +709,10 @@ export function createMissions(ctx) {
   function boardRows() {
     if (!run) return [];
     const rows = [];
-    if (run.part) rows.push({ me: true, name: ctx.myName() || 'You', sc: run.sc, dn: run.dn, t: run.t, h: run.h });
+    if (run.part) rows.push({ me: true, name: ctx.myName() || 'You', sc: run.sc, dn: run.dn, t: run.t, h: run.h, d: run.dist || 0 });
     for (const o of ctx.others()) {
       if (!o.ms || o.ms.n !== run.n) continue;
-      rows.push({ name: o.name, sc: +o.ms.sc || 0, dn: o.ms.dn ? 1 : 0, t: +o.ms.t || 0, h: +o.ms.h || 0 });
+      rows.push({ name: o.name, sc: +o.ms.sc || 0, dn: o.ms.dn ? 1 : 0, t: +o.ms.t || 0, h: +o.ms.h || 0, d: +o.ms.d || 0 });
     }
     if (run.def.id === 'fire') rows.sort((a, b) => b.h - a.h);
     else rows.sort((a, b) => (b.sc - a.sc) || ((a.t || 1e9) - (b.t || 1e9)));
@@ -616,6 +724,7 @@ export function createMissions(ctx) {
     if (!run) return 1;
     if (run.def.id === 'rings') { const max = run.rings.length * 10; return run.sc >= max * 0.7 ? 3 : run.sc >= max * 0.4 ? 2 : 1; }
     if (run.def.id === 'fire') { const t = run.t || elapsed(); return t < 240 ? 3 : t < 420 ? 2 : 1; }
+    if (run.def.id === 'paper') return run.dist >= 7000 ? 3 : run.dist >= 3000 ? 2 : 1;
     return run.sc >= 240 ? 3 : run.sc >= 150 ? 2 : 1;
   }
   function showResults() {
@@ -627,8 +736,9 @@ export function createMissions(ctx) {
     const rows = boardRows();
     const head = def.id === 'fire'
       ? `<p class="ui-sub">All fires out in <b>${fmtT(run.t)}</b>${rows.length > 1 ? ' together!' : '!'}</p>`
+      : def.id === 'paper' ? `<p class="ui-sub">${run.part ? `You glided <b>${(run.dist / 1000).toFixed(2)} km</b> through <b>${run.k}</b> hoops` : 'Mission over'}</p>`
       : `<p class="ui-sub">${run.part ? `You got <b>${run.sc}</b> points` : 'Mission over'}</p>`;
-    const list = rows.map((r, i) => `<div class="sp-mrow ${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : ['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h + ' hits' : r.sc + ' pts'}</i></div>`).join('');
+    const list = rows.map((r, i) => `<div class="sp-mrow ${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : ['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h + ' hits' : def.id === 'paper' ? (r.d / 1000).toFixed(1) + ' km · ' + r.sc + ' pts' : r.sc + ' pts'}</i></div>`).join('');
     const host = ctx.isHost();
     openOverlay(`<div class="ui-overlay sp-mres"><div class="ui-panel">
       <div class="ui-kicker">${def.icon} ${def.name}</div>
@@ -680,13 +790,14 @@ export function createMissions(ctx) {
     get kind() { return run ? run.def.id : ''; },
     // planes wait on the start line during the countdown (and solo while picking)
     frozen: () => (run && run.part && run.phase === 'count') || (pickerOpen && !ctx.inRoom()),
-    event(name, p) { if (run && run.def.id === 'land') landEvent(name, p); },
+    event(name, p) { if (run && run.def.id === 'land') landEvent(name, p); else if (run && run.def.id === 'paper') paperEvent(name, p); },
     respawnSpot() { return run && run.part && run.phase !== 'over' && !run.dn ? run.spot : null; },
     // sent with my plane
-    status() { return run ? { n: run.n, sc: run.sc, k: run.k, dn: run.dn, t: Math.round(run.t * 10) / 10, h: run.h, dr: run.dr.slice(-6) } : null; },
+    status() { return run ? { n: run.n, sc: run.sc, k: run.k, dn: run.dn, t: Math.round(run.t * 10) / 10, h: run.h, d: Math.round(run.dist || 0), dr: run.dr.slice(-6) } : null; },
     mapPoints() {
       if (!run) return [];
       if (run.def.id === 'rings') return run.rings.slice(run.k).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
+      if (run.def.id === 'paper') return run.hoops.slice(run.k, run.k + 8).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
       if (run.def.id === 'fire') return run.fires.filter((f, i) => run.hp[i] > 0).map(f => ({ x: f.x, z: f.z, c: '#ff5722', r: 4 }));
       return run.L ? [{ x: run.L.aim.x, z: run.L.aim.z, c: '#39ff7a', r: 4 }] : [];
     },
@@ -695,7 +806,7 @@ export function createMissions(ctx) {
       if (!on) { if (run) endRun(); closeOverlay(); return; }
       if (pending) { const m = pending; pending = null; onMeta(m); }
     },
-    _next: () => run && run.rings && run.rings[Math.min(run.k, run.rings.length - 1)],   // tests
+    _next: () => run && (run.rings ? run.rings[Math.min(run.k, run.rings.length - 1)] : run.hoops ? run.hoops[run.k] : null),   // tests
     _R: () => run && run.R,
     _fires: () => run && run.fires && { tank: run.tank, f: run.fires.map((f, i) => ({ x: Math.round(f.x), z: Math.round(f.z), y: Math.round(f.y), hp: run.hp[i] })) },
     _setTank: v => { if (run) run.tank = v; },

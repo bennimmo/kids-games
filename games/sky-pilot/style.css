@@ -204,3 +204,13 @@
   .sp-mcards { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .sp-mpick .i { font-size: 30px; } .sp-mpick small:not(.sp-mtag):not(.sp-mbest) { display: none; }
 }
+
+/* ---- paper plane: boost instead of throttle */
+.sp-boostbtn { display: none; position: absolute; right: 24px; bottom: 24px; width: 96px; height: 96px; border-radius: 50%; font-size: 40px; background: rgba(16,18,38,.55); border: 3px solid rgba(255,255,255,.6) !important; overflow: hidden; touch-action: none; place-items: center; }
+.sp-boostbtn i { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,122,47,.55); z-index: -1; }
+.sp-boostbtn.on { transform: scale(.93); background: rgba(255,122,47,.35); }
+.sp-paper .sp-thr, .sp-paper .sp-tbtns [data-a=gear], .sp-paper .sp-tbtns [data-a=flaps], .sp-paper .sp-tbtns [data-a=brake] { display: none; }
+.sp-paper .sp-boostbtn { display: grid; isolation: isolate; }
+.sp-paper .sp-thrbar i { background: linear-gradient(0deg, #ff7a2f, #ffd54f); }
+.sp-paper .sp-thrbar i.low { background: #e53935; }
+.sp-small .sp-boostbtn { width: 76px; height: 76px; right: 14px; bottom: 14px; font-size: 32px; }

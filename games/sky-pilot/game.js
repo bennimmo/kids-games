@@ -343,12 +343,23 @@ export function mount(stage) {
     if (thrDelta) inp.throttle = clamp(inp.throttle + thrDelta * dt * 0.55, 0, 1);
     if (T && T.thrSet !== null) { inp.throttle = T.thrSet; T.thrSet = null; }
     inp.brake = brake;
+    inp.boost = brake || any('thrUp') || !!(T && T.boost) || !!(gp && gp.buttons[7] && gp.buttons[7].value > 0.5);   // paper plane
     return actions;
   }
 
   // ---------------------------------------------------------------- players
   const spotFor = (choice, slot, type) => {
     const P = PLANES[type];
+    if (choice === 'peak') {
+      // high over the snowy mountains, gliding south
+      const pk = LANDMARKS.find(l => l.icon === '📡') || { x: -1500, z: -9000 };
+      const x = pk.x + slot * 40, z = pk.z + 900;
+      return { x, z, y: terrainHeight(pk.x, pk.z) + 160 + slot * 15, hdg: Math.PI, air: true, speed: P.vref };
+    }
+    if (choice === 'air' && P.kind === 'paper') {
+      const ap = AIRPORTS[0], [x, z] = runwayPoint(ap, -ap.len / 2 - 2500, slot * 50);
+      return { x, z, y: ap.elev + 650 + slot * 20, hdg: ap.hdg, air: true, speed: P.vref };
+    }
     if (choice === 'air') {
       const ap = AIRPORTS[0], [x, z] = runwayPoint(ap, -ap.len / 2 - 6000, slot * 60);
       const y = ap.elev + 380 + slot * 30;
@@ -367,6 +378,7 @@ export function mount(stage) {
   // where can this plane start?
   function startsFor(type) {
     const P = PLANES[type];
+    if (P.kind === 'paper') return [{ id: 'air', icon: '☁️', name: 'High in the sky' }, { id: 'peak', icon: '🏔️', name: 'Mountain top' }];
     const list = [];
     for (const ap of AIRPORTS) {
       const need = type === 'jumbo' ? 1700 : type === 'zoom' ? 1250 : 0;
@@ -394,6 +406,59 @@ export function mount(stage) {
     sp.scale.set(0.48, 0.12, 1); sp.center.set(0.5, 0); sp.renderOrder = 20;
     return sp;
   }
+  // two white ribbons streaming from the paper plane's wing tips (show the way it flew).
+  // Points are sampled as it flies; every frame the ribbon is rebuilt facing the camera, about the same width on screen.
+  function makeTrails(model) {
+    const N = 220, tips = model.parts.tips;
+    const mk = () => {
+      const pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 4), idx = [];
+      for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+      g.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
+      g.setIndex(idx);
+      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      m.frustumCulled = false; scene.add(m);
+      return { m, pos, col, pts: new Float32Array(N * 3), n: 0 };
+    };
+    const tr = { list: [mk(), mk()], acc: 0, last: new THREE.Vector3(1e9, 0, 0) };
+    const tp = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), side = new THREE.Vector3(), toCam = new THREE.Vector3();
+    tr.update = (group, dt, moving, camPos) => {
+      tr.acc += dt;
+      const here = group.position;
+      if (here.distanceTo(tr.last) > 60) tr.list.forEach(t => { t.n = 0; });      // jumped (respawn / teleport): start fresh
+      const sample = tr.acc >= 0.035 && moving;
+      if (sample) { tr.acc = 0; tr.last.copy(here); }
+      const cam = camPos || here;
+      tr.list.forEach((t, k) => {
+        if (sample) {
+          t.pts.copyWithin(3, 0, (N - 1) * 3);
+          tp.copy(tips[k]).applyQuaternion(group.quaternion).add(here);
+          t.pts[0] = tp.x; t.pts[1] = tp.y; t.pts[2] = tp.z;
+          t.n = Math.min(N, t.n + 1);
+        }
+        for (let i = 0; i < N; i++) {
+          const o = i * 6, c = i * 8;
+          if (i >= t.n) { t.col[c + 3] = 0; t.col[c + 7] = 0; continue; }
+          a.fromArray(t.pts, i * 3);
+          b.fromArray(t.pts, Math.min(t.n - 1, i + 1) * 3);
+          if (i === t.n - 1 && i > 0) b.fromArray(t.pts, (i - 1) * 3).sub(a).negate().add(a);
+          toCam.copy(cam).sub(a);
+          const dist = toCam.length();
+          side.crossVectors(b.sub(a), toCam);
+          if (side.lengthSq() < 1e-8) side.set(0, 1, 0);
+          side.normalize().multiplyScalar(clamp(dist * 0.0028, 0.03, 0.9));
+          t.pos[o] = a.x + side.x; t.pos[o + 1] = a.y + side.y; t.pos[o + 2] = a.z + side.z;
+          t.pos[o + 3] = a.x - side.x; t.pos[o + 4] = a.y - side.y; t.pos[o + 5] = a.z - side.z;
+          const al = Math.pow(1 - i / N, 1.4) * 0.9 * Math.min(1, i / 3);
+          for (const j of [c, c + 4]) { t.col[j] = 1; t.col[j + 1] = 1; t.col[j + 2] = 1; t.col[j + 3] = al; }
+        }
+        t.m.geometry.attributes.position.needsUpdate = true; t.m.geometry.attributes.color.needsUpdate = true;
+      });
+    };
+    tr.dispose = () => tr.list.forEach(t => { scene.remove(t.m); t.m.geometry.dispose(); t.m.material.dispose(); });
+    return tr;
+  }
   const displayName = (n, type) => cleanName(n) || (PLANES[type] ? PLANES[type].icon + ' Pilot' : 'Pilot');
 
   function makePlayer(slot, type, colorIdx) {
@@ -408,7 +473,9 @@ export function mount(stage) {
     const tagObj = nameTag(displayName(myName(), type), color);
     tagObj.layers.set(14 + slot); scene.add(tagObj);
     const cam = new THREE.PerspectiveCamera(65, 1, 0.3, 90000);
+    const trail = PLANES[type].kind === 'paper' ? makeTrails(model) : null;
     const p = {
+      trail,
       slot, s, model, cockpit, tag: tagObj, cam, type, color, colorIdx,
       view: VIEWS.includes(prefs.view[slot]) ? prefs.view[slot] : 'chase', look: { yaw: 0, pitch: 0, dist: 1, oyaw: 0.6, opitch: 0.25 },
       flyby: null, crashAt: 0, spot: null, smokeT: 0, engine: null, msgT: 0, warnSaid: 0, said: {}, camPos: new THREE.Vector3(), camInit: false,
@@ -420,6 +487,7 @@ export function mount(stage) {
   function removePlayers() {
     for (const p of players) {
       scene.remove(p.model.group); scene.remove(p.tag);
+      if (p.trail) p.trail.dispose();
       if (p.engine) p.engine.stop();
       p.model.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     }
@@ -639,6 +707,9 @@ export function mount(stage) {
           o.frequency.setTargetAtTime(40 + rpm * 70, t, 0.1); og.gain.setTargetAtTime(0.05 + rpm * 0.06, t, 0.1);
           nf.frequency.setTargetAtTime(200 + rpm * 600, t, 0.1); ng.gain.setTargetAtTime(0.05 + rpm * 0.1, t, 0.1);
           lfo.frequency.setTargetAtTime(15 + rpm * 30, t, 0.1); lg.gain.setTargetAtTime(0.08 * rpm * vol, t, 0.1);
+        } else if (P.engine === 'paper') {
+          og.gain.setTargetAtTime(0, t, 0.1); lg.gain.setTargetAtTime(0, t, 0.1);
+          nf.frequency.setTargetAtTime(700 + ab * 1400, t, 0.08); ng.gain.setTargetAtTime(ab * 0.16, t, 0.08);
         } else if (P.engine === 'heli') {
           o.frequency.setTargetAtTime(60 + rpm * 40, t, 0.1); og.gain.setTargetAtTime(0.03, t, 0.1);
           nf.frequency.setTargetAtTime(300 + rpm * 400, t, 0.1); ng.gain.setTargetAtTime(0.1 + rpm * 0.1, t, 0.1);
@@ -649,7 +720,7 @@ export function mount(stage) {
         }
         out.gain.setTargetAtTime(vol * k * (prefs.sound ? 0.9 : 0), t, 0.1);
         wf.frequency.setTargetAtTime(400 + speed * 8, t, 0.2);
-        wg.gain.setTargetAtTime(prefs.sound ? clamp(speed / 120, 0, 1) * 0.12 * vol * k : 0, t, 0.2);
+        wg.gain.setTargetAtTime(prefs.sound ? clamp(speed / (P.engine === 'paper' ? 45 : 120), 0, 1) * (P.engine === 'paper' ? 0.08 : 0.12) * vol * k : 0, t, 0.2);
       },
       stop() { const t = a.currentTime; out.gain.setTargetAtTime(0, t, 0.05); wg.gain.setTargetAtTime(0, t, 0.05); nodes.forEach(x => { try { x.stop(t + 0.3); } catch (e) { /* */ } }); },
     };
@@ -696,6 +767,12 @@ export function mount(stage) {
       } else if (e === 'splash') { sound.splash(); for (let i = 0; i < 10; i++) fx.puff(s.pos.clone().setY(0.5), 0xffffff, 2, 1.2, new THREE.Vector3((Math.random() - 0.5) * 8, 4 + Math.random() * 4, (Math.random() - 0.5) * 8)); }
       else if (e === 'wire') { flash(p, '⚓ Caught the wire!'); sound.tone(200, 0.5, 'sawtooth', 0.1, 80); }
       else if (e === 'offdeck') { flash(p, '🚀 Off the deck!'); }
+      else if (e === 'paperdown' || e === 'paperwet') {
+        const wet = e === 'paperwet';
+        flash(p, wet ? '💦 Splash! The paper got wet' : '📄 Landed!'); sound.bump();
+        for (let i = 0; i < 10; i++) fx.puff(s.pos.clone(), wet ? 0xffffff : 0xd8cbb0, 2, 1.4, new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 3, (Math.random() - 0.5) * 5), 1.2, 0.7);
+        if (!(missions && missions.kind === 'paper')) p.crashAt = clock + 2.6;   // free flying: back up into the sky
+      }
       if (missions) missions.event(e.split(':')[0], p);
     }
     s.events.length = 0;
@@ -729,16 +806,18 @@ export function mount(stage) {
         placePlane(p.s, spot); p.s.crashed = 0; p.crashAt = 0; p.camInit = false; p.said = {};
       },
       flash: t => players[0] && flash(players[0], t),
+      respawnMe: () => { const p = players[0]; if (p) { p.crashAt = 0; respawn(p); } },
       invite: () => hostRoomFlying(),
     };
   }
   // change plane while flying (missions): keep the same player, HUD and controls
   function swapPlane(p, type) {
     scene.remove(p.model.group); scene.remove(p.tag);
+    if (p.trail) p.trail.dispose();
     p.model.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     if (p.engine) p.engine.stop();
     const np = makePlayer(p.slot, type, p.colorIdx);
-    Object.assign(p, { s: np.s, model: np.model, cockpit: np.cockpit, tag: np.tag, type, color: np.color });
+    Object.assign(p, { s: np.s, model: np.model, cockpit: np.cockpit, tag: np.tag, type, color: np.color, trail: np.trail });
     p.engine = makeEngine(type, players.length);
     flash(p, PLANES[type].icon + ' ' + PLANES[type].name);
   }
@@ -825,9 +904,10 @@ export function mount(stage) {
           <div class="sp-near"><i class="sp-near-arrow">⬆️</i><span class="sp-near-txt"></span><b class="sp-sky"></b></div>
           <div class="sp-trb"><button class="sp-b sp-cam"></button><button class="sp-b sp-pause" aria-label="Pause">${icon('pause')}</button></div>
         </div>
-        <div class="sp-thrbar"><i></i><span>⚡</span></div>
+        <div class="sp-thrbar"><i></i><span class="sp-thricon">⚡</span></div>
         ${p.touch ? `<div class="sp-stick"><i></i></div>
           <div class="sp-thr"><div class="sp-thr-fill"></div><div class="sp-thr-knob">⚡</div></div>
+          <button class="sp-boostbtn" aria-label="Boost">🚀<i></i></button>
           <div class="sp-tbtns"><button data-a="gear">⚙️</button><button data-a="flaps">🪶</button><button data-a="brake" class="sp-hold">🛑</button><button data-a="smoke">💨</button><button data-a="drop" class="sp-dropbtn">💧</button>${players.length === 1 ? '<button data-a="tilt" class="sp-tilt">👆</button>' : ''}</div>` : ''}
       </div>`);
       hudEl.appendChild(v);
@@ -862,6 +942,11 @@ export function mount(stage) {
     thr.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); tid = e.pointerId; thr.setPointerCapture(tid); setThr(e); });
     thr.addEventListener('pointermove', e => { if (e.pointerId === tid) setThr(e); });
     thr.addEventListener('pointerup', () => { tid = null; }); thr.addEventListener('pointercancel', () => { tid = null; });
+    const bb = v.querySelector('.sp-boostbtn');
+    if (bb) {
+      bb.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); T.boost = true; bb.classList.add('on'); });
+      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) bb.addEventListener(ev, () => { T.boost = false; bb.classList.remove('on'); });
+    }
     v.querySelectorAll('.sp-tbtns button').forEach(b => {
       const a = b.dataset.a;
       if (a === 'brake') {
@@ -927,8 +1012,12 @@ export function mount(stage) {
     if (h.net.textContent !== nt) h.net.textContent = nt;
     const nd = net.room || prefs.shared ? '' : 'none';
     if (h.net.style.display !== nd) h.net.style.display = nd;
-    h.thr.style.height = (s.throttle * 100) + '%';
+    const paperP = P.kind === 'paper';
+    if (h.paper !== paperP) { h.paper = paperP; h.v.classList.toggle('sp-paper', paperP); h.v.querySelector('.sp-thricon').textContent = paperP ? '🚀' : '⚡'; }
+    const lvl = paperP ? s.boostE : s.throttle;
+    h.thr.style.height = (lvl * 100) + '%';
     h.thr.classList.toggle('ab', s.ab > 0);
+    if (paperP) { h.thr.classList.toggle('low', s.boostE < 0.2); const bi = h.v.querySelector('.sp-boostbtn i'); if (bi) bi.style.height = (s.boostE * 100) + '%'; }
     h.cam.textContent = VIEW_ICON[p.view];
     h.place.textContent = placeName(s.pos.x, s.pos.z);
     // warnings
@@ -937,7 +1026,8 @@ export function mount(stage) {
     if (warn && clock - p.warnSaid > 2.5 && players.length === 1) { p.warnSaid = clock; if (s.stall) sound.tone(420, 0.35, 'square', 0.1); if (s.pullUp) speak('Pull up'); if (s.gearWarn) sound.tone(700, 0.2, 'square', 0.08); }
     // hint for new pilots
     let hint = '';
-    if (s.onGround && s.speed < 2 && s.throttle < 0.05 && P.kind !== 'heli') hint = TOUCH ? '⚡ Slide power up to go!' : '⚡ Power up: R or Shift';
+    if (P.kind === 'paper') hint = s.onGround ? '' : s.boostE > 0.98 && s.airTime < 6 ? (TOUCH ? '🚀 Hold for a boost' : '🚀 Space = boost') : '';
+    else if (s.onGround && s.speed < 2 && s.throttle < 0.05 && P.kind !== 'heli') hint = TOUCH ? '⚡ Slide power up to go!' : '⚡ Power up: R or Shift';
     else if (s.onGround && P.kind === 'heli' && s.throttle < 0.55) hint = TOUCH ? '⚡ Slide power up to lift off!' : '⚡ Lift: R or Shift';
     else if (s.onGround && s.speed > P.vr * 0.9 && !prefs.easy && P.kind !== 'heli') hint = TOUCH ? '⬇️ Pull back to take off' : '⬇️ Pull back (S / ↓) to take off';
     h.hint.textContent = hint; h.hint.classList.toggle('show', !!hint);
@@ -1061,7 +1151,7 @@ export function mount(stage) {
     clearRemotes();
   }
   function clearRemotes() { for (const r of remotes.values()) disposeRemote(r); remotes.clear(); }
-  function disposeRemote(r) { scene.remove(r.model.group); scene.remove(r.tag); r.model.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+  function disposeRemote(r) { if (r.trail) r.trail.dispose(); scene.remove(r.model.group); scene.remove(r.tag); r.model.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
 
   function netTick(dt) {
     const api = net.room || net.pub;
@@ -1093,7 +1183,7 @@ export function mount(stage) {
         scene.add(model.group);
         const tag = nameTag(displayName(d.n, d.ty), color); scene.add(tag);
         if (!remotes.has(pid) && remotes.size < 8 && players[0]) flash(players[0], '👋 ' + displayName(d.n, d.ty));
-        r = { model, tag, type: d.ty, color, name: cleanName(d.n), pos: new THREE.Vector3(...d.p), vel: new THREE.Vector3(), quat: new THREE.Quaternion(...d.q), tq: new THREE.Quaternion(...d.q), t: 0, d, smokeT: 0 };
+        r = { trail: PLANES[d.ty].kind === 'paper' ? makeTrails(model) : null, model, tag, type: d.ty, color, name: cleanName(d.n), pos: new THREE.Vector3(...d.p), vel: new THREE.Vector3(), quat: new THREE.Quaternion(...d.q), tq: new THREE.Quaternion(...d.q), t: 0, d, smokeT: 0 };
         remotes.set(pid, r);
       }
       if (cleanName(d.n) !== r.name) { scene.remove(r.tag); r.tag = nameTag(displayName(d.n, d.ty), color); scene.add(r.tag); r.name = cleanName(d.n); }
@@ -1119,6 +1209,7 @@ export function mount(stage) {
       r.quat.slerp(r.tq, 1 - Math.exp(-dt * 8));
       r.model.group.position.copy(r.pos); r.model.group.quaternion.copy(r.quat);
       r.model.group.visible = !r.d.cr;
+      if (r.trail) r.trail.update(r.model.group, dt, r.vel.lengthSq() > 4, players[0] && players[0].cam.position);
       const P = PLANES[r.type];
       r.tag.position.copy(r.pos).add(tv.set(0, P.span * 0.15 + 3, 0));
       const inp = Array.isArray(r.d.i) ? r.d.i : [0, 0, 0];
@@ -1244,7 +1335,7 @@ export function mount(stage) {
       for (const p of players) {
         handleEvents(p);
         helpers(p, dt);
-        if (p.s.crashed && p.crashAt && clock > p.crashAt) { p.crashAt = 0; respawn(p); }
+        if ((p.s.crashed || p.s.P.kind === 'paper') && p.crashAt && clock > p.crashAt) { p.crashAt = 0; respawn(p); }
       }
       if (missions && pressed.includes('KeyB')) missions.drop();
     } else if (S.phase === 'fly' && S.paused) pressed.includes('Escape') && pause(false);
@@ -1257,6 +1348,7 @@ export function mount(stage) {
       m.group.visible = !s.crashed;
       animatePlane(m, { roll: s.input.roll, pitch: s.input.pitch, yaw: s.input.yaw, flaps: s.flapPos / Math.max(1, s.P.flaps.length - 1), gear: s.gear, rpm: s.rpm, lights: true, landLight: s.landLight, t: clock, ab: s.ab, steer: s.steer }, dt);
       if (p.view === 'cockpit') p.cockpit.update(s, dt);
+      if (p.trail) p.trail.update(m.group, dt, !s.onGround, p.cam.position);
       p.tag.position.copy(s.pos).add(tv.set(0, s.P.span * 0.15 + 3, 0));
       updateCamera(p, dt);
       if (p.engine) p.engine.set(s.crashed ? 0 : s.rpm, s.speed, s.ab, p.view === 'cockpit');
@@ -1291,6 +1383,7 @@ export function mount(stage) {
     fx.update(dt, sky);
     renderer.toneMappingExposure = lerp(1.0, 1.4, sky.state.night) + sky.state.weather.haze * 0.1;
     if (sky.state.thunder) thunder(sky.state.thunder);
+    musicTick(dt);
     if (flying) rainSound(sky.state.weather.rain * (cams[0].position.y < 2200 ? 1 : 0.2));
     else rainSound(0);
 
@@ -1503,10 +1596,25 @@ export function mount(stage) {
       else if (!on && wakeLock) { wakeLock.release(); wakeLock = null; }
     } catch (e) { /* not supported */ }
   }
-  const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); };
+  const music = { el: null, vol: 0 };
+  function musicTick(dt) {
+    const want = S.phase === 'fly' && !S.paused && prefs.sound && document.visibilityState === 'visible' && !!players[0] && players[0].s.P.kind === 'paper';
+    if (want && !music.el) {
+      try { music.el = new Audio(new URL('./music/calm.mp3', import.meta.url).href); music.el.loop = true; music.el.volume = 0; music.el.preload = 'auto'; } catch (e) { return; }
+    }
+    if (!music.el) return;
+    music.vol += ((want ? 0.42 : 0) - music.vol) * Math.min(1, dt * (want ? 0.6 : 2));
+    music.el.volume = clamp(music.vol, 0, 1);
+    if (want && music.el.paused) music.el.play().catch(() => {});
+    if (!want && music.vol < 0.01 && !music.el.paused) music.el.pause();
+  }
+  // phones only start sound after a tap
+  const musicKick = () => { if (music.el && music.el.paused && music.vol > 0) music.el.play().catch(() => {}); };
+  addEventListener('pointerdown', musicKick); addEventListener('keydown', musicKick);
+  const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); if (music.el && document.visibilityState !== 'visible') music.el.pause(); };
   document.addEventListener('visibilitychange', onVisible);
 
-  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, missions, hostTest: async () => { const r = await createRoom(GAME, { state: 'fly' }); r.setMeta({ hostUid: r.uid }); goRoom(r, true); return r.code; }, joinTest: c => tryJoin(c), players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
+  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, missions, music, hostTest: async () => { const r = await createRoom(GAME, { state: 'fly' }); r.setMeta({ hostUid: r.uid }); goRoom(r, true); return r.code; }, joinTest: c => tryJoin(c), players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
 
   return () => {
     alive = false;
@@ -1515,6 +1623,8 @@ export function mount(stage) {
     try { if (missions) missions.dispose(); } catch (e) { /* */ }
     if (net.room) leaveRoom();
     removeEventListener('keydown', onKeyDown);
+    removeEventListener('pointerdown', musicKick); removeEventListener('keydown', musicKick);
+    if (music.el) { music.el.pause(); music.el.src = ''; }
     removeEventListener('keyup', onKeyUp);
     removeEventListener('blur', onBlur);
     removeEventListener('deviceorientation', onOrient);

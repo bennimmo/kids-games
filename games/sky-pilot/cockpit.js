@@ -16,6 +16,7 @@ const DIMS = {
 const kts = v => v * 1.944, ft = m => m * 3.281;
 
 export function buildCockpit(type, color) {
+  if (PLANES[type].kind === 'paper') return { group: new THREE.Group(), update() {} };   // sitting on the paper: nothing in the way
   const P = PLANES[type], d = DIMS[type];
   const [ex, ey, ez] = P.eye;
   const g = new THREE.Group();
