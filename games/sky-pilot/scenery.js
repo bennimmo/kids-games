@@ -3,7 +3,7 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import {
   AIRPORTS, TOWNS, VILLAGES, townMask, CARRIER, HARBOUR, HELIPADS, LANDMARKS, LAKE, ROADS, roadPath, runwayPoint, runwayLocal, apronSide, dirOf,
-  terrainHeight, terrainNormal, regionWeights, biomeAt, addRoof, surfaceAt, HALF, CELL, GRID, N,
+  terrainHeight, terrainNormal, regionWeights, biomeAt, addRoof, surfaceAt, HALF, CELL, GRID, N, cityRuns, AVE, aveClear, aveWorld,
 } from './island.js';
 import { rng, hash2, clamp, smooth, lerp } from './noise.js';
 import { buildPlane, paint } from './planes.js';
@@ -63,7 +63,7 @@ class Builder {
     for (let i = 0; i < 6; i++) { this.pos.push(...P[i]); this.nor.push(...n); this.uv.push(...U[i]); this.col.push(...col); }
   }
   // axis box at x,z (rotated rot), from y0 up h. uvScale: metres per texture repeat [u, v]
-  box(x, y0, z, w, h, d, rot, col = [1, 1, 1], us = [12, 12], top = true) {
+  box(x, y0, z, w, h, d, rot, col = [1, 1, 1], us = [12, 12], top = true, bottom = false) {
     const c = Math.cos(rot), s = Math.sin(rot);
     const P = (lx, ly, lz) => [x + lx * c + lz * s, y0 + ly, z - lx * s + lz * c];
     const N = (lx, lz) => [lx * c + lz * s, 0, -lx * s + lz * c];
@@ -74,6 +74,7 @@ class Builder {
     this.quad(P(hw, 0, hd), P(hw, 0, -hd), P(hw, h, -hd), P(hw, h, hd), N(1, 0), ru(d, 0), ru(h, 1), col);
     this.quad(P(-hw, 0, -hd), P(-hw, 0, hd), P(-hw, h, hd), P(-hw, h, -hd), N(-1, 0), ru(d, 0), ru(h, 1), col);
     if (top) this.quad(P(-hw, h, hd), P(hw, h, hd), P(hw, h, -hd), P(-hw, h, -hd), [0, 1, 0], 0.01, 0.01, col, 0.99, 0.99);
+    if (bottom) this.quad(P(-hw, 0, -hd), P(hw, 0, -hd), P(hw, 0, hd), P(-hw, 0, hd), [0, -1, 0], 0.01, 0.01, col, 0.99, 0.99);
   }
   // pitched roof along the width
   roof(x, y0, z, w, d, h, rot, col) {
@@ -473,6 +474,20 @@ export function createScenery(scene, sky, quality, dpr) {
       }
       if (run.length > 1) ribbon(run, city ? 14 : 8, 0.25, streets);
     }
+    // Sunny Town: keep the two avenues clear (push buildings back to line them, like a canyon)
+    const skyRects = [];
+    if (city) for (const run of cityRuns()) for (const p of run.pts) if (p.sky) {
+      const [la, lb] = run.axis ? [AVE.off, p.a] : [p.a, AVE.off];
+      for (const sd of [-1, 1]) skyRects.push(run.axis ? [la + sd * (AVE.half + 16), lb, 16, 16] : [la, lb + sd * (AVE.half + 16), 16, 16]);
+    }
+    const spot = (blx, blz, hw, hd) => {
+      if (!city) return [blx, blz];
+      const [px, pz] = aveClear(blx, blz, hw, hd);
+      if ((px && pz) || Math.abs(px) > 45 || Math.abs(pz) > 45) return null;
+      const nx = blx + px, nz = blz + pz;
+      if (skyRects.some(([x, z, w, d]) => Math.abs(nx - x) < w + hw + 3 && Math.abs(nz - z) < d + hd + 3)) return null;
+      return [nx, nz];
+    };
     let hospital = city, churchDone = !(t.kind === 'village' || t.kind === 'chalet');
     for (let lx = -reach + step / 2; lx < reach; lx += step) for (let lz = -reach + step / 2; lz < reach; lz += step) {
       const [x, z] = W(lx, lz);
@@ -482,7 +497,7 @@ export function createScenery(scene, sky, quality, dpr) {
       if (city) {
         if (Math.abs(lx) < 70 && Math.abs(lz) < 70) continue; // park
         const y0 = terrainHeight(x, z);
-        if (hospital && m > 0.35 && m < 0.6) {
+        if (hospital && m > 0.35 && m < 0.6 && spot(lx, lz, 40, 40) && !aveClear(lx, lz, 40, 40).some(v => v)) {
           hospital = false;
           building(x, z, y0, 80, 30, 80, t.rot, 'white', [1, 1, 1]);
           const hp = new THREE.Mesh(new THREE.CircleGeometry(14, 32).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: canvas(128, 128, g => { g.fillStyle = '#3c3c40'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#ffd400'; g.lineWidth = 6; g.beginPath(); g.arc(64, 64, 56, 0, 7); g.stroke(); g.fillStyle = '#fff'; g.font = '700 80px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('H', 64, 68); }), roughness: 0.9 }));
@@ -499,7 +514,9 @@ export function createScenery(scene, sky, quality, dpr) {
           for (let k = 0; k < n; k++) {
             const ox = (R() - 0.5) * 50, oz = (R() - 0.5) * 50, w = 26 + R() * 26, d = 26 + R() * 26;
             const h = 40 + R() * 150 * (1 - m * 1.6);
-            const [bx, bz] = W(lx + ox, lz + oz);
+            const sp = spot(lx + ox, lz + oz, w / 2, d / 2);
+            if (!sp) continue;
+            const [bx, bz] = W(sp[0], sp[1]);
             building(bx, bz, y0, w, h, d, t.rot, R.pick(['glass', 'glass', 'concrete']), [0.85 + R() * 0.15, 0.85 + R() * 0.15, 0.9 + R() * 0.1]);
             if (h > 90) townLights.push([bx, y0 + h + 3, bz, 1, 0.1, 0.1, 2, R()]);
             if (R() < 0.4) B('roof').box(bx, y0 + h, bz, w * 0.3, 4, d * 0.3, t.rot, [0.55, 0.55, 0.58]);
@@ -508,15 +525,19 @@ export function createScenery(scene, sky, quality, dpr) {
           // flats and shops
           for (let k = 0; k < 4; k++) {
             const ox = (k % 2 - 0.5) * 50 + (R() - 0.5) * 8, oz = (Math.floor(k / 2) - 0.5) * 50 + (R() - 0.5) * 8;
-            const [bx, bz] = W(lx + ox, lz + oz);
             if (R() < 0.15) continue;
-            building(bx, bz, y0, 26 + R() * 14, 10 + R() * 22, 22 + R() * 14, t.rot, R.pick(['concrete', 'brick', 'white', 'brick']), [0.88 + R() * 0.12, 0.88 + R() * 0.12, 0.88 + R() * 0.12]);
+            const fw = 26 + R() * 14, fh = 10 + R() * 22, fd = 22 + R() * 14, sp = spot(lx + ox, lz + oz, fw / 2, fd / 2);
+            if (!sp) continue;
+            const [bx, bz] = W(sp[0], sp[1]);
+            building(bx, bz, y0, fw, fh, fd, t.rot, R.pick(['concrete', 'brick', 'white', 'brick']), [0.88 + R() * 0.12, 0.88 + R() * 0.12, 0.88 + R() * 0.12]);
           }
         } else {
           // suburbs: houses with gardens
           for (let k = 0; k < 6; k++) {
             if (R() < 0.3) continue;
-            const [bx, bz] = W(lx + (k % 3 - 1) * 36 + (R() - 0.5) * 6, lz + (Math.floor(k / 3) - 0.5) * 50);
+            const sp = spot(lx + (k % 3 - 1) * 36 + (R() - 0.5) * 6, lz + (Math.floor(k / 3) - 0.5) * 50, 9, 9);
+            if (!sp) continue;
+            const [bx, bz] = W(sp[0], sp[1]);
             house(bx, bz, t.rot + (R() < 0.5 ? 0 : Math.PI / 2), 'cottage');
           }
         }
@@ -531,6 +552,38 @@ export function createScenery(scene, sky, quality, dpr) {
           house(bx, bz, t.rot + (R() < 0.5 ? 0 : Math.PI / 2), t.kind === 'village' ? 'cottage' : t.kind);
         }
         if (R() < 0.5) { const [sx, sz] = W(lx - step / 2 + 5, lz - step / 2 + 5); townLights.push([sx, terrainHeight(sx, sz) + 6, sz, 1, 0.75, 0.4, 1.2]); }
+      }
+    }
+  }
+  // Sunny Town avenues: glass sky bridges to fly under (between two towers) and a big gate at each end
+  {
+    const t = TOWNS[0];
+    for (const run of cityRuns()) {
+      const P = (along, side) => run.axis ? aveWorld(t, AVE.off + side, along) : aveWorld(t, along, AVE.off + side);
+      const span = (w, d) => run.axis ? [w, d] : [d, w];          // [local x size, local z size] for something across the avenue
+      for (const p of run.pts) if (p.sky) {
+        const deck = p.y + p.R + 7;
+        for (const sd of [-1, 1]) {
+          const [x, z] = P(p.a, sd * (AVE.half + 16)), y0 = terrainHeight(x, z);
+          const h = deck + 8 + 25 + R() * 70 - y0;
+          building(x, z, y0, 32, h, 32, t.rot, 'glass', [0.8 + R() * 0.2, 0.9, 1]);
+          townLights.push([x, y0 + h + 3, z, 1, 0.1, 0.1, 2, R()]);
+        }
+        const [sx, sz] = span(AVE.half * 2 + 2, 12);
+        B('glass').box(p.x, deck, p.z, sx, 6, sz, t.rot, [0.7, 0.95, 1], [24, 14], true, true);
+        const [fx, fz] = span(AVE.half * 2 + 2, 13);
+        B('concrete').box(p.x, deck - 1.2, p.z, fx, 1.2, fz, t.rot, [0.95, 0.4, 0.3], [12, 12], true, true);
+        for (const sd of [-0.6, 0, 0.6]) { const [lx, lz] = P(p.a, sd * AVE.half); townLights.push([lx, deck - 1.5, lz, 1, 0.85, 0.5, 1.4]); }
+      }
+      for (const p of [run.pts[0], run.pts[run.pts.length - 1]]) {
+        const top = p.y + p.R + 16;
+        for (const sd of [-1, 1]) {
+          const [x, z] = P(p.a, sd * (AVE.half + 5)), y0 = terrainHeight(x, z) - 0.5;
+          building(x, z, y0, 8, top - y0, 8, t.rot, 'concrete', [0.95, 0.35, 0.3]);
+        }
+        const [bx, bz] = span(AVE.half * 2 + 18, 9);
+        B('concrete').box(p.x, top, p.z, bx, 6, bz, t.rot, [1, 0.8, 0.25], [12, 12], true, true);
+        for (const sd of [-0.7, -0.35, 0, 0.35, 0.7]) { const [lx, lz] = P(p.a, sd * AVE.half); townLights.push([lx, top - 0.5, lz, 1, 0.9, 0.4, 1.6]); }
       }
     }
   }

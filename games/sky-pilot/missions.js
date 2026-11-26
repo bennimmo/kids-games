@@ -12,7 +12,7 @@
 //   others() -> [{ uid, name, color, ms }], myName(), placeMe(spot, type?), flash(text), sound, invite(), hostName() }
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { PLANES } from './planes.js';
-import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt } from './island.js';
+import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt, solidHeight, cityRuns } from './island.js';
 import { rng, clamp } from './noise.js';
 
 export const MISSIONS = [
@@ -76,6 +76,19 @@ export function bridgeSpots() {
   for (const b of all) if (!BRIDGES.some(o => Math.hypot(o.x - b.x, o.z - b.z) < 350)) BRIDGES.push(b);
   return BRIDGES;
 }
+// things to fly through: under a bridge (one hoop) or down a city avenue (a line of hoops, either way)
+let FEATS = null;
+export function features() {
+  if (FEATS) return FEATS;
+  FEATS = [...cityRuns().map(r => ({ city: true, run: r })), ...bridgeSpots().map(b => ({ bridge: b }))];
+  return FEATS;
+}
+// ways in: [{ pts, n:{x,z} }] (n = direction of travel)
+function waysIn(f) {
+  if (f.bridge) { const b = f.bridge; return [{ pts: [b], n: { x: b.nx, z: b.nz } }, { pts: [b], n: { x: -b.nx, z: -b.nz } }]; }
+  const r = f.run, l = Math.hypot(r.dir.x, r.dir.z), n = { x: r.dir.x / l, z: r.dir.z / l };
+  return [{ pts: r.pts, n }, { pts: [...r.pts].reverse(), n: { x: -n.x, z: -n.z } }];
+}
 const segDist = (px, pz, a, b) => {
   const vx = b.x - a.x, vz = b.z - a.z, t = clamp(((px - a.x) * vx + (pz - a.z) * vz) / (vx * vx + vz * vz || 1), 0, 1);
   return Math.hypot(px - a.x - vx * t, pz - a.z - vz * t);
@@ -100,15 +113,19 @@ export function makeCourse(seed) {
   const pool = places();
   const r = rng(seed);
   let best = null;
+  const sunny = pool.find(p => p.name === '🏘️ ' + TOWNS[0].name);
+  const wantCity = r() < 0.55;                                    // about half the races go through the city
+  const near = sunny && wantCity ? pool.filter(p => { const d = Math.hypot(p.x - sunny.x, p.z - sunny.z); return d >= 2300 && d <= 8500; }) : [];
   for (let attempt = 0; attempt < 60; attempt++) {
     const used = new Set(), way = [];
-    let cur = r.pick(pool); used.add(cur); way.push(cur);
+    const viaCity = near.length && attempt % 2 === 0;           // half the tries go through the city
+    let cur = viaCity ? r.pick(near) : r.pick(pool); used.add(cur); way.push(cur);
     let dir = null, ok = true;
-    for (let leg = 0; leg < 3; leg++) {
-      const cand = pool.filter(p => {
+    for (let leg = 0; leg < (viaCity ? 2 : 3); leg++) {
+      const cand = viaCity && leg === 0 ? [sunny] : pool.filter(p => {
         if (used.has(p)) return false;
         const d = Math.hypot(p.x - cur.x, p.z - cur.z);
-        if (d < 2300 || d > 5200) return false;
+        if (d < 2300 || d > (viaCity ? 8500 : 5200)) return false;
         if (!dir) return true;
         const a = Math.atan2(p.z - cur.z, p.x - cur.x) - dir;
         return Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 105 * D;
@@ -121,9 +138,9 @@ export function makeCourse(seed) {
     if (!ok) continue;
     // smooth path through the places, a ring every ~600 m
     const pts = [];
-    const W = [{ x: 2 * way[0].x - way[1].x, z: 2 * way[0].z - way[1].z }, ...way, { x: 2 * way[3].x - way[2].x, z: 2 * way[3].z - way[2].z }];
+    const W = [{ x: 2 * way[0].x - way[1].x, z: 2 * way[0].z - way[1].z }, ...way, { x: 2 * way.at(-1).x - way.at(-2).x, z: 2 * way.at(-1).z - way.at(-2).z }];
     for (let i = 1; i < W.length - 2; i++) for (let k = 0; k < 40; k++) pts.push(catmull(W[i - 1], W[i], W[i + 1], W[i + 2], k / 40));
-    pts.push({ x: way[3].x, z: way[3].z });
+    pts.push({ x: way.at(-1).x, z: way.at(-1).z });
     const rings = [];
     let acc = 0;
     for (let i = 1; i < pts.length; i++) {
@@ -131,17 +148,39 @@ export function makeCourse(seed) {
       if (acc >= 450) { acc = 0; rings.push({ x: pts[i].x, z: pts[i].z }); }
     }
     if (rings.length < 15 || rings.length > 32) continue;
+    rings.forEach(g => { delete g.city; });
     rings.forEach(g => { delete g.bridge; });
     // height: just above the ground under each ring (the biggest ring clears it)
-    const gnd = (x, z) => { let m = 0; for (const [dx, dz] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40]]) m = Math.max(m, terrainHeight(x + dx, z + dz)); return m; };
+    const gnd = (x, z) => { let m = 0; for (const [dx, dz] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40]]) m = Math.max(m, solidHeight(x + dx, z + dz)); return m; };
     rings.forEach(g => { g.y = g.floor = gnd(g.x, g.z) + 46; });
+    // through Sunny Town? then the rings go down the avenue between the towers (whichever way fits best)
+    let city = 0;
+    {
+      const t = TOWNS[0];
+      let ci = -1, cd = 1e9;
+      rings.forEach((g, i) => { const d = Math.hypot(g.x - t.x, g.z - t.z); if (d < cd) { cd = d; ci = i; } });
+      if (cd < 700 && ci >= 2 && ci <= rings.length - 3) {
+        const cx = rings[ci + 1].x - rings[ci - 1].x, cz = rings[ci + 1].z - rings[ci - 1].z, cl = Math.hypot(cx, cz) || 1;
+        let way = null, wd = -2;
+        for (const f of features()) if (f.city) for (const w of waysIn(f)) { const d = (w.n.x * cx + w.n.z * cz) / cl; if (d > wd) { wd = d; way = w; } }
+        const P = way.pts, A = P[0], Z = P[P.length - 1];
+        // drop the rings over the town, keep the ones before the way in and after the way out
+        let i0 = ci, i1 = ci;
+        while (i0 > 0 && Math.hypot(rings[i0].x - t.x, rings[i0].z - t.z) < Math.hypot(A.x - t.x, A.z - t.z) + 250) i0--;
+        while (i1 < rings.length - 1 && Math.hypot(rings[i1].x - t.x, rings[i1].z - t.z) < Math.hypot(Z.x - t.x, Z.z - t.z) + 250) i1++;
+        if (i0 >= 1 && i1 <= rings.length - 2) {
+          rings.splice(i0 + 1, i1 - i0 - 1, ...P.map(p => ({ x: p.x, z: p.z, y: p.y, floor: p.y, city: way.n, R: p.R })));
+          city = 1;
+        }
+      }
+    }
     // a bridge near the course? put a ring under it (the rings either side come down to meet it)
     let added = 0;
     for (const b of bridgeSpots()) {
       if (added >= 2) break;
       let bi = -1, bd = 1e9;
       for (let i = 0; i < rings.length - 1; i++) { const d = segDist(b.x, b.z, rings[i], rings[i + 1]); if (d < bd) { bd = d; bi = i; } }
-      if (bi < 0 || bd > 550 || rings[bi].bridge || rings[bi + 1].bridge) continue;
+      if (bi < 0 || bd > 550 || rings[bi].bridge || rings[bi + 1].bridge || rings[bi].city || rings[bi + 1].city) continue;
       if (Math.max(rings[bi].floor, rings[bi + 1].floor) - b.y > 60) continue;
       rings.splice(bi + 1, 0, { x: b.x, z: b.z, y: b.y, floor: b.y, bridge: b });
       added++;
@@ -151,23 +190,26 @@ export function makeCourse(seed) {
       for (let i = 1; i < rings.length; i++) {
         const a = rings[i - 1], b = rings[i];
         let need = 0;
-        for (let q = 1; q < 12; q++) { const t = q / 12, y = a.y + (b.y - a.y) * t; need = Math.max(need, terrainHeight(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t) + 14 - y); }
-        if (need > 0) { if (!a.bridge) a.y += need; if (!b.bridge) b.y += need; }
+        if (a.city && b.city) continue;                             // the avenue is clear
+        for (let q = 1; q < 12; q++) { const t = q / 12, y = a.y + (b.y - a.y) * t; need = Math.max(need, solidHeight(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t) + 14 - y); }
+        if (need > 0) { if (!a.bridge && !a.city) a.y += need; if (!b.bridge && !b.city) b.y += need; }
       }
-      for (let i = rings.length - 2; i >= 0; i--) if (!rings[i].bridge) rings[i].y = Math.max(rings[i].y, rings[i + 1].y - 45);
-      for (let i = 1; i < rings.length; i++) if (!rings[i].bridge) rings[i].y = Math.max(rings[i].y, rings[i - 1].y - 70);
+      const fixed = g => g.bridge || g.city;
+      for (let i = rings.length - 2; i >= 0; i--) if (!fixed(rings[i])) rings[i].y = Math.max(rings[i].y, rings[i + 1].y - 45);
+      for (let i = 1; i < rings.length; i++) if (!fixed(rings[i])) rings[i].y = Math.max(rings[i].y, rings[i - 1].y - 70);
     }
     const maxY = Math.max(...rings.map(g => g.y));
     const nb = rings.filter(g => g.bridge).length;
-    const score = (maxY > 600 ? 1000 : 0) + Math.abs(rings.length - 22) * 0.5 - nb * 6;      // courses with a bridge win
+    const score = (maxY > 600 ? 1000 : 0) + Math.abs(rings.length - 30) * 0.3 - nb * 6 - city * (wantCity ? 10 : 0);      // courses with a bridge and the city win
     if (!best || score < best.score) best = { score, rings, way };
-    if (score < -4) break;
+    if (score < -12) break;
   }
   const rings = best.rings;
   rings.forEach((g, i) => {
     const a = rings[Math.max(0, i - 1)], b = rings[Math.min(rings.length - 1, i + 1)];
     let n = new THREE.Vector3(b.x - a.x, (b.y - a.y) * 0.5, b.z - a.z).normalize();
     if (g.bridge) { const sg = n.x * g.bridge.nx + n.z * g.bridge.nz >= 0 ? 1 : -1; n = new THREE.Vector3(g.bridge.nx * sg, 0, g.bridge.nz * sg); g.Rmax = g.bridge.R; }
+    if (g.city) { n = new THREE.Vector3(g.city.x, (b.y - a.y) * 0.002, g.city.z).normalize(); g.Rmax = g.R + 2; delete g.R; }
     g.c = new THREE.Vector3(g.x, g.y, g.z); g.n = n;
   });
   return { rings, way: best.way };
@@ -385,15 +427,18 @@ export function createMissions(ctx) {
     run.prng = r;
     // start low over the forests and foothills, where there's lots to fly around
     let sx = LAKE.x, sz = LAKE.z, sh = 0;
-    for (let i = 0; i < 300; i++) {
-      const x = r.range(-12000, 9000), z = r.range(-9000, 9000), h = terrainHeight(x, z), b = biomeAt(x, z);
+    const st = TOWNS[0];
+    for (let i = 0; i < 600; i++) {
+      // first try: hills a few km from Sunny Town, so the city comes along soon
+      const a = r() * Math.PI * 2, dd = r.range(2500, 5000);
+      const x = i < 300 ? st.x + Math.cos(a) * dd : r.range(-12000, 9000), z = i < 300 ? st.z + Math.sin(a) * dd : r.range(-9000, 9000), h = terrainHeight(x, z), b = biomeAt(x, z);
       if ((b === 'forest' || b === 'mountain') && h > 30 && h < 450) { sx = x; sz = z; sh = r() * Math.PI * 2; break; }
     }
     let top = 0;
     for (const [dx, dz] of [[0, 0], [100, 0], [-100, 0], [0, 100], [0, -100]]) top = Math.max(top, terrainHeight(sx + dx, sz + dz));
     run.visited = new Map();
     run.cur = { x: sx, z: sz, y: Math.max(0, top) + 70, hdg: sh };
-    run.usedB = new Set(); run.bridge = null;
+    run.usedB = new Map(); run.feat = null;
     run.hoops = []; run.dist = 0; run.hpts = 0;
     run.mat = hoopMats(tex.target);
     run.geo = { torus: new THREE.TorusGeometry(1, 0.08, 8, 40), disc: new THREE.CircleGeometry(1, 40) };
@@ -411,7 +456,7 @@ export function createMissions(ctx) {
     const r = run.prng, c = run.cur, easy = ctx.easy();
     const i = run.hoops.length;
     const R = (easy ? 30 : 22) * Math.max(0.75, 1 - i * 0.004);
-    const groundAt = (x, z) => Math.max(0, terrainHeight(x, z), terrainHeight(x + 15, z), terrainHeight(x - 15, z), terrainHeight(x, z + 15), terrainHeight(x, z - 15));
+    const groundAt = (x, z) => Math.max(solidHeight(x, z), solidHeight(x + 15, z), solidHeight(x - 15, z), solidHeight(x, z + 15), solidHeight(x, z - 15));
     // hoop bottom just above the ground under it, and the straight line from the last hoop clear of the hills
     const floorOf = (top, local) => Math.max(local + R + (easy ? 5 : 3), top + 10);
     const away = Math.hypot(c.x, c.z - 1500) > 9500 || terrainHeight(c.x, c.z) < 0.3;
@@ -424,49 +469,61 @@ export function createMissions(ctx) {
       run.hoops.push(g);
       return g;
     };
-    // a bridge ahead? head for it and fly underneath
-    if (!run.bridge && i > 2) for (const b of bridgeSpots()) {
-      if (run.usedB.has(b)) continue;
-      const d = Math.hypot(b.x - c.x, b.z - c.z);
-      if (d < 300 || d > 1800) continue;
-      const hb = Math.atan2(b.x - c.x, -(b.z - c.z));
-      if (Math.abs(Math.atan2(Math.sin(hb - c.hdg), Math.cos(hb - c.hdg))) > 1.3) continue;
-      if (Math.abs(((b.x - c.x) * b.nx + (b.z - c.z) * b.nz) / d) < 0.45) continue;      // need to come at it across, not along it
-      run.bridge = b; break;
-    }
-    if (run.bridge) {
-      const b = run.bridge, d = Math.hypot(b.x - c.x, b.z - c.z);
-      const sg = (b.x - c.x) * b.nx + (b.z - c.z) * b.nz >= 0 ? 1 : -1, nx = b.nx * sg, nz = b.nz * sg;
-      if (d <= PAPER.gap * 1.35) {
-        run.usedB.add(b); run.bridge = null;
-        const a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(b.x, b.y, b.z);
-        return push({ c: cc, n: new THREE.Vector3(nx, 0, nz).add(cc.clone().sub(a).normalize()).normalize(), R: b.R, bridge: true });
+    const featHoop = F => {
+      const p = F.pts[F.j], a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(p.x, p.y, p.z);
+      const n = F.j === 0 ? new THREE.Vector3(F.n.x, 0, F.n.z).add(cc.clone().sub(a).normalize()).normalize() : new THREE.Vector3(F.n.x, 0, F.n.z);
+      const hr = F.f.city ? (easy ? 16 : 13) : p.R;
+      F.j++;
+      if (F.j >= F.pts.length) { run.usedB.set(F.f, run.hoops.length); run.feat = null; }
+      return push({ c: cc, n, R: hr, bridge: !!F.f.bridge, city: !!F.f.city });
+    };
+    const used = f => run.usedB.has(f) && (!f.city || i - run.usedB.get(f) < 45);   // the city can come round again
+    // flying down a city avenue: the next hoop along it
+    const f0 = run.feat;
+    if (f0 && f0.j > 0) return featHoop(f0);
+    // a bridge or a city avenue ahead? head for it and fly through
+    if (!f0 && i > 2) pick: for (const f of features()) {
+      if (used(f)) continue;
+      for (const w of waysIn(f)) {
+        const b = w.pts[0], d = Math.hypot(b.x - c.x, b.z - c.z);
+        if (d < 300 || d > (f.city ? 2600 : 1800)) continue;
+        const hb = Math.atan2(b.x - c.x, -(b.z - c.z));
+        if (Math.abs(Math.atan2(Math.sin(hb - c.hdg), Math.cos(hb - c.hdg))) > 1.3) continue;
+        if (((b.x - c.x) * w.n.x + (b.z - c.z) * w.n.z) / d < 0.45) continue;      // need to come at it from the front
+        run.feat = { f, pts: w.pts, n: w.n, j: 0 }; break pick;
       }
-      // line up: aim at a point just before the bridge, coming straight at it
+    }
+    if (run.feat) {
+      const F = run.feat, b = F.pts[0], d = Math.hypot(b.x - c.x, b.z - c.z), nx = F.n.x, nz = F.n.z;
+      if (d <= PAPER.gap * 1.35) return featHoop(F);
+      // line up: aim at a point just before it, coming straight at it
       const ax = b.x - nx * PAPER.gap, az = b.z - nz * PAPER.gap;
       let h = Math.atan2(ax - c.x, -(az - c.z));
       h = c.hdg + clamp(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)), -0.6, 0.6);
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let q = 0; q <= 8; q++) top = Math.max(top, terrainHeight(c.x + (x - c.x) * q / 8, c.z + (z - c.z) * q / 8));
+      for (let q = 0; q <= 8; q++) top = Math.max(top, solidHeight(c.x + (x - c.x) * q / 8, c.z + (z - c.z) * q / 8));
       const fl = floorOf(top, groundAt(x, z));
       const y = Math.max(fl, c.y + (b.y - c.y) * clamp(PAPER.gap / d, 0, 1));
       if (y - c.y < PAPER.rise + 5 && y < b.y + 120) {
         const a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(x, y, z);
         return push({ c: cc, n: cc.clone().sub(a).normalize(), R });
       }
-      run.bridge = null;                                          // hills in the way: forget it this time
+      run.feat = null;                                            // hills in the way: forget it this time
     }
-    // the nearest bridge we haven't been under pulls the course gently towards it
-    let lure = null, ld = 7000;
-    for (const b of bridgeSpots()) { if (run.usedB.has(b)) continue; const d = Math.hypot(b.x - c.x, b.z - c.z); if (d < ld) { ld = d; lure = b; } }
+    // the nearest bridge or avenue we haven't been through pulls the course gently towards it (the city most of all)
+    let lure = null, ld = 7000, lw = 0;
+    for (const f of features()) {
+      if (used(f)) continue;
+      for (const w of waysIn(f)) { const b = w.pts[0], d = Math.hypot(b.x - c.x, b.z - c.z) * (f.city ? 0.35 : 1); if (d < ld) { ld = d; lure = b; lw = f.city ? 32 : 24; } }
+    }
     const lureH = lure ? Math.atan2(lure.x - c.x, -(lure.z - c.z)) : 0;
     const look = (h, wide) => {
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
       for (let q = 0; q <= 8; q++) for (const sd of [-12, 0, 12]) {
         const px = c.x + (x - c.x) * q / 8 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 8 + Math.sin(h) * sd;
-        top = Math.max(top, terrainHeight(px, pz));
+        top = Math.max(top, solidHeight(px, pz));
       }
       top = Math.max(top, 0);
       const local = groundAt(x, z), fl = floorOf(top, local);
@@ -474,12 +531,12 @@ export function createMissions(ctx) {
       for (let q = 2; q <= 6; q++) ahead = Math.max(ahead, terrainHeight(c.x + Math.sin(h) * PAPER.gap * q, c.z - Math.cos(h) * PAPER.gap * q));
       const want = c.y - dropFor(fl), climb = Math.max(0, fl - want), yEst = Math.max(want, fl);
       // walls either side = flying through a gap or a valley: fun!
-      const wl = terrainHeight(x + Math.cos(h) * 170, z + Math.sin(h) * 170), wr = terrainHeight(x - Math.cos(h) * 170, z - Math.sin(h) * 170);
+      const wl = solidHeight(x + Math.cos(h) * 170, z + Math.sin(h) * 170), wr = solidHeight(x - Math.cos(h) * 170, z - Math.sin(h) * 170);
       const gap = Math.min(wl, wr) > yEst + 25 ? -35 : Math.max(wl, wr) > yEst + 25 ? -12 : 0;
       const turn = Math.abs(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)));
       const b = biomeAt(x, z);
       const seen = run.visited.get(Math.round(x / 400) + ',' + Math.round(z / 400)) || 0;
-      const pull = lure ? -24 * Math.cos(h - lureH) : 0;
+      const pull = lure ? -lw * Math.cos(h - lureH) : 0;
       const score = seen * 25 + climb * 4 + turn * (wide ? 5 : 15) + gap + pull + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 650) * 0.6
         + (b === 'sea' ? 300 : b === 'forest' || b === 'mountain' ? -10 : 0) + r() * 12;
       return { h, x, z, fl, climb, score };
@@ -936,9 +993,11 @@ export function createMissions(ctx) {
     _R: () => run && run.R,
     _fires: () => run && run.fires && { tank: run.tank, f: run.fires.map((f, i) => ({ x: Math.round(f.x), z: Math.round(f.z), y: Math.round(f.y), hp: run.hp[i] })) },
     _bridge: () => run && (run.rings || run.hoops || []).find(g => g.bridge),
+    _city: () => run && (run.rings || run.hoops || []).find(g => g.city),
     _setTank: v => { if (run) run.tank = v; },
     _count: () => run && run.rings ? run.rings.length : 0,
-    _jump: k => { if (run && run.rings) { run.k = k; highlightRing(); } },
+    _jump: k => { if (run && run.rings) { run.k = k; highlightRing(); } else if (run && run.hoops) { while (run.hoops.length < k + 9) paperGen(); run.k = k; paperFill(); } },
+    _hoops: () => run && run.hoops,
     dispose() { endRun(); drops.forEach(d => scene.remove(d.sp)); box.remove(); },
   };
 }

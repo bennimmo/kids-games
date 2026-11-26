@@ -321,6 +321,52 @@ function roofAt(x, z) {
   return null;
 }
 
+// highest solid thing at a point: ground or a building roof
+export function solidHeight(x, z) {
+  const rf = roofAt(x, z), t = Math.max(0, terrainHeight(x, z));
+  return rf ? Math.max(rf.top, t) : t;
+}
+
+// ---------------------------------------------------------------- Sunny Town avenues: a wide clear canyon between the towers to fly down
+// two straight avenues through the middle of the city (local x and local z), crossing at the park
+export const AVE = { off: 15, half: 34, gap: 150 };   // local offset of the avenue line, clear half width, hoop spacing
+export function aveLocal(t, x, z) { const c = Math.cos(t.rot), s = Math.sin(t.rot), dx = x - t.x, dz = z - t.z; return [dx * c - dz * s, dx * s + dz * c]; }
+export function aveWorld(t, lx, lz) { const c = Math.cos(t.rot), s = Math.sin(t.rot); return [t.x + lx * c + lz * s, t.z - lx * s + lz * c]; }
+let RUNS = null;
+// [{ axis, dir:{x,z}, pts:[{x, y, z, R, sky, a}] }]: hoop spots down each avenue, low over the street
+export function cityRuns() {
+  if (RUNS) return RUNS;
+  const t = TOWNS[0];
+  RUNS = [0, 1].map(axis => {
+    const at = a => aveWorld(t, axis ? AVE.off : a, axis ? a : AVE.off);
+    const ok = a => { const [x, z] = at(a); return townMask(t, x, z) < 0.86 && terrainHeight(x, z) > 2; };
+    let lo = AVE.off, hi = AVE.off;
+    while (ok(lo - AVE.gap)) lo -= AVE.gap;
+    while (ok(hi + AVE.gap)) hi += AVE.gap;
+    const pts = [];
+    let wv = 1;
+    for (let a = lo, i = 0; a <= hi + 1; a += AVE.gap, i++) {
+      const [cx, cz] = at(a), m = townMask(t, cx, cz);
+      const sky = m < 0.7 && Math.abs(a - AVE.off) > 160 && i % 2 === 1;
+      // hoops weave a little from side to side (centred under the sky bridges)
+      const off = sky || i === 0 || a + AVE.gap > hi + 1 ? 0 : (wv = -wv) * 11;
+      const [x, z] = aveWorld(t, axis ? AVE.off + off : a, axis ? a : AVE.off + off), g = terrainHeight(x, z);
+      pts.push({ x, z, y: g + 21, R: 13, a, sky });
+    }
+    const [x0, z0] = at(0), [x1, z1] = at(1);
+    return { axis, dir: { x: x1 - x0, z: z1 - z0 }, pts };
+  });
+  return RUNS;
+}
+// is a building (local centre lx,lz, half sizes hw,hd) in the way of an avenue? returns how far to push it along local z / x
+export function aveClear(lx, lz, hw, hd) {
+  let px = 0, pz = 0;
+  const need = AVE.half;
+  if (Math.abs(lz - AVE.off) < need + hd) pz = (lz >= AVE.off ? 1 : -1) * (need + hd) + AVE.off - lz;
+  if (Math.abs(lx - AVE.off) < need + hw) px = (lx >= AVE.off ? 1 : -1) * (need + hw) + AVE.off - lx;
+  return [px, pz];
+}
+
 // ---------------------------------------------------------------- what's under a point (physics)
 // returns { h, kind } kind: 'water' | 'land' | 'runway' | 'grass' | 'deck' | 'roof'
 const under = { h: 0, kind: 'land', ap: null };
