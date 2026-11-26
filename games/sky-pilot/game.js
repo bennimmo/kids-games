@@ -282,7 +282,7 @@ export function mount(stage) {
     if (a === 180 || a === -180) return [-g, -b];
     return [g, b];
   }
-  const onOrient = e => { if (e.beta == null) return; tilt.ok = true; [tilt.steer, tilt.pitch] = tiltAxes(e); if (tilt.base == null) tilt.base = tilt.pitch; };
+  const onOrient = e => { if (e.beta == null) return; tilt.ok = true; [tilt.steer, tilt.pitch] = tiltAxes(e); if (tilt.base == null) { tilt.base = tilt.pitch; tilt.sbase = tilt.steer; } };
   function askTilt() {
     if (!TOUCH || tilt.listening || typeof DeviceOrientationEvent === 'undefined') return;
     const listen = () => { tilt.listening = true; addEventListener('deviceorientation', onOrient); };
@@ -333,7 +333,7 @@ export function mount(stage) {
     if (T && T.stick.active) analog = { roll: T.stick.x, pitch: -T.stick.y * inv };
     if (T && T.brake) brake = true;
     if (T && T.actions.length) { actions.push(...T.actions); T.actions.length = 0; }
-    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer, 3, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) };
+    if (tiltActive() && !(T && T.stick.active)) analog = { roll: dead(tilt.steer - (tilt.sbase || 0), 5, 25), pitch: dead(tilt.pitch - tilt.base, 4, 22) };
     // smooth keys, take analog straight
     const ease = (cur, tgt) => cur + clamp(tgt - cur, -dt * (tgt === 0 ? 5 : 3), dt * (tgt === 0 ? 5 : 3));
     const inp = s.input;
@@ -509,6 +509,7 @@ export function mount(stage) {
       players.push(p);
     }
     S.phase = 'fly'; S.paused = false;
+    if (tilt.ok) { tilt.base = tilt.pitch; tilt.sbase = tilt.steer; }    // "level" = however you're holding it now
     buildHud();
     layout();
     for (const p of players) p.engine = makeEngine(p.type, players.length);
@@ -953,7 +954,7 @@ export function mount(stage) {
         b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); T.brake = true; b.classList.add('on'); });
         for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { T.brake = false; b.classList.remove('on'); });
       } else if (a === 'tilt') {
-        b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (!tilt.listening) { askTilt(); prefs.tilt = true; } else prefs.tilt = !prefs.tilt; tilt.base = tilt.pitch; savePrefs(); sound.pop(); });
+        b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (!tilt.listening) { askTilt(); prefs.tilt = true; } else prefs.tilt = !prefs.tilt; tilt.base = tilt.pitch; tilt.sbase = tilt.steer; savePrefs(); sound.pop(); });
       } else b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); T.actions.push(a); sound.tok(); });
     });
   }

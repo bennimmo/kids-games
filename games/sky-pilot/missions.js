@@ -167,7 +167,8 @@ function landSpot(round, seed, idx, n, type, easy) {
 function hoopMats(tex) {
   const ring = (color, glow) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: glow, roughness: 0.45, metalness: 0.1 });
   const disc = op => new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide });
-  return { next: ring(0xffd54f, 0.75), far: ring(0xe8eef5, 0.25), finish: ring(0x66ff88, 0.6), discNext: disc(0.5), discFar: disc(0.14) };
+  const ghost = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false });
+  return { next: ring(0xffd54f, 0.75), far: ghost, finish: ring(0x66ff88, 0.6), discNext: disc(0.55), discFar: disc(0) };
 }
 
 // ================================================================= controller
@@ -176,7 +177,11 @@ export function createMissions(ctx) {
   const box = document.createElement('div');
   box.className = 'sp-mis';
   box.innerHTML = `<div class="sp-mpanel"><div class="sp-mtitle"></div><div class="sp-mline"></div>
-      <div class="sp-mgo"><i class="sp-marrow">⬆️</i><span class="sp-mdist"></span></div><div class="sp-mboard"></div></div>
+      <div class="sp-mboard"></div></div>
+    <div class="sp-mgo"><div class="sp-mtilt"><svg class="sp-marrow" viewBox="0 0 100 100" aria-hidden="true">
+      <defs><linearGradient id="spag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset="1" stop-color="#bfe6ff" stop-opacity=".55"/></linearGradient></defs>
+      <path d="M50 6 L90 86 L50 66 L10 86 Z" fill="url(#spag)" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M50 6 L50 66 L10 86 Z" fill="#0b2a4a" opacity=".18"/></svg></div><span class="sp-mdist"></span></div>
     <div class="sp-mcount"></div><div class="sp-mcard"></div><div class="sp-mov"></div>`;
   ctx.root.insertBefore(box, ctx.before || null);
   const q = s => box.querySelector(s);
@@ -270,7 +275,7 @@ export function createMissions(ctx) {
       const torus = new THREE.Mesh(torusG, i === run.rings.length - 1 ? run.mat.finish : run.mat.far);
       const disc = new THREE.Mesh(discG, run.mat.discFar); disc.renderOrder = 8;
       grp.add(torus, disc);
-      grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).add(g.n)); grp.scale.setScalar(R);
+      grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).sub(g.n)); /* target faces the pilot, numbers read the right way */ grp.scale.setScalar(R);
       run.group.add(grp); g.obj = grp; g.torus = torus; g.disc = disc;
     });
     highlightRing();
@@ -291,9 +296,10 @@ export function createMissions(ctx) {
   function highlightRing() {
     run.rings.forEach((g, i) => {
       const last = i === run.rings.length - 1;
-      g.obj.visible = i >= run.k;
-      g.torus.material = i === run.k ? (last ? run.mat.finish : run.mat.next) : last ? run.mat.finish : run.mat.far;
-      g.disc.material = i === run.k ? run.mat.discNext : run.mat.discFar;
+      g.obj.visible = i === run.k || i === run.k + 1;          // the next ring, and a faint outline of the one after
+      g.torus.material = i === run.k ? (last ? run.mat.finish : run.mat.next) : run.mat.far;
+      g.torus.renderOrder = i === run.k ? 0 : 8;
+      g.disc.material = run.mat.discNext; g.disc.visible = i === run.k;
     });
   }
   function updateRings(dt, p) {
@@ -348,6 +354,9 @@ export function createMissions(ctx) {
     const c0 = run.cur, n2 = run.who.length, side = (run.idx - (n2 - 1) / 2) * 30;
     run.spot = { x: c0.x - Math.cos(c0.hdg) * side, z: c0.z - Math.sin(c0.hdg) * side, y: c0.y + 10, hdg: c0.hdg, air: true, speed: 24 };
     paperFill();
+    const h0 = run.hoops[0];
+    run.spot.hdg = hdgOf(h0.c.x - run.spot.x, h0.c.z - run.spot.z);            // facing the first hoop
+    run.spot.y = Math.max(run.spot.y, h0.c.y + 8);
     if (run.part) ctx.placeMe(run.spot, 'paper');
     run.prev = ctx.me().s.pos.clone();
   }
@@ -405,14 +414,14 @@ export function createMissions(ctx) {
   function paperFill() {
     while (run.hoops.length < run.k + 9) paperGen();
     run.hoops.forEach((g, i) => {
-      const want = i >= run.k && i < run.k + 9;
+      const want = i === run.k || i === run.k + 1;            // the next hoop, and a faint outline of the one after
       if (want && !g.obj) {
         const grp = new THREE.Group();
         g.torus = new THREE.Mesh(run.geo.torus, run.mat.far); g.disc = new THREE.Mesh(run.geo.disc, run.mat.discFar); g.disc.renderOrder = 8;
-        grp.add(g.torus, g.disc); grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).add(g.n)); grp.scale.setScalar(g.R);
+        grp.add(g.torus, g.disc); grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).sub(g.n)); /* target faces the pilot, numbers read the right way */ grp.scale.setScalar(g.R);
         run.group.add(grp); g.obj = grp;
       } else if (!want && g.obj) { run.group.remove(g.obj); g.obj = null; }
-      if (g.obj) { g.torus.material = i === run.k ? run.mat.next : run.mat.far; g.disc.material = i === run.k ? run.mat.discNext : run.mat.discFar; }
+      if (g.obj) { g.torus.material = i === run.k ? run.mat.next : run.mat.far; g.torus.renderOrder = i === run.k ? 0 : 8; g.disc.material = run.mat.discNext; g.disc.visible = i === run.k; }
     });
   }
   function updatePaper(dt, p) {
@@ -717,14 +726,15 @@ export function createMissions(ctx) {
     if (!run.part) line = '👀 ' + line;
     setText(H.line, line);
     if (target && target.here && run.phase === 'go') {
-      if (H.arrow._r !== 'down') { H.arrow._r = 'down'; H.arrow.style.transform = 'rotate(180deg)'; }
+      if (H.arrow._r !== 'down') { H.arrow._r = 'down'; H.arrow.style.transform = 'rotateZ(180deg)'; H.go.classList.remove('ahead'); }
       setText(H.dist, s.onGround || s.agl < 6 ? '💧 Filling up!' : '💧 Go down and skim the water');
       H.go.style.display = '';
     } else if (target && run.phase === 'go' && !(run.dn && def.id !== 'fire')) {
       const dx = target.x - s.pos.x, dz = target.z - s.pos.z, d = Math.hypot(dx, dz);
       const rel = (bearing(dx, dz) - s.heading) / D;
-      const rot = `rotate(${Math.round(rel)}deg)`;
-      if (H.arrow._r !== rot) { H.arrow._r = rot; H.arrow.style.transform = rot; }
+      const relN = Math.round(((rel % 360) + 540) % 360 - 180);
+      const rot = `rotateX(50deg) rotateZ(${relN}deg)`;              // lies flat like a compass needle pointing the way
+      if (H.arrow._r !== rot) { H.arrow._r = rot; H.arrow.style.transform = rot; H.go.classList.toggle('ahead', Math.abs(relN) < 12); }
       setText(H.dist, (target.water ? '💧 ' : '') + (d < 1000 ? Math.round(d) + ' m' : (d / 1000).toFixed(1) + ' km'));
       H.go.style.display = '';
     } else H.go.style.display = 'none';
@@ -823,8 +833,8 @@ export function createMissions(ctx) {
     status() { return run ? { n: run.n, sc: run.sc, k: run.k, dn: run.dn, t: Math.round(run.t * 10) / 10, h: run.h, d: Math.round(run.dist || 0), dr: run.dr.slice(-6) } : null; },
     mapPoints() {
       if (!run) return [];
-      if (run.def.id === 'rings') return run.rings.slice(run.k).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
-      if (run.def.id === 'paper') return run.hoops.slice(run.k, run.k + 8).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
+      if (run.def.id === 'rings') return run.rings.slice(run.k, run.k + 2).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
+      if (run.def.id === 'paper') return run.hoops.slice(run.k, run.k + 2).map((g, i) => ({ x: g.c.x, z: g.c.z, c: i === 0 ? '#ffd54f' : 'rgba(255,255,255,.8)', r: i === 0 ? 4 : 2.5 }));
       if (run.def.id === 'fire') return run.fires.filter((f, i) => run.hp[i] > 0).map(f => ({ x: f.x, z: f.z, c: '#ff5722', r: 4 }));
       return run.L ? [{ x: run.L.aim.x, z: run.L.aim.z, c: '#39ff7a', r: 4 }] : [];
     },
