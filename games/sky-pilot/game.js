@@ -186,7 +186,7 @@ export function mount(stage) {
   // faint streaks of air drifting past with the wind (very light: just enough to see which way it blows).
   // Thin ribbons that face the camera, tapering to nothing at the tail.
   function createWindStreaks(scn) {
-    const N = 60, R = 45;
+    const N = 26, R = 45;
     const pos = new Float32Array(N * 4 * 3), col = new Float32Array(N * 4 * 4), idx = [];
     for (let i = 0; i < N; i++) { const a = i * 4; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     const geo = new THREE.BufferGeometry();
@@ -204,7 +204,7 @@ export function mount(stage) {
         lines.visible = k > 0.01;
         if (!lines.visible) return;
         dir.copy(wind).divideScalar(sp);
-        const len = 5 + sp * 1.1;
+        const len = 3 + sp * 0.6;
         cam.getWorldDirection(fwd);
         for (let i = 0; i < N; i++) {
           const q = P[i];
@@ -217,11 +217,13 @@ export function mount(stage) {
             q.max = q.life = 1.6 + Math.random() * 2.4;
           }
           q.p.addScaledVector(wind, dt * 1.4);
-          const a = Math.min(1, (q.max - q.life) * 3, q.life * 1.5) * 0.75 * (0.6 + 0.4 * k) * (night ? 0.55 : 1);
           toCam.copy(cam.position).sub(q.p);
+          const dist = toCam.length();
+          // tiny threads: fade out before they get close to the camera (no blotches)
+          const a = Math.min(1, (q.max - q.life) * 2, q.life * 1.5) * 0.3 * (0.6 + 0.4 * k) * clamp((dist - 12) / 20, 0, 1) * (night ? 0.55 : 1);
           side.crossVectors(dir, toCam);
           if (side.lengthSq() < 1e-6) side.set(0, 1, 0);
-          side.normalize().multiplyScalar(clamp(toCam.length() * 0.008, 0.05, 0.7));
+          side.normalize().multiplyScalar(clamp(dist * 0.0016, 0.012, 0.18));
           const tx = q.p.x - dir.x * len, tz = q.p.z - dir.z * len, o = i * 12, c = i * 16;
           pos[o] = q.p.x + side.x; pos[o + 1] = q.p.y + side.y; pos[o + 2] = q.p.z + side.z;
           pos[o + 3] = q.p.x - side.x; pos[o + 4] = q.p.y - side.y; pos[o + 5] = q.p.z - side.z;
