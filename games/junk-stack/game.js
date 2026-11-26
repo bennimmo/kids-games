@@ -24,7 +24,6 @@ const SAVE_KEY = 'junk-stack:v2';
 const SEA = -2.2;          // sea level (platform top is y = 0)
 const BASE_CAM = -5.0;     // bottom of the view (world y)
 const PW = 4.4;            // rock platform width
-const ROT = Math.PI / 4;   // one turn of the rotate button
 const SLOTS = [-1.9, 0, 1.9]; // where junk sits on the boat
 const DECK = SEA + 0.35;   // boat deck height
 const MIN_ZOOM = 0.55;     // don't zoom out further: the camera climbs with the tower instead
@@ -57,7 +56,6 @@ export function mount(stage) {
   let boatN = 0;
   let picks = 0;             // for the first-time hint
   let nextJunk = null;
-  let rot = 0;               // turn for the next pick (steps of 45°)
   let acc = 0, time = 0;
   let camY = BASE_CAM, zoom = 1;
   let craneX = 0;
@@ -156,7 +154,7 @@ export function mount(stage) {
     ground = world.createBody();
     ground.createFixture(planck.Box(PW / 2, 0.3, Vec2(0, -0.3), 0), { friction: 0.9 });
     nextJunk = junkSequence(seed);
-    rot = 0; acc = 0; maxTop = 0; lost = false; wind = 0;
+    acc = 0; maxTop = 0; lost = false; wind = 0;
     measureAt = 0; measure = null; lastMeasured = 0;
     camY = BASE_CAM; zoom = 1;
     boatN = 0;
@@ -184,10 +182,8 @@ export function mount(stage) {
         ${r ? `<div class="ui-chip js-rank"></div>` : `<div class="ui-chip js-bestchip">🏆 ${data.best.toFixed(1)} m</div>
           <button class="ui-hud-btn js-pause" aria-label="Pause">${icon('pause')}</button>`}
       </div>
-      <div class="js-toast"></div>
-      <button class="ui-hud-btn js-rot" aria-label="Turn">${icon('redo')}</button>`;
+      <div class="js-toast"></div>`;
     ui.querySelector('.js-pause')?.addEventListener('click', () => { sound.pop(); pause(); });
-    ui.querySelector('.js-rot').addEventListener('click', () => turn(1));
   }
 
   function toast(text) {
@@ -237,7 +233,6 @@ export function mount(stage) {
         <button class="ui-btn primary big again">${icon('retry')} Play again</button>
       </div></div>`;
     ui.appendChild(p);
-    ui.querySelector('.js-rot')?.remove();
     p.querySelector('.again').onclick = () => { sound.pop(); startGame(); };
     p.querySelector('.quit').onclick = () => { sound.pop(); showMenu(); };
   }
@@ -327,7 +322,6 @@ export function mount(stage) {
     net.sendTower(race.id, bodies, maxTop, { out, f: myFinal, now: true });
     mode = 'race-result';
     resultAt = time;
-    ui.querySelector('.js-rot')?.remove();
     showRaceResult();
   }
 
@@ -437,7 +431,7 @@ export function mount(stage) {
     }
   }
 
-  // ---------- crane: pick up, move, turn, drop ----------
+  // ---------- crane: pick up, move, drop ----------
   // Tap junk on the boat: the crane lifts it up above the tower and holds it there.
   function pick(slot, e) {
     if (!canBuild() || !boat || boat.phase !== 'docked') return;
@@ -448,7 +442,7 @@ export function mount(stage) {
     const r = itemR(it.type, it.sc);
     const x = 0;
     const y = Math.max(stackTop() + r + 1, 1 + r);
-    const body = makeBody(world, it.type, x, y, rot * ROT, it.sc);
+    const body = makeBody(world, it.type, x, y, 0, it.sc);
     body.setFixedRotation(true);
     const joint = world.createJoint(new planck.MouseJoint(
       { maxForce: 70 * body.getMass(), frequencyHz: 3.5, dampingRatio: 0.85 }, ground, body, Vec2(x, y)));
@@ -502,32 +496,18 @@ export function mount(stage) {
     sound.tok();
   }
 
-  function turn(dir) {
-    if (!canBuild() && mode !== 'race-wait') return;
-    sound.tok();
-    if (held) {
-      const b = held.body;
-      b.setTransform(b.getPosition(), b.getAngle() - dir * ROT);
-      b.setAwake(true);
-    } else rot = (rot + dir + 8) % 8;
-  }
+
 
   function onCanvasDown(e) {
     if (e.target !== canvas) return;
     const slot = slotAt(e);
-    if (held && held.pointerId !== null) { if (e.pointerId !== held.pointerId) { e.preventDefault(); turn(1); } return; } // 2nd finger = turn
+    if (held && held.pointerId !== null) return; // already dragging
     if (slot >= 0) { pick(slot, e); return; }
     if (held) grab(e);
   }
-  function onWheel(e) {
-    if (!held) return;
-    e.preventDefault();
-    turn(e.deltaY > 0 ? 1 : -1);
-  }
+
   function onKey(e) {
-    if (e.key === 'r' || e.key === 'R' || e.key === 'ArrowUp') turn(1);
-    else if (e.key === 'ArrowDown') turn(-1);
-    else if (e.key === 'Escape') pause();
+    if (e.key === 'Escape') pause();
   }
   function onContext(e) { if (held) e.preventDefault(); }
 
@@ -888,7 +868,6 @@ export function mount(stage) {
       }
       ctx.save();
       ctx.translate(ix, iy);
-      ctx.rotate(-rot * ROT);
       ctx.scale(k * ds, -k * ds);
       drawItem(ctx, it.type, it.sc);
       ctx.restore();
@@ -977,7 +956,6 @@ export function mount(stage) {
   window.addEventListener('pointercancel', onUp);
   window.addEventListener('keydown', onKey);
   stage.addEventListener('pointerdown', onCanvasDown);
-  canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('contextmenu', onContext);
 
   if (/[?&]jsdebug/.test(location.search)) {

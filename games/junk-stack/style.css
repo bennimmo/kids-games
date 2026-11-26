@@ -52,7 +52,7 @@
 .js-flag.used { opacity: .15; pointer-events: none; }
 .js-flag.ready { animation: js-pulse 1s ease-in-out infinite; background: rgba(239,83,80,.35); }
 @keyframes js-pulse { 50% { transform: scale(1.08); } }
-.js-rot { flex: none; }
+
 
 /* messages */
 .js-toast {
@@ -103,7 +103,7 @@
 
 /* endless mode */
 .js-hud .js-pause { margin-left: auto; }
-.js-rot { position: absolute; right: 14px; top: 46%; pointer-events: auto; width: 60px; height: 60px; }
+
 .js-best { margin: 0; text-align: center; font-size: 18px; color: var(--ui-text); }
 .js-best b { color: #facc15; font-weight: 900; }
 .js-menu .ui-panel > .ui-row { margin-top: 6px; }
