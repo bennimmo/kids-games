@@ -28,9 +28,9 @@ export const PLANES = {
   jumbo: {
     name: 'Jumbo Jet', icon: '✈️', stars: 3, desc: 'Big passenger jet',
     kind: 'plane', mass: 62000, wing: 122, cla: 5.6, cl0: 0.22, clmax: 1.45, stall: 14 * D, cd0: 0.021, k: 0.045,
-    thrust: 240000, jet: true, rates: [32, 11, 7], vr: 72, vref: 70, vno: 175,
+    thrust: 240000, jet: true, rates: [40, 17, 9], vr: 72, vref: 70, vno: 175,
     gear: 'retract', gearH: 3.6, groundPitch: 0.2 * D, tailStrike: 11 * D, wheelbase: 12.6,
-    flaps: [0, 0.25, 0.5, 0.8, 1.05], flapDrag: [0, 0.006, 0.012, 0.025, 0.045], maxG: 2.5,
+    flaps: [0, 0.25, 0.5, 0.8, 1.05], flapDrag: [0, 0.006, 0.012, 0.025, 0.045], maxG: 3,
     eye: [0.5, 1.95, 16.4], camDist: 60, length: 37.6, span: 34, panel: 'glass', engine: 'jet', color: 0x1e88e5,
   },
   zoom: {
@@ -221,6 +221,19 @@ function loft(sections, vertical = false, M2 = 12) {
 const mesh = (g, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; return o; };
 const cyl = (r1, r2, h, seg = 16) => { const g = new THREE.CylinderGeometry(r1, r2, h, seg); g.rotateX(Math.PI / 2); return g; };
 // a pivot for a moving part (hinge line along axis through point)
+// a control surface on a hinge line from a to b (b further left, +x): it hangs aft of the hinge and turns about it
+function hinge(parent, a, b, chord, thick, mat) {
+  const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b);
+  const X = B.clone().sub(A).normalize();
+  const fwd = new THREE.Vector3(0, 0, 1); fwd.addScaledVector(X, -fwd.dot(X)).normalize();
+  const Y = new THREE.Vector3().crossVectors(fwd, X);
+  const h = new THREE.Group(); h.position.copy(A).add(B).multiplyScalar(0.5);
+  h.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, fwd));
+  parent.add(h);
+  const d = new THREE.Group(); h.add(d);
+  d.add(mesh(new THREE.BoxGeometry(A.distanceTo(B), thick, chord), mat, 0, 0, -chord / 2));
+  return d;
+}
 function pivot(parent, x, y, z) { const p = new THREE.Group(); p.position.set(x, y, z); parent.add(p); return p; }
 
 function wheel(r, w, parent, x, y, z) {
@@ -422,10 +435,12 @@ export function buildPlane(type, color = PLANES[type].color) {
     outer.add(mesh(loft(wsec), M.grey));
     // winglets
     for (const s of [1, -1]) outer.add(mesh(loft([{ p: [s * 17, 0.4, -5.5], c: 1.6, t: 0.08 }, { p: [s * 17.25, 2.6, -7.0], c: 0.8, t: 0.08 }], true), C));
-    parts.ailL = pivot(outer, 13.5, 0.15, -5.0); parts.ailL.add(mesh(new THREE.BoxGeometry(4, 0.1, 0.7), M.grey, 0, 0, -0.35)); parts.ailL.rotation.y = -0.47;
-    parts.ailR = pivot(outer, -13.5, 0.15, -5.0); parts.ailR.add(mesh(new THREE.BoxGeometry(4, 0.1, 0.7), M.grey, 0, 0, -0.35)); parts.ailR.rotation.y = 0.47;
-    parts.flapL = pivot(outer, 6.5, -0.75, -3.6); parts.flapL.add(mesh(new THREE.BoxGeometry(8, 0.12, 1.3), M.grey, 0, 0, -0.65)); parts.flapL.rotation.y = -0.3;
-    parts.flapR = pivot(outer, -6.5, -0.75, -3.6); parts.flapR.add(mesh(new THREE.BoxGeometry(8, 0.12, 1.3), M.grey, 0, 0, -0.65)); parts.flapR.rotation.y = 0.3;
+    // flaps (inner + outer) and ailerons on hinges that follow the wing's trailing edge (unswept inside, swept outside)
+    const teZ = x => (x <= 6 ? -4.0 : -4.0 - (x - 6) * (3.2 / 11)), teY = x => (x <= 6 ? -1.15 + (x - 1.8) * (0.4 / 4.2) : -0.75 + (x - 6) * (1.15 / 11)) - 0.04;
+    const surf = (x0, x1, chord, s) => hinge(outer, [s * (s > 0 ? x0 : x1), teY(s > 0 ? x0 : x1), teZ(s > 0 ? x0 : x1) + chord], [s * (s > 0 ? x1 : x0), teY(s > 0 ? x1 : x0), teZ(s > 0 ? x1 : x0) + chord], chord, 0.1, M.grey);
+    parts.flapL = surf(2.2, 5.9, 1.5, 1); parts.flapR = surf(2.2, 5.9, 1.5, -1);
+    parts.flaps2 = [surf(6.2, 11.6, 1.15, 1), surf(6.2, 11.6, 1.15, -1)];
+    parts.ailL = surf(12, 15.6, 0.8, 1); parts.ailR = surf(12, 15.6, 0.8, -1);
     // engines
     for (const s of [1, -1]) {
       const e = new THREE.Group(); e.position.set(s * 5.8, -2.0, 3.6); outer.add(e);
@@ -620,10 +635,12 @@ export function animatePlane(pl, st, dt) {
   const p = pl.parts, P = PLANES[pl.type];
   const sp = st.rpm;
   for (const pr of p.props) pr.rotation.z -= dt * (8 + sp * 60);
-  if (p.ailL) { p.ailL.rotation.x = st.roll * 0.35; p.ailR.rotation.x = -st.roll * 0.35; }
-  if (p.elev) p.elev.rotation.x = -st.pitch * 0.35;
+  // trailing edge down = a negative turn about the hinge. Roll right: left aileron down, right aileron up. Nose up: elevator up.
+  if (p.ailL) { p.ailL.rotation.x = -st.roll * 0.35; p.ailR.rotation.x = st.roll * 0.35; }
+  if (p.elev) p.elev.rotation.x = st.pitch * 0.35;
   if (p.rudder) p.rudder.rotation.y = -st.yaw * 0.4;
-  if (p.flapL) { p.flapL.rotation.x = st.flaps * 0.6; p.flapR.rotation.x = st.flaps * 0.6; }
+  if (p.flapL) { p.flapL.rotation.x = -st.flaps * 0.6; p.flapR.rotation.x = -st.flaps * 0.6; }
+  if (p.flaps2) p.flaps2.forEach(f => { f.rotation.x = -st.flaps * 0.55; });
   for (const gr of p.gear) {
     const a = (1 - st.gear) * gr.up;
     gr.g.rotation.set(gr.axis === 'x' ? a : 0, 0, gr.axis === 'z' ? a : 0);
