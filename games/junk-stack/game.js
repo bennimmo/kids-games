@@ -27,7 +27,8 @@ const PW = 4.4;            // rock platform width
 const ROT = Math.PI / 4;   // one turn of the rotate button
 const SLOTS = [-1.9, 0, 1.9]; // where junk sits on the boat
 const DECK = SEA + 0.35;   // boat deck height
-const MIN_ZOOM = 0.32;
+const MIN_ZOOM = 0.55;     // don't zoom out further: the camera climbs with the tower instead
+const SEA_BAND = 1.9;     // metres of sea kept at the bottom of the screen (the sea 'rises' with you)
 
 function load() {
   try { return { best: 0, ...JSON.parse(localStorage.getItem(SAVE_KEY)) }; } catch (e) { return { best: 0 }; }
@@ -64,6 +65,7 @@ export function mount(stage) {
   let maxTop = 0;            // best height while still standing
   let lost = false;
   let wind = 0;
+  let measureAt = 0, measure = null, lastMeasured = 0; // tape-measure show after each barge load
   let closed = false;
   const scenery = createScenery();
   // racing
@@ -103,7 +105,15 @@ export function mount(stage) {
       if (Math.hypot(v.x, v.y) < 0.4 && touching(it.body)) top = Math.max(top, bodyTop(it.body));
     });
     return top;
+  }  // very top of the pile, wobbling or not (where new junk must go above)
+  function stackTop() {
+    let top = 0;
+    bodies.forEach(it => { if (!it.wet) top = Math.max(top, bodyTop(it.body)); });
+    return top;
   }
+  // the sea line on screen: the real sea, or a band at the bottom when the tower is tall
+  const seaLine = l => Math.min(sy(l, SEA), l.playH - SEA_BAND * l.s);
+
   const itemR = (type, sc) => ITEMS[type].r * Math.max(sc.x, sc.y);
   const deckScale = (type, sc) => Math.min(1, 1.7 / Math.max(ITEMS[type].w * sc.x, ITEMS[type].h * sc.y));
 
@@ -147,6 +157,7 @@ export function mount(stage) {
     ground.createFixture(planck.Box(PW / 2, 0.3, Vec2(0, -0.3), 0), { friction: 0.9 });
     nextJunk = junkSequence(seed);
     rot = 0; acc = 0; maxTop = 0; lost = false; wind = 0;
+    measureAt = 0; measure = null; lastMeasured = 0;
     camY = BASE_CAM; zoom = 1;
     boatN = 0;
     newBoat();
@@ -391,8 +402,7 @@ export function mount(stage) {
   // Where the boat is on screen. Pinned to the bottom if the sea is out of view.
   function boatPlace(l) {
     const bob = Math.sin(time * 2) * 0.06;
-    let deckY = sy(l, DECK + bob);
-    deckY = Math.min(deckY, l.playH - 0.9 * l.s);
+    const deckY = seaLine(l) - (DECK - SEA + bob) * l.s;
     return { cx: sx(l, boat.x), deckY, k: l.s };
   }
   function slotAt(e) {
@@ -419,7 +429,7 @@ export function mount(stage) {
       boat.x = -16 * Math.pow(1 - k, 3);
       if (k >= 1) { boat.phase = 'docked'; boat.t = 0; }
     } else if (boat.phase === 'docked') {
-      if (boat.items.every(it => !it) && !(held && held.boatId === boat.id)) { boat.phase = 'out'; boat.t = 0; }
+      if (boat.items.every(it => !it) && !(held && held.boatId === boat.id)) { boat.phase = 'out'; boat.t = 0; measureAt = time + 1.8; }
     } else if (boat.phase === 'out') {
       const k = Math.min(1, boat.t / 1.8);
       boat.x = 16 * k * k;
@@ -437,7 +447,7 @@ export function mount(stage) {
     if (held) { if (held.pointerId !== null) return; drop(true); } // swap: put the hanging one back
     const r = itemR(it.type, it.sc);
     const x = 0;
-    const y = Math.max(towerTop() + r + 1, 1 + r);
+    const y = Math.max(stackTop() + r + 1, 1 + r);
     const body = makeBody(world, it.type, x, y, rot * ROT, it.sc);
     body.setFixedRotation(true);
     const joint = world.createJoint(new planck.MouseJoint(
@@ -552,13 +562,16 @@ export function mount(stage) {
         world.step(STEP, 10, 8);
         acc -= STEP;
       }
-      // anything in the sea = game over
+      // anything in the sea = game over (the real sea, or the risen sea at the bottom of the screen)
+      const lv = L();
+      const seaW = camY + (lv.playH - seaLine(lv)) / lv.s;   // world height of the sea line on screen
       for (let k = bodies.length - 1; k >= 0; k--) {
         const it = bodies[k];
         const pos = it.body.getPosition();
-        if (!it.wet && pos.y < SEA) {
+        const falling = it.body.getLinearVelocity().y < -2;
+        if (!it.wet && (pos.y < SEA || (falling && seaW > SEA + 0.5 && pos.y < seaW - 0.2))) {
           it.wet = true;
-          splash(pos.x);
+          splash(pos.x, Math.max(SEA, seaW));
           if (mode === 'play' || mode === 'race') splashLose();
         }
         if (pos.y < SEA - 4) { world.destroyBody(it.body); bodies.splice(k, 1); }
@@ -567,6 +580,18 @@ export function mount(stage) {
         const top = towerTop();
         if (top > maxTop) maxTop = top;
         wind = maxTop > 8 ? Math.min(2.2, (maxTop - 8) * 0.12) : 0;
+      }
+      if (measureAt && time > measureAt && !held && !lost && (mode === 'play' || mode === 'race')) {
+        measureAt = 0;
+        measure = { t: 0, h: towerTop(), gain: towerTop() - lastMeasured, tick: 0 };
+        lastMeasured = measure.h;
+      }
+      if (measure) {
+        measure.t += dt;
+        const cur = measureHeight();
+        if (Math.floor(cur) > measure.tick) { measure.tick = Math.floor(cur); sound.tone(500 + measure.tick * 40, 0.06, 'square', 0.08); }
+        if (measure.t > 1.5 && !measure.done) { measure.done = true; sound.tone(660, 0.12, 'triangle', 0.18); setTimeout(() => sound.tone(990, 0.2, 'triangle', 0.18), 110); }
+        if (measure.t > 3.2 || lost) measure = null;
       }
       if (net && race && racing()) raceTick();
       const hEl = ui.querySelector('.js-height');
@@ -581,12 +606,12 @@ export function mount(stage) {
     const l = L();
     const panel = (mode === 'over' || mode === 'race-result') ? ui.querySelector('.js-result .ui-panel') : null;
     const panelPx = panel ? panel.offsetHeight + 40 : 0;
-    let top = Math.max(towerTop(), maxTop * 0.6);
+    let top = Math.max(stackTop(), maxTop * 0.6);
     if (held) top = Math.max(top, held.body.getPosition().y + held.r);
     const above = panel ? 2 : 5.5;
     const availPx = Math.max(120, l.playH - panelPx - (panel ? 100 : 0));
     const need = top + above - BASE_CAM;
-    let targetZoom = Math.max(MIN_ZOOM, Math.min(1, availPx / (need * l.s1)));
+    let targetZoom = Math.max(panel ? 0.15 : MIN_ZOOM, Math.min(1, availPx / (need * l.s1)));
     let targetCam = BASE_CAM - panelPx / (l.s1 * targetZoom);
     const viewHz = l.playH / (l.s1 * targetZoom);
     if (!panel && top + above > targetCam + viewHz) targetCam = top + above - viewHz; // very tall: scroll up
@@ -596,10 +621,10 @@ export function mount(stage) {
     craneX += (hx - craneX) * Math.min(1, dt * 8);
   }
 
-  function splash(x) {
+  function splash(x, y = SEA) {
     sound.splash();
     for (let i = 0; i < 18; i++) {
-      particles.push({ x: x + (Math.random() - 0.5) * 0.8, y: SEA, vx: (Math.random() - 0.5) * 4, vy: 3 + Math.random() * 5, life: 0.6 + Math.random() * 0.5, r: 0.06 + Math.random() * 0.08 });
+      particles.push({ x: x + (Math.random() - 0.5) * 0.8, y, vx: (Math.random() - 0.5) * 4, vy: 3 + Math.random() * 5, life: 0.6 + Math.random() * 0.5, r: 0.06 + Math.random() * 0.08 });
     }
   }
 
@@ -619,7 +644,7 @@ export function mount(stage) {
   function sceneView(l) {
     return {
       ctx, w: l.w, playH: l.playH, s: l.s, time, sx: x => sx(l, x), sy: y => sy(l, y),
-      seaY: sy(l, SEA), topY: sy(l, Math.max(0, towerTop())),
+      seaY: seaLine(l), topY: sy(l, Math.max(0, stackTop())),
     };
   }
 
@@ -665,7 +690,7 @@ export function mount(stage) {
     }
 
     // far islands + sea (back)
-    const seaY = sy(l, SEA);
+    const seaY = seaLine(l);
     ctx.fillStyle = '#7fb3a8';
     ctx.beginPath();
     ctx.moveTo(0, seaY);
@@ -746,6 +771,7 @@ export function mount(stage) {
     // crane
     if (mode === 'play' || mode === 'paused' || mode === 'race' || mode === 'race-wait') drawCrane(l);
     if (held) drawBody(held.body, held.type, held.sc);
+    drawMeasure(l);
     scenery.drawUfo(v);
 
     // sea (front, so things sink in)
@@ -778,6 +804,46 @@ export function mount(stage) {
     ctx.globalAlpha = 1;
 
     if (net && race && (mode === 'race' || mode === 'race-wait')) drawFriends(l);
+  }
+
+  const measureHeight = () => measure ? measure.h * (1 - Math.pow(1 - Math.min(1, measure.t / 1.5), 3)) : 0;
+
+  // A tape measure zips up the side of the tower and shows how tall it is.
+  function drawMeasure(l) {
+    if (!measure) return;
+    const cur = measureHeight();
+    const fade = Math.min(1, (3.2 - measure.t) / 0.4);
+    const x0 = sx(l, PW / 2 + 0.15), wpx = Math.max(10, 0.28 * l.s);
+    const yb = sy(l, 0), yt = sy(l, cur);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    // tape
+    ctx.fillStyle = '#ffd600'; ctx.fillRect(x0, yt, wpx, yb - yt);
+    ctx.strokeStyle = '#8d6e00'; ctx.lineWidth = 1.5; ctx.strokeRect(x0, yt, wpx, yb - yt);
+    ctx.fillStyle = '#212121';
+    for (let m = 0; m <= cur; m += 0.5) {
+      const y = sy(l, m), whole = Math.abs(m - Math.round(m)) < 0.01;
+      ctx.fillRect(x0, y - 1, whole ? wpx * 0.7 : wpx * 0.4, 2);
+    }
+    // sweep line across the tower
+    ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 3;
+    ctx.shadowColor = '#ffd600'; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.moveTo(sx(l, -PW / 2 - 0.4), yt); ctx.lineTo(x0 + wpx, yt); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // label
+    const label = `${cur.toFixed(1)} m`;
+    ctx.font = '900 22px Nunito, system-ui, sans-serif';
+    const tw = ctx.measureText(label).width + 22;
+    const lx = Math.min(l.w - tw - 70, x0 + wpx + 10), ly = yt - 18;
+    rrect(lx, ly, tw, 36, 12); ctx.fillStyle = 'rgba(16,18,38,.85)'; ctx.fill();
+    ctx.fillStyle = '#ffd600'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx + 11, ly + 19);
+    if (measure.done && measure.gain > 0.05) {
+      ctx.font = '800 16px Nunito, system-ui, sans-serif';
+      ctx.fillStyle = '#69f0ae';
+      ctx.fillText(`⬆ +${measure.gain.toFixed(1)} m`, lx + 6, ly - 14);
+    }
+    ctx.restore();
   }
 
   function drawBoat(l) {
@@ -919,6 +985,7 @@ export function mount(stage) {
     window.__jsHost = async () => { const r = await makeRoom(); enterRoom(r); return r.code; };
     window.__jsJoin = code => joinFromInvite(code);
     window.__jsScene = scenery._debug;
+    window.__jsTower = n => { for (let i = 0; i < n; i++) bodies.push({ body: makeBody(world, 'crate', 0, 0.6 + i * 1.2), type: 'crate', sc: { x: 1, y: 1 }, wet: false }); };
     window.__js = () => {
       const l = L();
       const bp = boat ? boatPlace(l) : null;
