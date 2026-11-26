@@ -18,7 +18,7 @@ import { rng, clamp } from './noise.js';
 export const MISSIONS = [
   { id: 'rings', name: 'Ring Race', icon: '⭕', tag: '🏁 Race', desc: 'Fly through the middle of each ring. Closer to the middle = more points. Missed one? Keep going!' },
   { id: 'fire', name: 'Fire Fight', icon: '🔥', tag: '👫 Team', desc: 'Skim the lake in the Splash to fill up with water, then drop it on the forest fires.' },
-  { id: 'paper', name: 'Paper Plane', icon: '📄', tag: '🕊️ Glide', desc: 'No engine! Glide through the hoops as far as you can. Space / 🚀 = boost. Hoops refill it.' },
+  { id: 'paper', name: 'Paper Plane', icon: '📄', tag: '🕊️ Glide', desc: 'No engine! Glide low through hoops over forests and hills, as far as you can. Space / 🚀 = boost. Hoops refill it.' },
   { id: 'land', name: 'Landing Contest', icon: '🛬', tag: '🏁 Contest', desc: 'Three landings. Soft, on the green box, in the middle and straight wins.' },
 ];
 const DEF = Object.fromEntries(MISSIONS.map(m => [m.id, m]));
@@ -162,6 +162,14 @@ function landSpot(round, seed, idx, n, type, easy) {
   return { ap, dir, hdg, spot: { x, z, y, hdg, air: true, speed: heli ? 22 : P.vref * 1.25 }, aim: { x: aim[0], z: aim[1] } };
 }
 
+
+// hoop materials: solid lit rings (proper depth with clouds), see-through targets drawn after the clouds
+function hoopMats(tex) {
+  const ring = (color, glow) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: glow, roughness: 0.45, metalness: 0.1 });
+  const disc = op => new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide });
+  return { next: ring(0xffd54f, 0.75), far: ring(0xe8eef5, 0.25), finish: ring(0x66ff88, 0.6), discNext: disc(0.5), discFar: disc(0.14) };
+}
+
 // ================================================================= controller
 export function createMissions(ctx) {
   const { scene } = ctx;
@@ -256,12 +264,11 @@ export function createMissions(ctx) {
     const R = ringR(p);
     run.R = R;
     const torusG = new THREE.TorusGeometry(1, 0.07, 8, 48), discG = new THREE.CircleGeometry(1, 48);
-    const mk = (color, op) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide, fog: false });
-    run.mat = { next: mk(0xffd54f, 0.95), far: mk(0xffffff, 0.5), finish: mk(0x66ff88, 0.9), discNext: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }), discFar: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }) };
+    run.mat = hoopMats(tex.target);
     run.rings.forEach((g, i) => {
       const grp = new THREE.Group();
       const torus = new THREE.Mesh(torusG, i === run.rings.length - 1 ? run.mat.finish : run.mat.far);
-      const disc = new THREE.Mesh(discG, run.mat.discFar);
+      const disc = new THREE.Mesh(discG, run.mat.discFar); disc.renderOrder = 8;
       grp.add(torus, disc);
       grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).add(g.n)); grp.scale.setScalar(R);
       run.group.add(grp); g.obj = grp; g.torus = torus; g.disc = disc;
@@ -321,23 +328,22 @@ export function createMissions(ctx) {
   const ringTarget = () => { const g = run.rings[Math.min(run.k, run.rings.length - 1)]; return g ? { x: g.c.x, z: g.c.z } : null; };
 
   // ------------------------------------------------------------ Paper Plane: endless hoops, glide as far as you can
-  const PAPER = { gap: 240, drop: 22, rise: 18 };
+  const PAPER = { gap: 200, drop: 18, rise: 16 };
   function setupPaper() {
     const r = rng(run.m.seed ^ 0x9a9e7);
     run.prng = r;
-    // start somewhere over the island, high up
-    let sx = 0, sz = 0, sh = 0;
-    for (let i = 0; i < 40; i++) {
-      const a = r() * Math.PI * 2, d = r.range(1500, 7000);
-      sx = Math.cos(a) * d; sz = 1500 + Math.sin(a) * d; sh = r() * Math.PI * 2;
-      if (terrainHeight(sx, sz) < 400) break;
+    // start low over the forests and foothills, where there's lots to fly around
+    let sx = LAKE.x, sz = LAKE.z, sh = 0;
+    for (let i = 0; i < 300; i++) {
+      const x = r.range(-12000, 9000), z = r.range(-9000, 9000), h = terrainHeight(x, z), b = biomeAt(x, z);
+      if ((b === 'forest' || b === 'mountain') && h > 30 && h < 450) { sx = x; sz = z; sh = r() * Math.PI * 2; break; }
     }
     let top = 0;
-    for (let i = 0; i < 6; i++) top = Math.max(top, terrainHeight(sx + Math.sin(sh) * i * 150, sz - Math.cos(sh) * i * 150));
-    run.cur = { x: sx, z: sz, y: Math.max(0, top) + 380, hdg: sh };
+    for (const [dx, dz] of [[0, 0], [100, 0], [-100, 0], [0, 100], [0, -100]]) top = Math.max(top, terrainHeight(sx + dx, sz + dz));
+    run.visited = new Map();
+    run.cur = { x: sx, z: sz, y: Math.max(0, top) + 130, hdg: sh };
     run.hoops = []; run.dist = 0; run.hpts = 0;
-    const mk = (color, op) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide, fog: false });
-    run.mat = { next: mk(0xffd54f, 0.95), far: mk(0xffffff, 0.55), discNext: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }), discFar: new THREE.MeshBasicMaterial({ map: tex.target, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }) };
+    run.mat = hoopMats(tex.target);
     run.geo = { torus: new THREE.TorusGeometry(1, 0.08, 8, 40), disc: new THREE.CircleGeometry(1, 40) };
     const c0 = run.cur, n2 = run.who.length, side = (run.idx - (n2 - 1) / 2) * 30;
     run.spot = { x: c0.x - Math.cos(c0.hdg) * side, z: c0.z - Math.sin(c0.hdg) * side, y: c0.y + 10, hdg: c0.hdg, air: true, speed: 24 };
@@ -345,33 +351,54 @@ export function createMissions(ctx) {
     if (run.part) ctx.placeMe(run.spot, 'paper');
     run.prev = ctx.me().s.pos.clone();
   }
-  // the next hoop: wander gently, keep over the island, never into a hill
+  // the next hoop: wander low over the land, through the valleys, round the hills, never into one
   function paperGen() {
     const r = run.prng, c = run.cur, easy = ctx.easy();
-    const away = Math.hypot(c.x, c.z - 1500) > 11000;
+    const i = run.hoops.length;
+    const R = (easy ? 32 : 24) * Math.max(0.75, 1 - i * 0.004);
+    const floorOf = top => top + R + (easy ? 12 : 7);
+    const away = Math.hypot(c.x, c.z - 1500) > 9500 || terrainHeight(c.x, c.z) < 0.3;
+    // high above the ground: dive down faster (up to ~12°) to get back amongst the trees
+    const dropFor = top => clamp((c.y - floorOf(top)) * 0.2, PAPER.drop, 42);
     const toC = Math.atan2(-c.x, -(1500 - c.z));
-    let best = null;
-    for (let k = 0; k < 5; k++) {
-      let h = c.hdg + r.range(-0.42, 0.42);
-      if (away) h = c.hdg + clamp(Math.atan2(Math.sin(toC - c.hdg), Math.cos(toC - c.hdg)), -0.5, 0.5) + r.range(-0.1, 0.1);
+    const look = (h, wide) => {
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let i = 0; i <= 6; i++) for (const sd of [-60, 0, 60]) {
-        const px = c.x + (x - c.x) * i / 6 + Math.cos(h) * sd, pz = c.z + (z - c.z) * i / 6 + Math.sin(h) * sd;
+      for (let q = 0; q <= 8; q++) for (const sd of [-25, 0, 25]) {
+        const px = c.x + (x - c.x) * q / 8 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 8 + Math.sin(h) * sd;
         top = Math.max(top, terrainHeight(px, pz));
       }
       top = Math.max(top, 0);
-      if (!best || top < best.top - 15) best = { h, x, z, top };
+      // how high is it further on that way? (don't fly into a mountain bowl)
+      let ahead = 0;
+      for (let q = 2; q <= 6; q++) ahead = Math.max(ahead, terrainHeight(c.x + Math.sin(h) * PAPER.gap * q, c.z - Math.cos(h) * PAPER.gap * q));
+      const want = c.y - dropFor(top), climb = Math.max(0, floorOf(top) - want);
+      const turn = Math.abs(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)));
+      const b = biomeAt(x, z);
+      const seen = run.visited.get(Math.round(x / 400) + ',' + Math.round(z / 400)) || 0;   // somewhere new, not round in circles
+      const score = seen * 25 + climb * 3 + turn * (wide ? 5 : 15) + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 600) * 0.6
+        + (b === 'sea' ? 150 : b === 'forest' || b === 'mountain' ? -10 : 0) + r() * 12;
+      return { h, x, z, top, climb, score };
+    };
+    let best = null;
+    for (let k = 0; k < 7; k++) {
+      let h = c.hdg + r.range(-0.6, 0.6);
+      if (away) h = c.hdg + clamp(Math.atan2(Math.sin(toC - c.hdg), Math.cos(toC - c.hdg)), -0.55, 0.55) + r.range(-0.15, 0.15);
+      const o = look(h, false);
+      if (!best || o.score < best.score) best = o;
     }
-    const clr = easy ? 45 : 35;
-    let y = Math.max(c.y - PAPER.drop, best.top + clr);
-    y = Math.min(y, c.y + PAPER.rise, 1100);
-    y = Math.max(y, best.top + 15);
-    const i = run.hoops.length;
-    const R = (easy ? 26 : 18) * Math.max(0.65, 1 - i * 0.006);
+    // a hill in the way: look further round (but never straight back)
+    if (best.climb > PAPER.rise || best.top > 600) for (let k = 0; k < 12; k++) {
+      const o = look(c.hdg + (k / 11 - 0.5) * 2 * 2.2, true);
+      if (o.score < best.score) best = o;
+    }
+    let y = Math.max(c.y - dropFor(best.top), floorOf(best.top));
+    y = Math.min(y, Math.max(c.y + PAPER.rise, floorOf(best.top)));   // a big hill: climb (boost!) rather than hit it
     const a = new THREE.Vector3(c.x, c.y, c.z), b = new THREE.Vector3(best.x, y, best.z);
     const g = { c: b, n: b.clone().sub(a).normalize(), R };
     run.cur = { x: best.x, z: best.z, y, hdg: best.h };
+    const key = Math.round(best.x / 400) + ',' + Math.round(best.z / 400);
+    run.visited.set(key, (run.visited.get(key) || 0) + 1);
     run.hoops.push(g);
     return g;
   }
@@ -381,7 +408,7 @@ export function createMissions(ctx) {
       const want = i >= run.k && i < run.k + 9;
       if (want && !g.obj) {
         const grp = new THREE.Group();
-        g.torus = new THREE.Mesh(run.geo.torus, run.mat.far); g.disc = new THREE.Mesh(run.geo.disc, run.mat.discFar);
+        g.torus = new THREE.Mesh(run.geo.torus, run.mat.far); g.disc = new THREE.Mesh(run.geo.disc, run.mat.discFar); g.disc.renderOrder = 8;
         grp.add(g.torus, g.disc); grp.position.copy(g.c); grp.lookAt(v1.copy(g.c).add(g.n)); grp.scale.setScalar(g.R);
         run.group.add(grp); g.obj = grp;
       } else if (!want && g.obj) { run.group.remove(g.obj); g.obj = null; }
@@ -401,7 +428,7 @@ export function createMissions(ctx) {
         if (lat < 900) {
           const fr = lat / g.R;
           const pts = fr < 0.25 ? 10 : fr < 0.5 ? 6 : fr < 0.75 ? 3 : fr < 1 ? 1 : 0;
-          const refill = { 10: 0.35, 6: 0.25, 3: 0.15, 1: 0.08 }[pts] || 0;
+          const refill = { 10: 0.45, 6: 0.35, 3: 0.25, 1: 0.15 }[pts] || 0;
           run.hpts += pts; run.k++;
           if (refill && s.P.kind === 'paper') s.boostE = Math.min(1, (s.boostE || 0) + refill);
           if (pts === 10) { ctx.flash('🎯 10! +🚀'); ctx.sound.win(); }
