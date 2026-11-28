@@ -50,6 +50,20 @@ function cleanEvent(e) {
     case 'bub': return { n, k: 'bub', fx: num(e.fx, 0, 1, 0.5), fy: num(e.fy, 0, 1, 0.5) };
     case 'tickle': { const to = str(e.to, /^[\w-]+$/, 80); return to ? { n, k: 'tickle', to } : null; }
     case 'game': return { n, k: 'game' };
+    case 'hug': case 'dance': return { n, k: e.k };
+    case 'treat': {
+      const f = FOODS.find(x => x.id === e.f);
+      const to = str(e.to, /^[\w-]+$/, 80);
+      return f && to ? { n, k: 'treat', f: f.id, to } : null;
+    }
+    case 'race': { const id = str(e.id, /^[\w-]+$/); return id ? { n, k: 'race', id, at: num(e.at, 0, 1e15, 0) } : null; }
+    case 'rfin': { const id = str(e.id, /^[\w-]+$/); return id ? { n, k: 'rfin', id, ms: num(e.ms, 0, 120000, 120000) } : null; }
+    case 'ttt': {
+      const id = str(e.id, /^[\w-]+$/);
+      const op = ['ask', 'yes', 'no', 'move', 'again', 'bye'].includes(e.op) ? e.op : null;
+      if (!id || !op) return null;
+      return { n, k: 'ttt', id, op, to: str(e.to, /^[\w-]+$/, 80), i: Math.round(num(e.i, 0, 8, 0)) };
+    }
     default: return null;
   }
 }
@@ -136,6 +150,7 @@ export function connect(room, { petInfo, onEvent, onChange, onClosed }) {
 
   return {
     pid, uid: room.uid, isHost: room.isHost, code: room.code,
+    now: () => room.now(),
     // Everyone else here: [{ pid, who, face, pet, pos: { fx, fy, dir, face } | null, host }]
     mates() {
       return Object.entries(players).filter(([id, p]) => id !== pid && p).slice(0, 6).map(([id, p]) => {

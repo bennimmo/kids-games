@@ -408,3 +408,66 @@ function copyMe(env) {
   f.again.addEventListener('click', () => { env.sfx.click(); round(); });
   round();
 }
+
+// ---------------------------------------------------------------- Noughts & crosses vs a FRIEND (playdate)
+// opts: { me: 'x' | 'o', friend: name, send(op, i), done(result) }
+// Returns { remote(op, i) } – feed the friend's moves in.
+export function tttFriend(env, opts) {
+  const f = frame(env, `❌ vs ${esc(opts.friend)} ⭕`);
+  f.ov.querySelector('[data-back]').innerHTML = '👋 Stop';
+  f.ov.querySelector('[data-back]').addEventListener('click', () => opts.send('bye'), { capture: true });
+  const sc = { x: 0, o: 0 };
+  let b, over, turn, starter = 'x';
+  const mine = () => turn === opts.me;
+  const name = who => (who === opts.me ? 'You' : esc(opts.friend));
+  const draw = () => {
+    f.area.querySelector('[data-x]').classList.toggle('on', !over && turn === 'x');
+    f.area.querySelector('[data-o]').classList.toggle('on', !over && turn === 'o');
+    f.area.querySelector('[data-x]').textContent = `❌ ${name('x')} ${sc.x}`;
+    f.area.querySelector('[data-o]').textContent = `⭕ ${name('o')} ${sc.o}`;
+    if (!over) f.msg(mine() ? 'Your go!' : `${esc(opts.friend)}'s go…`);
+  };
+  const start = () => {
+    b = Array(9).fill(null); over = false; turn = starter;
+    f.again.hidden = true;
+    f.area.innerHTML = `<div class="mg-score"><span data-x></span><span data-o></span></div><div style="height:10px"></div><div class="mg-ttt">${b.map((_, i) => `<button data-i="${i}"></button>`).join('')}</div>`;
+    f.area.querySelectorAll('[data-i]').forEach(c => c.addEventListener('click', () => {
+      const i = +c.dataset.i;
+      if (over || !mine() || b[i]) return;
+      put(i, opts.me);
+      opts.send('move', i);
+    }));
+    draw();
+  };
+  const put = (i, who) => {
+    const cells = f.area.querySelectorAll('[data-i]');
+    b[i] = who;
+    cells[i].textContent = who === 'x' ? '❌' : '⭕';
+    env.sound.tone(who === 'x' ? 660 : 440, 0.1, 'triangle', 0.15);
+    turn = who === 'x' ? 'o' : 'x';
+    const w = winner(b);
+    if (w) {
+      over = true;
+      if (w.line) w.line.forEach(k => cells[k].classList.add('win'));
+      if (w.who === 'draw') { f.msg("It's a draw! 🤝"); f.view.say('🤝'); opts.done('draw'); }
+      else {
+        sc[w.who]++;
+        if (w.who === opts.me) { f.msg('You win! 🎉'); f.view.face('giggle', 2); f.view.say('🎉'); f.view.hop(); opts.done('win'); }
+        else { f.msg(`${esc(opts.friend)} wins! 👏`); f.view.face('wow', 2); f.view.say('👏'); opts.done('lose'); }
+      }
+      f.again.hidden = false;
+    }
+    draw();
+  };
+  f.again.addEventListener('click', () => { env.sfx.click(); starter = starter === 'x' ? 'o' : 'x'; opts.send('again'); start(); });
+  start();
+  return {
+    remote(op, i) {
+      if (!f.ov.isConnected) return;
+      if (op === 'move' && !over && !mine() && !b[i]) put(i, opts.me === 'x' ? 'o' : 'x');
+      else if (op === 'again') { starter = starter === 'x' ? 'o' : 'x'; start(); }
+      else if (op === 'bye') { over = true; f.msg(`${esc(opts.friend)} stopped playing 👋`); f.again.hidden = true; }
+    },
+    open: () => f.ov.isConnected,
+  };
+}

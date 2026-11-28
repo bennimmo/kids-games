@@ -12,7 +12,7 @@ import {
 } from './pet.js';
 import { drawThing, hasArt } from './art.js';
 import { ic, ICON_CSS } from './icons.js';
-import { MINI, MINI_CSS, play as playMini } from './minigames.js';
+import { MINI, MINI_CSS, play as playMini, tttFriend } from './minigames.js';
 import { hostPlaydate, joinPlaydate, connect as connectPlaydate } from './playdate.js';
 import { takeJoinCode } from '../../js/engine/together.js';
 import { createRoom } from '../../js/engine/net.js';
@@ -954,6 +954,7 @@ export function mount(stage, info) {
     }
     if (screen !== 'tank') return;
     if (party) { partyTap(p.x, p.y); return; }
+    if (race && race.phase !== 'done') { raceTap(); return; }
     if (game) {
       for (const b of game.list) {
         if (!b.dead && Math.hypot(p.x - b.x, p.y - b.y) < b.r + 14) {
@@ -1118,7 +1119,19 @@ export function mount(stage, info) {
     let speed = 110 * (pet.energy < 25 ? 0.55 : 1) * (pet.sick ? 0.6 : 1) * Math.max(0.8, S);
     const food = foods.filter(f => !f.gone).sort((a, b) => Math.abs(a.x - ax.x) - Math.abs(b.x - ax.x))[0];
     const chase = bubbles.find(b => b.chase);
-    if (party) {
+    if (race && race.phase !== 'done') {
+      const laneY = TOP + 100 + race.lane * Math.min(110, (FLOOR - TOP - 170) / Math.max(1, race.lanes - 1));
+      ax.tx = box.x0 + (W - 120 * S - box.x0) * race.p; ax.ty = laneY;
+      speed *= 5;
+    } else if (dance) {
+      const ph = pd ? (pd.pid.charCodeAt(0) % 7) : 0;
+      ax.tx = W / 2 + Math.cos(t * 1.6 + ph) * Math.min(220, W * 0.25); ax.ty = (TOP + FLOOR) / 2 + Math.sin(t * 3.2 + ph) * 60;
+      speed *= 1.6;
+    } else if (hug) {
+      const left = !pd || [pd.pid, ...mates.keys()].sort()[0] === pd.pid;
+      ax.tx = W / 2 + (left ? -80 : 80) * S; ax.ty = (TOP + FLOOR) / 2 + 40;
+      speed *= 1.8;
+    } else if (party) {
       ax.tx = W / 2 - 160 * S; ax.ty = FLOOR - 120 * S;
     } else if (pet.asleep) {
       ax.tx = clamp(ax.x, box.x0, box.x1); ax.ty = FLOOR - 26 * S;
@@ -1272,6 +1285,23 @@ export function mount(stage, info) {
     }
 
     // HUD bars move slowly; refresh now and then
+    // ---- Together activities
+    if (race) raceTick(dt);
+    if (dance) {
+      dance.t -= dt; dance.beat -= dt;
+      if (dance.beat <= 0) { dance.beat = 0.42; sound.tone([110, 147, 165, 131][Math.floor(t * 2.4) % 4], 0.12, 'triangle', 0.1); parts.push({ icon: ['🎵', '🎶', '✨'][Math.floor(Math.random() * 3)], x: ax.x + rand(-40, 40), y: ax.y - 40 * S, vx: rand(-20, 20), vy: -60, life: 1.5, size: 24 }); }
+      if (Math.random() < dt * 3) setFace('giggle', 0.5);
+      pet.fun = clamp(pet.fun + dt * 1.5);
+      if (dance.t <= 0) { dance = null; setFace('joy', 1.5); refreshHud(); }
+    }
+    if (hug) {
+      hug.t -= dt;
+      const close = [...mates.values()].some(m => Math.hypot(m.x - ax.x, m.y - ax.y) < 220 * S);
+      if ((close || !mates.size) && Math.random() < dt * 5) pop('💖', W / 2 + rand(-60, 60), ax.y - 40 * S);
+      if (close) setFace('giggle', 0.3);
+      if (hug.t <= 0) { hug = null; pet.fun = clamp(pet.fun + 10); setFace('joy', 1.5); refreshHud(); }
+    }
+
     // ---- Playdate: move friends' axolotls, send mine
     if (pd) {
       pd.setPos(ax.x / W, (ax.y - TOP) / (FLOOR - TOP), ax.dir, faceNow());
@@ -1430,6 +1460,24 @@ export function mount(stage, info) {
 
     // Glass dirt, lights off, clean mode sponge
     drawAlgae(ctx, W, H, 1 - pet.clean / 100);
+    if (dance) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ['#ff4f86', '#4fa3ff', '#ffd54a', '#5ccf8a', '#b388ff'].forEach((c, i) => {
+        const x = W / 2 + Math.cos(t * 1.3 + i * 1.3) * W * 0.4, y = H * 0.45 + Math.sin(t * 1.7 + i) * H * 0.3;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, 180);
+        g.addColorStop(0, c + '55'); g.addColorStop(1, c + '00');
+        ctx.fillStyle = g; ctx.fillRect(x - 180, y - 180, 360, 360);
+      });
+      ctx.restore();
+    }
+    if (race && race.phase !== 'done') {
+      const fx = W - 120 * S + 60 * S;
+      for (let y = TOP + 40, k = 0; y < FLOOR; y += 16, k++) {
+        ctx.fillStyle = k % 2 ? '#fff' : '#222'; ctx.fillRect(fx, y, 8, 16);
+        ctx.fillStyle = k % 2 ? '#222' : '#fff'; ctx.fillRect(fx + 8, y, 8, 16);
+      }
+    }
     drawGlass(ctx, W, H);
     drawNight(ctx, W, H, dark);
     if (drag?.kind === 'clean' && drag.sx != null) drawEmoji(ctx, '🧽', drag.sx, drag.sy, 52);
@@ -1474,6 +1522,117 @@ export function mount(stage, info) {
     }
     refreshHud();
   }
+  // ---------- Playdate things to do together ----------
+  // hug: axolotls swim to the middle and cuddle. dance: disco party. race: tap to swim to the finish.
+  // treat: send food to a friend's axolotl. ttt: noughts & crosses against a friend.
+  let hug = null, dance = null, race = null, ttt = null;
+  const wake = () => { if (pet.asleep) { pet.asleep = false; pet.lights = true; refreshHud(); } };
+  const mateName = pid => mates.get(pid)?.pet.name || 'Friend';
+  const mateWho = pid => mates.get(pid)?.who || 'Friend';
+
+  function startHug() { wake(); hug = { t: 4.5 }; sfx.giggle(); }
+  function startDance() { wake(); dance = { t: 10, beat: 0 }; hint('💃 Dance party!', 2); }
+  function startRace(id, at) {
+    if (race && race.phase !== 'done') return;
+    wake(); closeTray();
+    const pids = [pd.pid, ...mates.keys()].sort();
+    race = { id, at, phase: 'count', p: 0, lane: pids.indexOf(pd.pid), lanes: pids.length, res: new Map(), names: new Map(pids.map(id2 => [id2, id2 === pd.pid ? pet.name : mateName(id2)])), mine: null, end: 0 };
+    bar.style.visibility = 'hidden';
+  }
+  function raceTick(dt) {
+    const now = pd ? pd.now() : Date.now();
+    if (race.phase === 'count') {
+      const left = Math.ceil((race.at - now) / 1000);
+      if (left !== race.shown) { race.shown = left; if (left > 0) { hint(`🏁 ${left}…`, 0); sound.tone(440, 0.12, 'square', 0.1); } }
+      if (now >= race.at) { race.phase = 'go'; hint('GO! Tap tap tap! 👆', 2); sound.tone(880, 0.25, 'square', 0.12); }
+    } else if (race.phase === 'go' && (now - race.at > 30000 || (race.first && performance.now() - race.first > 8000))) finishRace();
+    else if (race.phase === 'wait' && (performance.now() > race.end || race.res.size >= race.lanes)) finishRace();
+  }
+  function raceTap() {
+    if (!race || race.phase !== 'go') return;
+    race.p = Math.min(1, race.p + 0.034);
+    sound.tone(500 + race.p * 500, 0.04, 'triangle', 0.08);
+    if (race.p >= 1) {
+      race.mine = pd.now() - race.at;
+      race.res.set(pd.pid, race.mine);
+      pd.send({ k: 'rfin', id: race.id, ms: Math.round(race.mine) });
+      race.phase = 'wait'; race.end = performance.now() + 4000;
+      hint('🏁 Finished!', 1.5);
+    }
+  }
+  function finishRace() {
+    const r = race;
+    r.phase = 'done';
+    bar.style.visibility = '';
+    const order = [...r.res.entries()].sort((a, b) => a[1] - b[1]);
+    const medals = ['🥇', '🥈', '🥉', '🏅', '🏅', '🏅'];
+    const list = order.map(([pid], i) => `${medals[i]} ${esc(r.names.get(pid) || 'Friend')}`).join('<br>');
+    const won = order.length && order[0][0] === pd?.pid;
+    toast(`🏁 Race!<br><small style="font-size:20px">${list || 'Nobody finished 😅'}</small>`, 4);
+    if (won) { sound.win(); setFace('giggle', 2); } else setFace('joy', 2);
+    pet.fun = clamp(pet.fun + 15); pet.energy = clamp(pet.energy - 5);
+    refreshHud();
+    setTimeout(() => { if (race === r) race = null; }, 500);
+  }
+
+  function sendTreat() {
+    const list = pd.mates();
+    if (!list.length) { hint('Waiting for friends…', 2); return; }
+    let to = list[0].pid;
+    const ov = overlay(`
+      <div class="ui-title">🎁 Send a treat</div>
+      ${list.length > 1 ? `<div class="ui-row">${list.map((m, i) => `<button class="ui-btn small ${i ? '' : 'primary'}" data-to="${m.pid}">${m.face} ${esc(m.pet.name)}</button>`).join('')}</div>` : `<div class="ui-sub">For ${esc(list[0].pet.name)} 💝</div>`}
+      <div class="axie-grid">${FOODS.map(f => `<button class="axie-item" data-f="${f.id}">${thumb('food-' + f.id)}</button>`).join('')}</div>
+      <div class="ui-row"><button class="ui-btn ghost" data-close>Back</button></div>`, false);
+    ov.querySelectorAll('[data-to]').forEach(b => b.addEventListener('click', () => {
+      to = b.dataset.to; ov.querySelectorAll('[data-to]').forEach(x => x.classList.toggle('primary', x === b)); sfx.click();
+    }));
+    ov.querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
+      pd.send({ k: 'treat', f: b.dataset.f, to });
+      ov.close();
+      sfx.coin(); pet.fun = clamp(pet.fun + 5); setFace('joy', 1.5);
+      hint(`💝 Sent to ${mateName(to)}!`, 2);
+    }));
+  }
+
+  // Noughts & crosses with a friend
+  function askTtt() {
+    const list = pd.mates();
+    if (!list.length) { hint('Waiting for friends…', 2); return; }
+    const go = m => {
+      const id = pd.uid.slice(0, 6) + Date.now().toString(36);
+      ttt = { id, peer: m.pid, me: 'x', asking: true };
+      pd.send({ k: 'ttt', op: 'ask', id, to: m.pid });
+      hint(`❌⭕ Asking ${m.pet.name}…`, 3);
+    };
+    if (list.length === 1) { go(list[0]); return; }
+    const ov = overlay(`<div class="ui-title">❌⭕ Play with…</div><div class="ui-row">${list.map(m => `<button class="ui-btn primary" data-to="${m.pid}">${m.face} ${esc(m.pet.name)}</button>`).join('')}</div><div class="ui-row"><button class="ui-btn ghost" data-close>Back</button></div>`, false);
+    ov.querySelectorAll('[data-to]').forEach(b => b.addEventListener('click', () => { ov.close(); go(list.find(m => m.pid === b.dataset.to)); }));
+  }
+  function openTtt(me, peer, id) {
+    ttt = { id, peer, me, game: null };
+    ttt.game = tttFriend({ pet, col: colOf, overlay: html => overlay(html), sfx, sound, menu: () => { if (pd) openPlaydate(); } }, {
+      me, friend: mateName(peer),
+      send: (op, i) => pd?.send({ k: 'ttt', op, id, to: peer, i: i || 0 }),
+      done: rewardMini,
+    });
+  }
+  function onTtt(from, e) {
+    if (e.op === 'ask' && e.to === pd.pid) {
+      if (panelOpen || party || game) { pd.send({ k: 'ttt', op: 'no', id: e.id, to: from }); return; }
+      const ov = overlay(`<div class="ui-title">❌⭕</div><div class="ui-sub" style="font-size:22px"><b>${esc(mateWho(from))}</b> wants to play noughts & crosses!</div>
+        <div class="ui-row"><button class="ui-btn ghost" data-no>✖ Not now</button><button class="ui-btn go big" data-yes>✔ Play</button></div>`, false);
+      ov.querySelector('[data-no]').addEventListener('click', () => { ov.close(); pd?.send({ k: 'ttt', op: 'no', id: e.id, to: from }); });
+      ov.querySelector('[data-yes]').addEventListener('click', () => { ov.close(); pd?.send({ k: 'ttt', op: 'yes', id: e.id, to: from }); openTtt('o', from, e.id); });
+      sound.win();
+      return;
+    }
+    if (!ttt || e.id !== ttt.id || from !== ttt.peer) return;
+    if (e.op === 'yes' && ttt.asking) { document.querySelectorAll('.axie .ui-overlay').forEach(o => o.close && o.close()); openTtt('x', from, e.id); }
+    else if (e.op === 'no' && ttt.asking) { hint(`${mateName(from)} said not now 🙂`, 2.5); ttt = null; }
+    else if (ttt.game) ttt.game.remote(e.op, e.i);
+  }
+
   function onPlaydateEvent(from, e) {
     if (screen !== 'tank') return;
     if (e.k === 'food') {
@@ -1493,7 +1652,18 @@ export function mount(stage, info) {
       refreshHud();
     } else if (e.k === 'game') {
       if (!pet.asleep && !pet.sick && !panelOpen) startGame(true);
-    }
+    } else if (e.k === 'hug') { startHug(); hint(`🤗 ${mateName(from)} wants a hug!`, 2); }
+    else if (e.k === 'dance') startDance();
+    else if (e.k === 'race') { if (!panelOpen && !party && !game) startRace(e.id, e.at); }
+    else if (e.k === 'rfin') { if (race && race.id === e.id) { race.res.set(from, e.ms); race.first = race.first || performance.now(); } }
+    else if (e.k === 'treat' && pd && e.to === pd.pid) {
+      const f = FOODS.find(x => x.id === e.f);
+      if (!f) return;
+      wake();
+      foods.push({ f, x: clamp(ax.x + ax.dir * 80 * S, 60, W - 60), y: TOP - 10, vy: 30, age: 0, id: 'gift-' + (++foodN) });
+      toast(`💝 ${esc(mateWho(from))} sent ${esc(pet.name)} a treat!`, 2.5);
+      sound.win();
+    } else if (e.k === 'ttt') onTtt(from, e);
   }
   function usePlaydate(room) {
     pd = connectPlaydate(room, {
@@ -1501,6 +1671,7 @@ export function mount(stage, info) {
       onEvent: onPlaydateEvent,
       onChange: syncMates,
       onClosed: () => {
+        endTogether();
         pd = null; mates.clear();
         toast('Playdate over 👋', 2.5);
         refreshHud();
@@ -1535,7 +1706,12 @@ export function mount(stage, info) {
       hint("Couldn't connect 😢 Try again", 3);
     }
   }
+  function endTogether() {
+    hug = null; dance = null; ttt = null;
+    if (race) { race = null; if (bar) bar.style.visibility = ''; hint(''); }
+  }
   async function leavePlaydate() {
+    endTogether();
     const p = pd;
     pd = null; mates.clear();
     if (p) await p.leave();
@@ -1543,20 +1719,34 @@ export function mount(stage, info) {
   }
   function openPlaydate() {
     const list = pd.mates();
-    const ov = overlay(`
+    const acts = [['hug', 'hug', 'Hug'], ['dance', 'music', 'Dance party'], ['race', 'race', 'Swim race'], ['ttt', 'ttt', 'Noughts & crosses'], ['treat', 'treat', 'Send a treat'], ['bubbles', 'bubbles', 'Bubble pop']];
+    const ov = overlay(`<style>${miniTile}</style>
       <div class="ui-kicker">Playdate</div>
-      <div class="ui-title">${pd.isHost ? '👫 In your tank' : `🏠 At ${esc(pd.hostName())}'s tank`}</div>
+      <div class="ui-title">${pd.isHost ? `${ic('friends')} In your tank` : `🏠 At ${esc(pd.hostName())}'s tank`}</div>
       <div class="ui-row">${list.length ? list.map(m => `<span class="ui-chip">${m.face} ${esc(m.pet.name)}</span>`).join('') : '<span class="ui-sub">Waiting for friends…</span>'}</div>
-      <div class="ui-sub">Feed, blow bubbles and play 🎮 together. Tap a friend's axolotl to tickle it!</div>
-      <div class="ui-row"><button class="ui-btn danger" data-leave>👋 ${pd.isHost ? 'End playdate' : 'Go home'}</button><button class="ui-btn primary" data-close>Keep playing</button></div>`, false);
+      <div class="ui-choices">${acts.map(([id, icon, name]) => `<button class="mg-tile" data-a="${id}" ${list.length ? '' : 'disabled style="opacity:.4"'}>${ic(icon)}<small>${name}</small></button>`).join('')}</div>
+      <div class="ui-sub">Food and bubbles show for everyone. Tap a friend's axolotl to tickle it!</div>
+      <div class="ui-row"><button class="ui-btn danger" data-leave>👋 ${pd.isHost ? 'End playdate' : 'Go home'}</button><button class="ui-btn primary" data-close>Keep playing</button></div>`);
     ov.querySelector('[data-leave]').addEventListener('click', () => { ov.close(); leavePlaydate(); });
+    ov.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => {
+      if (!pd || !pd.mates().length) return;
+      sfx.click(); ov.close();
+      const a = b.dataset.a;
+      if (a === 'hug') { pd.send({ k: 'hug' }); startHug(); }
+      else if (a === 'dance') { pd.send({ k: 'dance' }); startDance(); }
+      else if (a === 'race') { const id = pd.uid.slice(0, 6) + Date.now().toString(36), at = pd.now() + 3500; pd.send({ k: 'race', id, at }); startRace(id, at); }
+      else if (a === 'ttt') askTtt();
+      else if (a === 'treat') sendTreat();
+      else if (a === 'bubbles') { if (pet.sick) { hint('Give medicine first 💊'); return; } wake(); startGame(); }
+    }));
   }
+
 
   // Tests: ?axdebug&net=local, then __axie.host() in one tab and #/axie?join=<code> in another.
   if (/axdebug/.test(location.search)) {
     window.__axie = {
       host: async () => { const r = await createRoom('axie', { v: 1, tank: {} }); await r.setMeta({ hostUid: r.uid }); usePlaydate(r); return r.code; },
-      state: () => ({ pd: !!pd, mates: mates.size, foods: foods.length, game: !!game, fun: pet && pet.fun }),
+      state: () => ({ pd: !!pd, mates: mates.size, foods: foods.length, game: !!game, fun: pet && pet.fun, hug: !!hug, dance: !!dance, race: race && race.phase, raceP: race && race.p, ttt: !!(ttt && ttt.game) }),
     };
   }
 

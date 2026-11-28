@@ -97,6 +97,18 @@ const S = {
   colour: `<path d="M32 8C17 8 7 18 7 30c0 10 8 17 16 17 5 0 5-4 4-7-1-3 0-6 4-6h7c9 0 15-6 15-13C53 13 44 8 32 8z" fill="#ffe7c2"/>
     <circle cx="20" cy="24" r="5" fill="#ff6b6b"/><circle cx="32" cy="17" r="5" fill="#ffd54a"/><circle cx="44" cy="22" r="5" fill="#5ccf8a"/><circle cx="17" cy="36" r="4.5" fill="#4fa3ff"/>`,
   outfits: `<path d="M32 7l7 15 16 2-12 11 3 16-14-8-14 8 3-16L9 24l16-2z" fill="#ffd54a"/><path d="M24 22l4-8" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".6"/>`,
+  // playdate
+  hug: `<path d="M24 50C10 40 4 32 4 23c0-7 5-12 11-12 4 0 7 2 9 5 2-3 5-5 9-5 6 0 11 5 11 12 0 9-6 17-20 27z" fill="#ff7aa2"/>
+    <path d="M42 54C30 46 25 39 25 32c0-6 4-10 9-10 3 0 6 2 8 4 2-2 5-4 8-4 5 0 9 4 9 10 0 7-5 14-17 22z" fill="#ffb3c8"/>
+    <ellipse cx="13" cy="20" rx="4" ry="2.5" fill="#fff" opacity=".6" transform="rotate(-30 13 20)"/>`,
+  race: `<rect x="12" y="8" width="4" height="50" rx="2" fill="#8d6e63"/>
+    <path d="M16 10h36l-6 10 6 10H16z" fill="#fff"/>
+    <path d="M16 10h9v7h-9zM34 10h9v7h-9zM25 17h9v6h-9zM43 17h6l-3 6h-3zM16 23h9v7h-9zM34 23h9v7h-9z" fill="#2b2b3a"/>`,
+  treat: `<ellipse cx="32" cy="54" rx="20" ry="4" fill="#000" opacity=".12"/>
+    <path d="M18 30h28l-4 22H22z" fill="#ffcc80"/><path d="M24 32l1 18M32 32v18M40 32l-1 18" stroke="#e09a48" stroke-width="2"/>
+    <path d="M14 31c-2-10 6-14 12-13 2-6 10-6 12 0 6-1 14 3 12 13z" fill="#ffb3d9"/>
+    <circle cx="32" cy="13" r="5" fill="#ff4f6d"/><path d="M32 8c1-3 4-4 6-3" stroke="#5ccf8a" stroke-width="2" fill="none"/>
+    <path d="M22 24l3-1M30 22l3 1M38 25l3-1" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
   // games
   ttt: `<path d="M24 8v48M40 8v48M8 24h48M8 40h48" stroke="#a9bdd6" stroke-width="4" stroke-linecap="round"/><path d="M11 11l10 10M21 11L11 21" stroke="#ff6b81" stroke-width="5" stroke-linecap="round"/><circle cx="48" cy="32" r="5.5" fill="none" stroke="#4fa3ff" stroke-width="4.5"/><path d="M27 43l10 10M37 43l-10 10" stroke="#ff6b81" stroke-width="5" stroke-linecap="round"/>`,
   shell: `<path d="M8 44C8 24 18 12 32 12s24 12 24 32z" fill="#ffc7b0"/><path d="M32 44V14M32 44L14 22M32 44L50 22M32 44L9 34M32 44L55 34" stroke="#e58e7a" stroke-width="2.5"/><path d="M24 44h16l-3 8H27z" fill="#f2a48f"/><ellipse cx="22" cy="22" rx="5" ry="2.5" fill="#fff" opacity=".6" transform="rotate(-35 22 22)"/>`,
