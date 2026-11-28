@@ -12,7 +12,7 @@
 //   others() -> [{ uid, name, color, ms }], myName(), placeMe(spot, type?), flash(text), sound, invite(), hostName() }
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { PLANES } from './planes.js';
-import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt, solidHeight, cityRuns } from './island.js';
+import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt, solidHeight, cityRuns, SPIRES } from './island.js';
 import { rng, clamp } from './noise.js';
 
 export const MISSIONS = [
@@ -285,6 +285,7 @@ export function createMissions(ctx) {
   let closedN = 0;         // run number we've closed (don't restart it)
   let flying = false;
   let pickerOpen = false;
+  let lobby = null;        // asking friends in the sky to join: { id, n, until, prev }
   const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 
   // water drops in the air (gravity)
@@ -306,14 +307,55 @@ export function createMissions(ctx) {
   function startMission(id) {
     if (!ctx.isHost()) return;
     const now = ctx.now();
-    const uids = [ctx.myUid(), ...ctx.others().map(o => o.uid)];
+    // friends flying in the same sky: ask them first (they tap Join), then start with whoever said yes
+    if (ctx.canAsk && ctx.canAsk() && !lobby) {
+      const n = (Math.floor(now / 1000) % 1e8) * 10 + Math.floor(Math.random() * 10);
+      lobby = { id, n, until: now + 15000, prev: run ? run.who.filter(u => u !== ctx.myUid()) : [] };
+      ctx.announce({ inv: id, n, until: lobby.until });
+      pickerOpen = false;
+      lobbyShow();
+      return;
+    }
+    go(id, [ctx.myUid(), ...ctx.others().map(o => o.uid)]);
+  }
+  const joiners = () => (lobby ? [...new Set(ctx.others().filter(o => o.jn === lobby.n).map(o => o.uid))] : []);
+  function lobbyShow() {
+    if (!lobby) return;
+    const def = DEF[lobby.id], j = joiners(), names = ctx.others().filter(o => j.includes(o.uid)).map(o => o.name);
+    const sec = Math.max(0, Math.ceil((lobby.until - ctx.now()) / 1000));
+    const html = `<div class="ui-overlay sp-mlobby"><div class="ui-panel">
+      <div class="ui-kicker">${def.icon} ${def.name}</div><h2 class="ui-title">👫 Asking friends…</h2>
+      <p class="ui-sub">Friends flying near you can tap <b>Join</b>. Starting in ${sec}s</p>
+      <div class="sp-mlist">${[`<div class="sp-mrow me"><span>✈️</span><b>${esc(ctx.myName() || 'You')}</b><i>ready</i></div>`, ...names.map(nm => `<div class="sp-mrow"><span>✅</span><b>${esc(nm)}</b><i>joined!</i></div>`)].join('')}</div>
+      <div class="ui-row"><button class="ui-btn primary big sp-lgo">▶️ Start now</button><button class="ui-btn ghost sp-lno">Cancel</button></div></div></div>`;
+    if (H.ov._lobby === html) return;
+    H.ov._lobby = html;
+    openOverlay(html);
+    tapBtn('.sp-lgo', () => lobbyGo());
+    tapBtn('.sp-lno', () => { lobby = null; H.ov._lobby = ''; ctx.announce(null); closeOverlay(); });
+  }
+  function lobbyTick() {
+    if (!lobby) return;
+    const j = joiners();
+    // everyone from last time is back (or time's up): go
+    if (ctx.now() >= lobby.until || (lobby.prev.length && lobby.prev.every(u => j.includes(u)))) lobbyGo();
+    else lobbyShow();
+  }
+  function lobbyGo() {
+    if (!lobby) return;
+    const { id } = lobby, j = joiners();
+    lobby = null; H.ov._lobby = '';
+    go(id, [ctx.myUid(), ...j]);
+  }
+  function go(id, uids) {
+    const now = ctx.now();
     const who = [...new Set(uids)].sort();
     const m = { id, n: (Math.floor(now / 1000) % 1e8) * 10 + Math.floor(Math.random() * 10), seed: Math.floor(Math.random() * 1e9), at: now + 4500, who };
     if (id === 'fire') m.fires = Array(Math.min(10, 3 + 2 * who.length)).fill(100);
     closeOverlay(); pickerOpen = false;
     ctx.setMeta(m);
   }
-  function stopMission() { if (ctx.isHost()) ctx.setMeta(null); else { if (run) closedN = run.n; endRun(); closeOverlay(); } }
+  function stopMission() { if (lobby) { lobby = null; ctx.announce(null); } if (ctx.isHost()) ctx.setMeta(null); else { if (run) closedN = run.n; endRun(); closeOverlay(); if (ctx.leaveGroup) ctx.leaveGroup(); } }
 
   // ------------------------------------------------------------ a run
   function startRun(m) {
@@ -324,7 +366,7 @@ export function createMissions(ctx) {
     const who = Array.isArray(m.who) ? m.who : [me];
     const idx = Math.max(0, who.indexOf(me));
     const part = who.includes(me) || m.id === 'fire';
-    run = { m, def, n: m.n, who, idx, part, phase: 'count', sc: 0, k: 0, dn: 0, t: 0, h: 0, dr: [], drId: 0, group: new THREE.Group(), lastSec: -1, endCheck: 0, pushT: 0, fx: [] };
+    run = { m, def, n: m.n, who, idx, part, phase: 'count', sc: 0, k: 0, bonus: 0, tk: {}, passT: {}, myT: {}, rescues: 0, dn: 0, t: 0, h: 0, dr: [], drId: 0, group: new THREE.Group(), lastSec: -1, endCheck: 0, pushT: 0, fx: [] };
     scene.add(run.group);
     if (m.id === 'rings') setupRings(); else if (m.id === 'fire') setupFire(); else if (m.id === 'paper') setupPaper(); else setupLand();
     if (!part) ctx.flash('👀 Watching. Join the next one!');
@@ -345,6 +387,30 @@ export function createMissions(ctx) {
   }
   const elapsed = () => Math.max(0, (ctx.now() - run.m.at) / 1000);
   const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+  // ------------------------------------------------------------ flying together
+  // passing the same ring / hoop as a teammate within 5 s (either way round) = +5 each
+  const TOGETHER = 5000;
+  function togetherOnPass(k) {
+    const now = ctx.now();
+    run.myT[k] = now;
+    if (run.passT[k] && now - run.passT[k] < TOGETHER) { run.bonus += 5; run.passT[k] = 0; setTimeout(() => ctx.flash('👫 Together! +5'), 700); }
+  }
+  function trackTeam() {
+    if (!run || !run.part || run.who.length < 2) return;
+    const now = ctx.now();
+    for (const o of ctx.others()) {
+      if (!run.who.includes(o.uid) || !o.ms || o.ms.n !== run.n) continue;
+      const k = +o.ms.k || 0, was = run.tk[o.uid];
+      run.tk[o.uid] = k;
+      if (was == null || k <= was) continue;
+      for (let q = was; q < k && q < was + 5; q++) {
+        if (run.myT[q] && now - run.myT[q] < TOGETHER) { run.bonus += 5; run.myT[q] = 0; ctx.flash(`👫 Together with ${o.name}! +5`); ctx.sound.tone(660, 0.2, 'triangle', 0.1, 990); }
+        else run.passT[q] = now;
+      }
+    }
+  }
+  const team = () => run && run.who.length > 1 && run.def.id !== 'fire';
 
   // ------------------------------------------------------------ Ring Race
   function ringR(p) { const P = p.s.P; return Math.min(40, Math.max(30, P.span * 1.8) * (ctx.easy() ? 1.35 : 1)); }
@@ -391,6 +457,7 @@ export function createMissions(ctx) {
   }
   function updateRings(dt, p) {
     const s = p.s, pos = s.pos;
+    if (run.part && !run.dn) run.sc = (run.pts || 0) + run.bonus;
     if (!run.part || run.dn) { run.prev.copy(pos); return ringTarget(); }
     const g = run.rings[run.k];
     if (g && !s.crashed) {
@@ -402,7 +469,9 @@ export function createMissions(ctx) {
         if (lat < 1500) {
           const fr = lat / (g.R || run.R);
           const pts = fr < 0.25 ? 10 : fr < 0.5 ? 6 : fr < 0.75 ? 3 : fr < 1 ? 1 : 0;
-          run.sc += pts; run.k++;
+          run.pts = (run.pts || 0) + pts; run.k++;
+          if (team()) togetherOnPass(run.k - 1);
+          run.sc = run.pts + run.bonus;
           if (pts === 10) { ctx.flash('🎯 10! Bullseye!'); ctx.sound.win(); }
           else if (pts) { ctx.flash(`⭕ ${pts} point${pts > 1 ? 's' : ''}`); ctx.sound.tone(400 + pts * 60, 0.15, 'triangle', 0.1, 700 + pts * 60); }
           else { ctx.flash('❌ Missed! Keep going ➡️'); ctx.sound.bump(); }
@@ -421,7 +490,7 @@ export function createMissions(ctx) {
   const ringTarget = () => { const g = run.rings[Math.min(run.k, run.rings.length - 1)]; return g ? { x: g.c.x, z: g.c.z } : null; };
 
   // ------------------------------------------------------------ Paper Plane: endless hoops, glide as far as you can
-  const PAPER = { gap: 200, drop: 18, rise: 16 };
+  const PAPER = { gap: 170, drop: 18, rise: 16 };
   function setupPaper() {
     const r = rng(run.m.seed ^ 0x9a9e7);
     run.prng = r;
@@ -455,14 +524,15 @@ export function createMissions(ctx) {
   function paperGen() {
     const r = run.prng, c = run.cur, easy = ctx.easy();
     const i = run.hoops.length;
-    const R = (easy ? 30 : 22) * Math.max(0.75, 1 - i * 0.004);
+    const R = (easy ? 22 : 15) * Math.max(0.75, 1 - i * 0.004);
     const groundAt = (x, z) => Math.max(solidHeight(x, z), solidHeight(x + 15, z), solidHeight(x - 15, z), solidHeight(x, z + 15), solidHeight(x, z - 15));
     // hoop bottom just above the ground under it, and the straight line from the last hoop clear of the hills
-    const floorOf = (top, local) => Math.max(local + R + (easy ? 5 : 3), top + 10);
+    const floorOf = (top, local) => Math.max(local + R + (easy ? 3 : 1.5), top + 6);      // right down among the tree tops
     const away = Math.hypot(c.x, c.z - 1500) > 9500 || terrainHeight(c.x, c.z) < 0.3;
     const dropFor = fl => clamp((c.y - fl) * 0.25, PAPER.drop, 45);
     const toC = Math.atan2(-c.x, -(1500 - c.z));
     const push = g => {
+      run.prevHdg = c.hdg;
       run.cur = { x: g.c.x, z: g.c.z, y: g.c.y, hdg: hdgOf(g.n.x, g.n.z) };
       const key = Math.round(g.c.x / 400) + ',' + Math.round(g.c.z / 400);
       run.visited.set(key, (run.visited.get(key) || 0) + 1);
@@ -470,9 +540,10 @@ export function createMissions(ctx) {
       return g;
     };
     const featHoop = F => {
-      const p = F.pts[F.j], a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(p.x, p.y, p.z);
-      const n = F.j === 0 ? new THREE.Vector3(F.n.x, 0, F.n.z).add(cc.clone().sub(a).normalize()).normalize() : new THREE.Vector3(F.n.x, 0, F.n.z);
-      const hr = F.f.city ? (easy ? 16 : 13) : p.R;
+      const p = F.pts[F.j], hr0 = F.f.city ? (easy ? 15 : 11) : p.R;
+      const a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(p.x, p.g != null ? Math.max(p.g + hr0 + 2, p.y - (p.R - hr0)) : p.y, p.z);
+      const n = new THREE.Vector3(F.n.x, 0, F.n.z).add(cc.clone().sub(a).normalize()).normalize();
+      const hr = hr0;
       F.j++;
       if (F.j >= F.pts.length) { run.usedB.set(F.f, run.hoops.length); run.feat = null; }
       return push({ c: cc, n, R: hr, bridge: !!F.f.bridge, city: !!F.f.city });
@@ -502,7 +573,7 @@ export function createMissions(ctx) {
       h = c.hdg + clamp(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)), -0.6, 0.6);
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let q = 0; q <= 8; q++) top = Math.max(top, solidHeight(c.x + (x - c.x) * q / 8, c.z + (z - c.z) * q / 8));
+      for (let q = 0; q <= 14; q++) for (const sd of [-12, 0, 12]) top = Math.max(top, solidHeight(c.x + (x - c.x) * q / 14 + Math.cos(h) * sd, c.z + (z - c.z) * q / 14 + Math.sin(h) * sd));
       const fl = floorOf(top, groundAt(x, z));
       const y = Math.max(fl, c.y + (b.y - c.y) * clamp(PAPER.gap / d, 0, 1));
       if (y - c.y < PAPER.rise + 5 && y < b.y + 120) {
@@ -518,11 +589,16 @@ export function createMissions(ctx) {
       for (const w of waysIn(f)) { const b = w.pts[0], d = Math.hypot(b.x - c.x, b.z - c.z) * (f.city ? 0.35 : 1); if (d < ld) { ld = d; lure = b; lw = f.city ? 32 : 24; } }
     }
     const lureH = lure ? Math.atan2(lure.x - c.x, -(lure.z - c.z)) : 0;
+    // rock spires: head for the nearest cluster we haven't flown through yet (and weave between them)
+    run.usedS = run.usedS || new Set();
+    let rock = null, rd = 2600;
+    for (const sp of SPIRES) { const d = Math.hypot(sp.x - c.x, sp.z - c.z); if (d < 140) run.usedS.add(sp); if (!run.usedS.has(sp) && d < rd) { rd = d; rock = sp; } }
+    const rockH = rock ? Math.atan2(rock.x - c.x, -(rock.z - c.z)) : 0;
     const look = (h, wide) => {
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let q = 0; q <= 8; q++) for (const sd of [-12, 0, 12]) {
-        const px = c.x + (x - c.x) * q / 8 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 8 + Math.sin(h) * sd;
+      for (let q = 0; q <= 14; q++) for (const sd of [-12, 0, 12]) {
+        const px = c.x + (x - c.x) * q / 14 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 14 + Math.sin(h) * sd;
         top = Math.max(top, solidHeight(px, pz));
       }
       top = Math.max(top, 0);
@@ -533,11 +609,21 @@ export function createMissions(ctx) {
       // walls either side = flying through a gap or a valley: fun!
       const wl = solidHeight(x + Math.cos(h) * 170, z + Math.sin(h) * 170), wr = solidHeight(x - Math.cos(h) * 170, z - Math.sin(h) * 170);
       const gap = Math.min(wl, wr) > yEst + 25 ? -35 : Math.max(wl, wr) > yEst + 25 ? -12 : 0;
+      // something right beside the hoop (a hillside, a building) = flying round obstacles: more fun
+      let close = 0;
+      for (const sd of [40, 75]) {
+        const nl = solidHeight(x + Math.cos(h) * sd, z + Math.sin(h) * sd), nr = solidHeight(x - Math.cos(h) * sd, z - Math.sin(h) * sd);
+        close += (nl > yEst + 6 ? -12 : 0) + (nr > yEst + 6 ? -12 : 0);
+      }
+      // weave: lean the opposite way to the last turn
+      const lastTurn = Math.atan2(Math.sin(c.hdg - (run.prevHdg ?? c.hdg)), Math.cos(c.hdg - (run.prevHdg ?? c.hdg)));
+      const tn = Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg));
+      const weave = Math.abs(lastTurn) > 0.08 && Math.sign(tn) === -Math.sign(lastTurn) && Math.abs(tn) > 0.15 ? -8 : 0;
       const turn = Math.abs(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)));
       const b = biomeAt(x, z);
       const seen = run.visited.get(Math.round(x / 400) + ',' + Math.round(z / 400)) || 0;
-      const pull = lure ? -lw * Math.cos(h - lureH) : 0;
-      const score = seen * 25 + climb * 4 + turn * (wide ? 5 : 15) + gap + pull + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 650) * 0.6
+      const pull = (lure && ld < 4000 ? -lw * Math.cos(h - lureH) : lure ? -lw * 0.5 * Math.cos(h - lureH) : 0) + (rock ? (rd < 800 ? -40 : -22) * Math.cos(h - rockH) : 0);
+      const score = seen * 25 + climb * 4 + turn * (wide ? 5 : 7) + gap + close + weave + pull + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 650) * 0.6
         + (b === 'sea' ? 300 : b === 'forest' || b === 'mountain' ? -10 : 0) + r() * 12;
       return { h, x, z, fl, climb, score };
     };
@@ -572,6 +658,26 @@ export function createMissions(ctx) {
   }
   function updatePaper(dt, p) {
     const s = p.s, pos = s.pos;
+    if (run.rescueAt && ctx.now() >= run.rescueAt) {
+      run.rescueAt = 0;
+      const o = ctx.others().find(x => x.uid === run.rescuer && Array.isArray(x.p) && Array.isArray(x.q) && x.ms && x.ms.n === run.n && !x.ms.dn);
+      if (!o) { run.dn = 1; run.t = elapsed(); ctx.flash(`📄 Landed! ${(run.dist / 1000).toFixed(1)} km · ⭐ ${run.sc}`); }
+      else {
+        // just behind and beside them, flying the same way, with their next hoop ahead
+        const fq = new THREE.Quaternion(...o.q), fw = new THREE.Vector3(0, 0, -1).applyQuaternion(fq); fw.y = 0;
+        if (fw.lengthSq() < 1e-4) fw.set(0, 0, -1); fw.normalize();
+        const side = new THREE.Vector3(-fw.z, 0, fw.x);
+        const spot = { x: o.p[0] - fw.x * 30 + side.x * 14, z: o.p[2] - fw.z * 30 + side.z * 14, y: o.p[1] + 4, hdg: hdgOf(fw.x, fw.z), air: true, speed: 24 };
+        const k = Math.max(run.k, +o.ms.k || 0);
+        while (run.hoops.length < k + 9) paperGen();
+        run.k = k; paperFill();
+        ctx.placeMe(spot, 'paper');
+        if (p.s) p.s.boostE = Math.max(p.s.boostE || 0, 0.5);
+        run.prev.copy(ctx.me().s.pos);
+        ctx.flash(`🤝 Back in the air with ${o.name}! (${2 - run.rescues} left)`);
+      }
+    }
+    if (run.rescueAt) { run.prev.copy(pos); const nx = run.hoops[run.k]; return nx ? { x: nx.c.x, z: nx.c.z } : null; }
     const step = Math.hypot(pos.x - run.prev.x, pos.z - run.prev.z);
     if (run.part && !run.dn && run.phase === 'go' && !s.onGround && step < 40) run.dist += step;   // (jumps don't count)
     const g = run.hoops[run.k];
@@ -585,6 +691,7 @@ export function createMissions(ctx) {
           const pts = fr < 0.25 ? 10 : fr < 0.5 ? 6 : fr < 0.75 ? 3 : fr < 1 ? 1 : 0;
           const refill = { 10: 0.45, 6: 0.35, 3: 0.25, 1: 0.15 }[pts] || 0;
           run.hpts += pts; run.k++;
+          if (team()) togetherOnPass(run.k - 1);
           if (refill && s.P.kind === 'paper') s.boostE = Math.min(1, (s.boostE || 0) + refill);
           if (pts === 10) { ctx.flash('🎯 10! +🚀'); ctx.sound.win(); }
           else if (pts) { ctx.flash(`⭕ ${pts} +🚀`); ctx.sound.tone(400 + pts * 60, 0.15, 'triangle', 0.1, 700 + pts * 60); }
@@ -593,14 +700,21 @@ export function createMissions(ctx) {
         }
       }
     }
-    run.sc = Math.round(run.dist / 10) + run.hpts;
+    if (!run.dn) run.sc = Math.round(run.dist / 10) + run.hpts + run.bonus;
     run.prev.copy(pos);
     const nx = run.hoops[run.k];
     if (nx && nx.torus) nx.torus.scale.setScalar(1 + Math.sin(performance.now() / 180) * 0.05);
     return nx ? { x: nx.c.x, z: nx.c.z } : null;
   }
   function paperEvent(name, p) {
-    if (!run.part || run.dn || (name !== 'paperdown' && name !== 'paperwet')) return;
+    if (!run.part || run.dn || run.rescueAt || (name !== 'paperdown' && name !== 'paperwet')) return;
+    // a teammate still gliding? they carry you on (twice per flight)
+    const mate = run.rescues < 2 && ctx.others().find(o => run.who.includes(o.uid) && o.ms && o.ms.n === run.n && !o.ms.dn && Array.isArray(o.p) && Array.isArray(o.q));
+    if (mate) {
+      run.rescues++; run.rescueAt = ctx.now() + 2500; run.rescuer = mate.uid;
+      ctx.flash(`🤝 ${mate.name} will carry you on!`); ctx.sound.tone(520, 0.25, 'triangle', 0.1, 780);
+      return;
+    }
     run.dn = 1; run.t = elapsed();
     ctx.flash(`📄 Landed! ${(run.dist / 1000).toFixed(1)} km · ⭐ ${run.sc}`);
   }
@@ -823,6 +937,7 @@ export function createMissions(ctx) {
       d.sp.position.addScaledVector(d.vel, dt);
       if (d.life <= 0 || d.sp.position.y < terrainHeight(d.sp.position.x, d.sp.position.z)) { d.life = 0; d.sp.visible = false; }
     }
+    if (lobby) { lobby.tickT = (lobby.tickT || 0) - dt; if (lobby.tickT <= 0) { lobby.tickT = 0.25; lobbyTick(); } }
     if (!run) return;
     const p = ctx.me(); if (!p) return;
     const now = ctx.now(), m = run.m;
@@ -836,6 +951,7 @@ export function createMissions(ctx) {
       run.phase = 'go'; setText(H.count, 'GO!'); ctx.sound.tone(880, 0.3, 'square', 0.1, 880);
       setTimeout(() => { if (run && run.phase === 'go') setText(H.count, ''); }, 900);
     }
+    if (run.phase === 'go' && (run.def.id === 'rings' || run.def.id === 'paper') && !run.dn) trackTeam();
     let target = null;
     if (run.def.id === 'rings') target = updateRings(dt, p);
     else if (run.def.id === 'fire') target = updateFire(dt, p);
@@ -886,7 +1002,9 @@ export function createMissions(ctx) {
     } else H.go.style.display = 'none';
     // friends' scores
     const rows = boardRows();
-    const html = rows.length > 1 || ctx.inRoom() ? rows.slice(0, 6).map((r, i) => `<div class="${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : ['🥇', '🥈', '🥉'][i] || '·'}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h : r.sc}${r.dn && def.id !== 'fire' ? ' 🏁' : ''}</i></div>`).join('') : '';
+    const tm = rows.length > 1 && def.id !== 'fire';
+    const html = (tm ? `<div class="sp-mteam"><span>👫</span><b>Team</b><i>⭐ ${rows.reduce((a, r) => a + r.sc, 0)}</i></div>` : '')
+      + (rows.length > 1 || ctx.inRoom() ? rows.slice(0, 6).map(r => `<div class="${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : r.dn ? '🏁' : '✈️'}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h : r.sc}</i></div>`).join('') : '');
     setHTML(H.board, html);
   }
   function boardRows() {
@@ -903,25 +1021,29 @@ export function createMissions(ctx) {
   }
 
   // ------------------------------------------------------------ end screen
-  function stars() {
+  // stars: for a team, the average of everyone's score (so a team of 3 isn't 3x easier, or harder)
+  function stars(rows) {
     if (!run) return 1;
-    if (run.def.id === 'rings') { const max = run.rings.length * 10; return run.sc >= max * 0.7 ? 3 : run.sc >= max * 0.4 ? 2 : 1; }
+    const R = rows && rows.length ? rows : [{ sc: run.sc, d: run.dist || 0 }];
+    const sc = R.reduce((a, r) => a + r.sc, 0) / R.length, dist = R.reduce((a, r) => a + (r.d || 0), 0) / R.length;
+    if (run.def.id === 'rings') { const max = run.rings.length * 10; return sc >= max * 0.7 ? 3 : sc >= max * 0.4 ? 2 : 1; }
     if (run.def.id === 'fire') { const t = run.t || elapsed(); return t < 240 ? 3 : t < 420 ? 2 : 1; }
-    if (run.def.id === 'paper') return run.dist >= 7000 ? 3 : run.dist >= 3000 ? 2 : 1;
-    return run.sc >= 240 ? 3 : run.sc >= 150 ? 2 : 1;
+    if (run.def.id === 'paper') return dist >= 7000 ? 3 : dist >= 3000 ? 2 : 1;
+    return sc >= 240 ? 3 : sc >= 150 ? 2 : 1;
   }
   function showResults() {
     if (!run) return;
     run.phase = 'over';
     if (!run.t) run.t = elapsed();
-    const st = stars(), def = run.def;
+    const def = run.def, rows = boardRows(), tm = rows.length > 1 && def.id !== 'fire', st = stars(tm ? rows : null);
     if (run.part) { const b = loadBest(); if (!b[def.id] || b[def.id] < st) { b[def.id] = st; try { localStorage.setItem(BEST_KEY, JSON.stringify(b)); } catch (e) { /* */ } } }
-    const rows = boardRows();
-    const head = def.id === 'fire'
+    const total = rows.reduce((a, r) => a + r.sc, 0);
+    const head = tm ? `<p class="ui-sub">👫 Team score <b>${total}</b>${def.id === 'paper' ? ` · <b>${(rows.reduce((a, r) => a + r.d, 0) / 1000).toFixed(1)} km</b> together` : ''}${run.bonus ? ` · you got <b>+${run.bonus}</b> for flying together` : ''}</p>`
+      : def.id === 'fire'
       ? `<p class="ui-sub">All fires out in <b>${fmtT(run.t)}</b>${rows.length > 1 ? ' together!' : '!'}</p>`
       : def.id === 'paper' ? `<p class="ui-sub">${run.part ? `You glided <b>${(run.dist / 1000).toFixed(2)} km</b> through <b>${run.k}</b> hoops` : 'Mission over'}</p>`
       : `<p class="ui-sub">${run.part ? `You got <b>${run.sc}</b> points` : 'Mission over'}</p>`;
-    const list = rows.map((r, i) => `<div class="sp-mrow ${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : ['🥇', '🥈', '🥉'][i] || i + 1}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h + ' hits' : def.id === 'paper' ? (r.d / 1000).toFixed(1) + ' km · ' + r.sc + ' pts' : r.sc + ' pts'}</i></div>`).join('');
+    const list = rows.map(r => `<div class="sp-mrow ${r.me ? 'me' : ''}"><span>${def.id === 'fire' ? '💦' : tm ? '✈️' : '⭐'}</span><b>${esc(r.name)}</b><i>${def.id === 'fire' ? r.h + ' hits' : def.id === 'paper' ? (r.d / 1000).toFixed(1) + ' km · ' + r.sc + ' pts' : r.sc + ' pts'}</i></div>`).join('');
     const host = ctx.isHost();
     openOverlay(`<div class="ui-overlay sp-mres"><div class="ui-panel">
       <div class="ui-kicker">${def.icon} ${def.name}</div>
@@ -932,7 +1054,7 @@ export function createMissions(ctx) {
     const id = def.id;
     tapBtn('.sp-magain', () => startMission(id));
     tapBtn('.sp-mother', () => { openPicker(); });
-    tapBtn('.sp-mfree', () => { closeOverlay(); if (host) ctx.setMeta(null); else { closedN = run ? run.n : closedN; endRun(); } });
+    tapBtn('.sp-mfree', () => { closeOverlay(); if (host) ctx.setMeta(null); else { closedN = run ? run.n : closedN; endRun(); if (ctx.leaveGroup) ctx.leaveGroup(); } });
   }
 
   // ------------------------------------------------------------ picker
@@ -944,9 +1066,9 @@ export function createMissions(ctx) {
       <small class="sp-mbest">${best[m.id] ? '⭐'.repeat(best[m.id]) : '☆☆☆'}</small></button>`).join('');
     openOverlay(`<div class="ui-overlay sp-mpickov"><div class="ui-panel wide">
       <div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">🎯 Missions</h2>
-      ${ctx.inRoom() ? (host ? '<p class="ui-sub">Everyone in your group plays together</p>' : `<p class="ui-sub">${esc(ctx.hostName())} picks the mission</p>`) : ''}
+      ${ctx.canAsk && ctx.canAsk() ? '<p class="ui-sub">👫 Friends flying near you will be asked to join. Play as a team!</p>' : ctx.inRoom() ? (host ? '<p class="ui-sub">Everyone in your group plays together, as a team</p>' : `<p class="ui-sub">${esc(ctx.hostName())} picks the mission</p>`) : ''}
       <div class="sp-mcards">${cards}</div>
-      <div class="ui-row">${!ctx.inRoom() ? '<button class="ui-btn sp-minvite">👫 With friends</button>' : ''}
+      <div class="ui-row">${!ctx.inRoom() && !(ctx.canAsk && ctx.canAsk()) ? '<button class="ui-btn sp-minvite">👫 With friends</button>' : ''}
         ${run && host ? '<button class="ui-btn ghost sp-mstop">⏹️ Stop mission</button>' : ''}
         <button class="ui-btn ghost sp-mclose">Close</button></div></div></div>`);
     box.querySelectorAll('.sp-mpick').forEach(b => tapBtn(b, () => { if (host) startMission(b.dataset.id); }));
@@ -998,6 +1120,7 @@ export function createMissions(ctx) {
     _count: () => run && run.rings ? run.rings.length : 0,
     _jump: k => { if (run && run.rings) { run.k = k; highlightRing(); } else if (run && run.hoops) { while (run.hoops.length < k + 9) paperGen(); run.k = k; paperFill(); } },
     _hoops: () => run && run.hoops,
+    _run: () => run && { bonus: run.bonus, who: run.who, n: run.n, seed: run.m.seed, part: run.part, phase: run.phase, rescues: run.rescues, dn: run.dn, k: run.k, sc: run.sc },
     dispose() { endRun(); drops.forEach(d => scene.remove(d.sp)); box.remove(); },
   };
 }
