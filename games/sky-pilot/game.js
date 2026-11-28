@@ -839,22 +839,34 @@ export function mount(stage) {
       scene, fx, root, before: ui, sound,
       me: () => players[0],
       easy: () => prefs.easy,
-      now: () => (net.room ? net.room.now() : Date.now()),
-      myUid: () => (net.room ? net.room.uid : 'me'),
-      inRoom: () => !!net.room,
-      isHost: () => !net.room || !!net.room.isHost,
-      setMeta: m => { if (net.room) net.room.setMeta({ mission: m || null }).catch(() => {}); else missions.onMeta(m); },
+      now: () => { const a = net.room || net.pub; return a ? a.now() : Date.now(); },
+      myUid: () => { const a = net.room || net.pub; return a ? a.uid : 'me'; },
+      inRoom: () => !!net.room || !!(net.pub && (grp.follow || grp.mi)),
+      isHost: () => (net.room ? !!net.room.isHost : !grp.follow),
+      setMeta: m => {
+        if (net.room) { net.room.setMeta({ mission: m || null }).catch(() => {}); return; }
+        grp.mi = net.pub && m ? m : null;                              // friends in the sky follow it from my live entry
+        missions.onMeta(m);
+      },
+      // shared sky: ask friends flying near me to join (they see a Join button)
+      canAsk: () => !net.room && !!net.pub && !grp.follow && remotes.size > 0,
+      announce: inv => { grp.mi = net.pub && inv ? inv : null; },
+      leaveGroup: () => { grp.follow = null; grp.jn = 0; grp.lastMi = ''; },
       others: () => {
-        if (!net.room) return [];
-        const out = [], uid = net.room.uid, now = net.room.now();
+        const api = net.room || net.pub;
+        if (!api) return [];
+        const out = [], uid = api.uid, now = api.now();
         for (const [pid, d] of Object.entries(net.live || {})) {
-          if (pid.startsWith(uid + '_') || !d || typeof d !== 'object' || typeof d.t !== 'number' || now - d.t > 12000) continue;
-          out.push({ uid: pid.split('_')[0], name: displayName(d.n, d.ty), color: d.c, ms: d.ms && typeof d.ms === 'object' ? d.ms : null });
+          if (pid.startsWith(uid + '_') || !pid.endsWith('_p0') || !d || typeof d !== 'object' || typeof d.t !== 'number' || now - d.t > 12000) continue;
+          out.push({ uid: pid.split('_')[0], name: displayName(d.n, d.ty), color: d.c, ms: d.ms && typeof d.ms === 'object' ? d.ms : null, jn: d.jn || 0, p: d.p, q: d.q });
         }
         return out;
       },
       myName: () => myName(),
-      hostName: () => { const e = Object.entries(net.players || {}).find(([pid]) => pid.startsWith((net.hostUid || '?') + '_')); return (e && cleanName(e[1].name)) || 'The host'; },
+      hostName: () => {
+        if (!net.room) { const d = grp.follow && net.live[grp.follow + '_p0']; return (d && displayName(d.n, d.ty)) || 'Your friend'; }
+        const e = Object.entries(net.players || {}).find(([pid]) => pid.startsWith((net.hostUid || '?') + '_')); return (e && cleanName(e[1].name)) || 'The host';
+      },
       placeMe: (spot, type) => {
         const p = players[0]; if (!p) return;
         if (type && p.type !== type) swapPlane(p, type);
@@ -1208,7 +1220,75 @@ export function mount(stage) {
       net.unsubs.push(api.onLive(l => { net.live = l; }));
     } catch (e) { net.connecting = false; console.warn('shared sky offline', e); }
   }
+  // ---------------------------------------------------------------- missions with friends in the shared sky (friends only)
+  // The host's mission rides in their own live entry (mi). An invite looks like { inv, n, until }:
+  // friends see a Join button, joining puts jn = n in their entry, then the host starts with whoever joined.
+  const grp = { follow: null, mi: null, jn: 0, lastMi: '', skip: new Set(), el: null, html: '' };
+  function groupTick() {
+    if (!net.pub || !missions || S.phase !== 'fly') { groupBanner(''); return; }
+    const now = net.pub.now();
+    const entry = u => { const d = net.live[u + '_p0']; return d && typeof d === 'object' && typeof d.t === 'number' && now - d.t < 12000 ? d : null; };
+    if (grp.follow) {
+      const d = entry(grp.follow), mi = d && d.mi && typeof d.mi === 'object' ? d.mi : null;
+      if (!d) { grp.lost = grp.lost || now; if (now - grp.lost < 20000) return; } else grp.lost = 0;   // a slow connection: wait a bit
+      if (!mi) {                                                       // they stopped (or flew off)
+        grp.follow = null; grp.jn = 0; grp.lastMi = '';
+        missions.onMeta(null); groupBanner(''); return;
+      }
+      if (mi.inv) {
+        if (grp.jn !== mi.n) grp.jn = mi.n;                            // still with them: join their next one too
+        if (!missions.running) groupBanner(`<span>⏳ Waiting for <b>${esc(displayName(d.n, d.ty))}</b> to start ${esc(missionName(mi.inv))}…</span><button data-g="leave">✕</button>`);
+        else groupBanner('');
+        return;
+      }
+      groupBanner('');
+      const key = JSON.stringify(mi);
+      if (key === grp.lastMi) return;
+      grp.lastMi = key;
+      if (Array.isArray(mi.who) && mi.who.includes(net.pub.uid)) missions.onMeta(mi);
+      else { grp.follow = null; grp.jn = 0; grp.lastMi = ''; flash(players[0], '😅 Just missed it. Join the next one!'); }
+      return;
+    }
+    if (grp.mi || missions.running) { groupBanner(''); return; }
+    // a friend asking? (newest first)
+    let ask = null;
+    for (const [pid, d] of Object.entries(net.live || {})) {
+      if (!pid.endsWith('_p0') || !d || typeof d !== 'object' || typeof d.t !== 'number' || now - d.t > 12000) continue;
+      const mi = d.mi;
+      if (!mi || typeof mi !== 'object' || !mi.inv || !(mi.until > now) || grp.skip.has(mi.n)) continue;
+      if (!ask || mi.until > ask.mi.until) ask = { uid: pid.split('_')[0], d, mi };
+    }
+    if (!ask) { groupBanner(''); return; }
+    grp.ask = ask;
+    groupBanner(`<span>🎯 <b>${esc(displayName(ask.d.n, ask.d.ty))}</b> wants to play <b>${esc(missionName(ask.mi.inv))}</b> together! <small>${Math.max(0, Math.ceil((ask.mi.until - now) / 1000))}s</small></span><button data-g="join" class="go">✅ Join</button><button data-g="no">✕</button>`);
+  }
+  const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const missionName = id => { const m = missions && missions.MISSIONS.find(x => x.id === id); return m ? m.icon + ' ' + m.name : '🎯'; };
+  function groupBanner(html) {
+    if (!grp.el) {
+      grp.el = document.createElement('div'); grp.el.className = 'sp-minv';
+      grp.el.addEventListener('pointerdown', e => {
+        const b = e.target.closest('button'); if (!b) return;
+        e.preventDefault(); e.stopPropagation(); sound.pop();
+        const a = b.dataset.g;
+        if (a === 'join' && grp.ask) { grp.follow = grp.ask.uid; grp.jn = grp.ask.mi.n; grp.lastMi = ''; flash(players[0], '✅ Joined! Get ready…'); }
+        else if (a === 'no' && grp.ask) grp.skip.add(grp.ask.mi.n);
+        else if (a === 'leave') { grp.follow = null; grp.jn = 0; grp.lastMi = ''; }
+        groupTick();
+      });
+      root.appendChild(grp.el);
+    }
+    if (grp.html === html) return;
+    grp.html = html; grp.el.innerHTML = html; grp.el.classList.toggle('show', !!html);
+  }
+  function groupReset() {
+    const following = grp.follow;
+    grp.follow = null; grp.jn = 0; grp.lastMi = ''; grp.mi = null; grp.ask = null;
+    groupBanner('');
+    if (following && missions) missions.onMeta(null);
+  }
   function leavePublic() {
+    groupReset();
     if (!net.pub) return;
     net.unsubs.forEach(u => u && u()); net.unsubs = [];
     net.pub.leave(); net.pub = null; net.live = {};
@@ -1227,8 +1307,9 @@ export function mount(stage) {
       net.sendAcc = 0;
       for (const p of players) {
         const name = p.slot === 0 ? myName() : '';
-        const ms = net.room && missions && p.slot === 0 ? missions.status() : null;
-        api.setLive(`${uid}_p${p.slot}`, { t: api.now(), ty: p.type, c: p.color, n: name, ...netState(p.s), ...(ms ? { ms } : {}) });
+        const ms = missions && p.slot === 0 && (net.room || grp.mi || grp.follow) ? missions.status() : null;
+        const extra = !net.room && p.slot === 0 ? { ...(grp.mi ? { mi: grp.mi } : {}), ...(grp.follow && grp.jn ? { jn: grp.jn } : {}) } : {};
+        api.setLive(`${uid}_p${p.slot}`, { t: api.now(), ty: p.type, c: p.color, n: name, ...netState(p.s), ...(ms ? { ms } : {}), ...extra });
       }
     }
     // friends' planes
@@ -1420,7 +1501,7 @@ export function mount(stage) {
     }
     if (flying) {
       if (missions && !S.paused) missions.update(dt);
-      netTick(dt); updateRemotes(dt);
+      netTick(dt); updateRemotes(dt); groupTick();
       // shared sky dropped or never connected: keep trying
       if (prefs.shared && !net.pub && !net.room && !net.connecting && clock > (net.retryAt || 0)) { net.retryAt = clock + 5; goPublic(); }
       // keep an open pilot list up to date
