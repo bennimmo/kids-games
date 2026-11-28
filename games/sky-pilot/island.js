@@ -36,7 +36,8 @@ export const CARRIER = { x: -2500, z: 16500, hdg: Math.PI / 2 + 0.3, len: 320, w
 // Seaplane harbour (in the bay by the town) and helipads.
 export const HARBOUR = { x: -3400, z: 10900, hdg: Math.PI / 2 };
 export const HELIPADS = [];   // filled once the town is known (roof tops)
-export const LANDMARKS = [];  // { icon, name, x, z } for the map (filled by scenery.js)
+export const LANDMARKS = [];
+export const SPIRES = [];    // rock spire clusters { x, z, n } (filled by scenery.js): the paper course weaves through them  // { icon, name, x, z } for the map (filled by scenery.js)
 
 // Flat areas for towns.
 // towns are blob shaped (see townMask), w/d = rough size
@@ -329,7 +330,7 @@ export function solidHeight(x, z) {
 
 // ---------------------------------------------------------------- Sunny Town avenues: a wide clear canyon between the towers to fly down
 // two straight avenues through the middle of the city (local x and local z), crossing at the park
-export const AVE = { off: 15, half: 34, gap: 150 };   // local offset of the avenue line, clear half width, hoop spacing
+export const AVE = { off: 15, half: 40, gap: 150 };   // local offset of the avenue line, clear half width, hoop spacing
 export function aveLocal(t, x, z) { const c = Math.cos(t.rot), s = Math.sin(t.rot), dx = x - t.x, dz = z - t.z; return [dx * c - dz * s, dx * s + dz * c]; }
 export function aveWorld(t, lx, lz) { const c = Math.cos(t.rot), s = Math.sin(t.rot); return [t.x + lx * c + lz * s, t.z - lx * s + lz * c]; }
 let RUNS = null;
@@ -347,11 +348,13 @@ export function cityRuns() {
     let wv = 1;
     for (let a = lo, i = 0; a <= hi + 1; a += AVE.gap, i++) {
       const [cx, cz] = at(a), m = townMask(t, cx, cz);
-      const sky = m < 0.7 && Math.abs(a - AVE.off) > 160 && i % 2 === 1;
-      // hoops weave a little from side to side (centred under the sky bridges)
-      const off = sky || i === 0 || a + AVE.gap > hi + 1 ? 0 : (wv = -wv) * 11;
+      const end = i === 0 || a + AVE.gap > hi + 1 || Math.abs(a - AVE.off) < 110;   // ends, and where the two avenues cross
+      const sky = !end && m < 0.7 && Math.abs(a - AVE.off) > 160 && i % 3 === 1;
+      // slalom: hoops swing from side to side, with a tower standing in the road on the other side (so you can't go straight)
+      const off = sky || end ? 0 : (wv = -wv) * 17;
       const [x, z] = aveWorld(t, axis ? AVE.off + off : a, axis ? a : AVE.off + off), g = terrainHeight(x, z);
-      pts.push({ x, z, y: g + 21, R: 13, a, sky });
+      const low = !sky && !end && i % 3 === 0;                     // some hoops dip right down to the street
+      pts.push({ x, z, g, y: g + (low ? 17 : sky ? 22 : 27), R: 13, a, sky, block: off ? -Math.sign(off) * (AVE.half - 13) : 0 });
     }
     const [x0, z0] = at(0), [x1, z1] = at(1);
     return { axis, dir: { x: x1 - x0, z: z1 - z0 }, pts };

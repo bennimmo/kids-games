@@ -3,7 +3,7 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import {
   AIRPORTS, TOWNS, VILLAGES, townMask, CARRIER, HARBOUR, HELIPADS, LANDMARKS, LAKE, ROADS, roadPath, runwayPoint, runwayLocal, apronSide, dirOf,
-  terrainHeight, terrainNormal, regionWeights, biomeAt, addRoof, surfaceAt, HALF, CELL, GRID, N, cityRuns, AVE, aveClear, aveWorld,
+  terrainHeight, terrainNormal, regionWeights, biomeAt, addRoof, surfaceAt, HALF, CELL, GRID, N, cityRuns, AVE, aveClear, aveWorld, SPIRES,
 } from './island.js';
 import { rng, hash2, clamp, smooth, lerp } from './noise.js';
 import { buildPlane, paint } from './planes.js';
@@ -575,6 +575,14 @@ export function createScenery(scene, sky, quality, dpr) {
         B('concrete').box(p.x, deck - 1.2, p.z, fx, 1.2, fz, t.rot, [0.95, 0.4, 0.3], [12, 12], true, true);
         for (const sd of [-0.6, 0, 0.6]) { const [lx, lz] = P(p.a, sd * AVE.half); townLights.push([lx, deck - 1.5, lz, 1, 0.85, 0.5, 1.4]); }
       }
+      // towers standing in the road: fly round them
+      for (const p of run.pts) if (p.block) {
+        const [x, z] = P(p.a, p.block), y0 = terrainHeight(x, z) - 0.5;
+        const h = 34 + R() * 60;
+        building(x, z, y0, 24, h, 24, t.rot, R.pick(['glass', 'concrete', 'brick']), [0.85 + R() * 0.15, 0.85 + R() * 0.15, 0.9]);
+        B('roof').box(x, y0 + h, z, 10, 5, 10, t.rot, [0.95, 0.3, 0.25]);
+        townLights.push([x, y0 + h + 6, z, 1, 0.1, 0.1, 2, R()]);
+      }
       for (const p of [run.pts[0], run.pts[run.pts.length - 1]]) {
         const top = p.y + p.R + 16;
         for (const sd of [-1, 1]) {
@@ -850,6 +858,51 @@ export function createScenery(scene, sky, quality, dpr) {
   const onRoute = (x, z) => ROADS.some(r => r.path.some((p, i) => i % 2 === 0 && Math.abs(p[0] - x) < 22 && Math.abs(p[2] - z) < 22));
   const roadNear = (x, z) => ROADS.some(r => r.path && r.path.some((p, i) => i % 3 === 0 && Math.abs(p[0] - x) < 25 && Math.abs(p[2] - z) < 25));
   const dens = quality.trees;
+
+  // ------------------------------------------------------------ rock spires: clusters of tall rocks in the forests, hills and desert (solid: fly round them)
+  {
+    const rr = rng(77123), spires = [];
+    const farRoad = (x, z) => !ROADS.some(r => r.path && r.path.some((p, i) => i % 2 === 0 && Math.abs(p[0] - x) < 70 && Math.abs(p[2] - z) < 70));
+    for (let c = 0; c < 1800 && spires.length < 520; c++) {
+      // a good share round Sunny Town (where the paper course starts), the rest anywhere
+      const ta = rr() * Math.PI * 2, td = rr.range(1700, 6500), near = c % 3 === 0;
+      const cx = near ? TOWNS[0].x + Math.cos(ta) * td : rr.range(-13000, 12000), cz = near ? TOWNS[0].z + Math.sin(ta) * td : rr.range(-10000, 10000), b = biomeAt(cx, cz), h0 = terrainHeight(cx, cz);
+      if (!(b === 'forest' || b === 'mountain' || b === 'desert' || (b === 'beach' && h0 > 25)) || h0 < 15 || h0 > 520) continue;
+      const n = 3 + Math.floor(rr() * 5);
+      let got = 0;
+      for (let k = 0; k < n; k++) {
+        const a = rr() * Math.PI * 2, d = k ? rr.range(90, 260) : 0, x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+        const y0 = terrainHeight(x, z);
+        if (y0 < 10 || nearAirport(x, z) || inTown(x, z) || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 150 || !farRoad(x, z)) continue;
+        if (spires.some(o => Math.hypot(o.x - x, o.z - z) < 70)) continue;
+        const r = rr.range(9, 18), h = rr.range(35, 95);
+        // sit it on the lowest ground under it so it doesn't float on a slope
+        const lo = Math.min(y0, terrainHeight(x + r, z), terrainHeight(x - r, z), terrainHeight(x, z + r), terrainHeight(x, z - r));
+        spires.push({ x, z, y0: lo - 2, r, h: h + (y0 - lo), sand: b === 'desert', rot: rr() * Math.PI });
+        got++;
+      }
+      if (got >= 3) SPIRES.push({ x: cx, z: cz, n: got });
+    }
+    const g = new THREE.CylinderGeometry(0.55, 1, 1, 8, 4); g.translate(0, 0.5, 0);
+    const pa = g.attributes.position, jr = rng(4242);
+    for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); if (y < 0.99) { const k = 0.82 + jr() * 0.36; pa.setX(i, pa.getX(i) * k); pa.setZ(i, pa.getZ(i) * k); } }
+    g.computeVertexNormals();
+    const capG = new THREE.ConeGeometry(0.57, 0.12, 8); capG.translate(0, 1.06, 0);
+    for (const sand of [false, true]) {
+      const list = spires.filter(o => o.sand === sand);
+      if (!list.length) continue;
+      const mat = flatMat(sand ? 0xc98a55 : 0x8f8a80, { flatShading: true, roughness: 0.95 });
+      const im = new THREE.InstancedMesh(g, mat, list.length), cap = new THREE.InstancedMesh(capG, flatMat(sand ? 0xb87a48 : 0x6f8a52, { flatShading: true }), list.length);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new V3();
+      list.forEach((o, i) => {
+        q.setFromAxisAngle(new V3(0, 1, 0), o.rot); sc.set(o.r, o.h, o.r);
+        m4.compose(new V3(o.x, o.y0, o.z), q, sc); im.setMatrixAt(i, m4); cap.setMatrixAt(i, m4);
+        addRoof({ x: o.x, z: o.z, hw: o.r * 0.72, hd: o.r * 0.72, rot: o.rot, top: o.y0 + o.h * 1.08 });
+      });
+      im.castShadow = true; im.receiveShadow = true; cap.castShadow = true;
+      root.add(im, cap);
+    }
+  }
   for (let cz = -HALF; cz < HALF; cz += TCH) for (let cx = -HALF; cx < HALF; cx += TCH) {
     const lists = { pine: [], leaf: [], palm: [], cactus: [], bush: [], rock: [], cow: [], sheep: [] };
     const tries = Math.round(3400 * dens);

@@ -12,7 +12,7 @@
 //   others() -> [{ uid, name, color, ms }], myName(), placeMe(spot, type?), flash(text), sound, invite(), hostName() }
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { PLANES } from './planes.js';
-import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt, solidHeight, cityRuns } from './island.js';
+import { AIRPORTS, TOWNS, LANDMARKS, LAKE, ROADS, terrainHeight, surfaceAt, runwayPoint, runwayLocal, biomeAt, solidHeight, cityRuns, SPIRES } from './island.js';
 import { rng, clamp } from './noise.js';
 
 export const MISSIONS = [
@@ -490,7 +490,7 @@ export function createMissions(ctx) {
   const ringTarget = () => { const g = run.rings[Math.min(run.k, run.rings.length - 1)]; return g ? { x: g.c.x, z: g.c.z } : null; };
 
   // ------------------------------------------------------------ Paper Plane: endless hoops, glide as far as you can
-  const PAPER = { gap: 200, drop: 18, rise: 16 };
+  const PAPER = { gap: 170, drop: 18, rise: 16 };
   function setupPaper() {
     const r = rng(run.m.seed ^ 0x9a9e7);
     run.prng = r;
@@ -524,14 +524,15 @@ export function createMissions(ctx) {
   function paperGen() {
     const r = run.prng, c = run.cur, easy = ctx.easy();
     const i = run.hoops.length;
-    const R = (easy ? 30 : 22) * Math.max(0.75, 1 - i * 0.004);
+    const R = (easy ? 22 : 15) * Math.max(0.75, 1 - i * 0.004);
     const groundAt = (x, z) => Math.max(solidHeight(x, z), solidHeight(x + 15, z), solidHeight(x - 15, z), solidHeight(x, z + 15), solidHeight(x, z - 15));
     // hoop bottom just above the ground under it, and the straight line from the last hoop clear of the hills
-    const floorOf = (top, local) => Math.max(local + R + (easy ? 5 : 3), top + 10);
+    const floorOf = (top, local) => Math.max(local + R + (easy ? 3 : 1.5), top + 6);      // right down among the tree tops
     const away = Math.hypot(c.x, c.z - 1500) > 9500 || terrainHeight(c.x, c.z) < 0.3;
     const dropFor = fl => clamp((c.y - fl) * 0.25, PAPER.drop, 45);
     const toC = Math.atan2(-c.x, -(1500 - c.z));
     const push = g => {
+      run.prevHdg = c.hdg;
       run.cur = { x: g.c.x, z: g.c.z, y: g.c.y, hdg: hdgOf(g.n.x, g.n.z) };
       const key = Math.round(g.c.x / 400) + ',' + Math.round(g.c.z / 400);
       run.visited.set(key, (run.visited.get(key) || 0) + 1);
@@ -539,9 +540,10 @@ export function createMissions(ctx) {
       return g;
     };
     const featHoop = F => {
-      const p = F.pts[F.j], a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(p.x, p.y, p.z);
-      const n = F.j === 0 ? new THREE.Vector3(F.n.x, 0, F.n.z).add(cc.clone().sub(a).normalize()).normalize() : new THREE.Vector3(F.n.x, 0, F.n.z);
-      const hr = F.f.city ? (easy ? 16 : 13) : p.R;
+      const p = F.pts[F.j], hr0 = F.f.city ? (easy ? 15 : 11) : p.R;
+      const a = new THREE.Vector3(c.x, c.y, c.z), cc = new THREE.Vector3(p.x, p.g != null ? Math.max(p.g + hr0 + 2, p.y - (p.R - hr0)) : p.y, p.z);
+      const n = new THREE.Vector3(F.n.x, 0, F.n.z).add(cc.clone().sub(a).normalize()).normalize();
+      const hr = hr0;
       F.j++;
       if (F.j >= F.pts.length) { run.usedB.set(F.f, run.hoops.length); run.feat = null; }
       return push({ c: cc, n, R: hr, bridge: !!F.f.bridge, city: !!F.f.city });
@@ -571,7 +573,7 @@ export function createMissions(ctx) {
       h = c.hdg + clamp(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)), -0.6, 0.6);
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let q = 0; q <= 8; q++) top = Math.max(top, solidHeight(c.x + (x - c.x) * q / 8, c.z + (z - c.z) * q / 8));
+      for (let q = 0; q <= 14; q++) for (const sd of [-12, 0, 12]) top = Math.max(top, solidHeight(c.x + (x - c.x) * q / 14 + Math.cos(h) * sd, c.z + (z - c.z) * q / 14 + Math.sin(h) * sd));
       const fl = floorOf(top, groundAt(x, z));
       const y = Math.max(fl, c.y + (b.y - c.y) * clamp(PAPER.gap / d, 0, 1));
       if (y - c.y < PAPER.rise + 5 && y < b.y + 120) {
@@ -587,11 +589,16 @@ export function createMissions(ctx) {
       for (const w of waysIn(f)) { const b = w.pts[0], d = Math.hypot(b.x - c.x, b.z - c.z) * (f.city ? 0.35 : 1); if (d < ld) { ld = d; lure = b; lw = f.city ? 32 : 24; } }
     }
     const lureH = lure ? Math.atan2(lure.x - c.x, -(lure.z - c.z)) : 0;
+    // rock spires: head for the nearest cluster we haven't flown through yet (and weave between them)
+    run.usedS = run.usedS || new Set();
+    let rock = null, rd = 2600;
+    for (const sp of SPIRES) { const d = Math.hypot(sp.x - c.x, sp.z - c.z); if (d < 140) run.usedS.add(sp); if (!run.usedS.has(sp) && d < rd) { rd = d; rock = sp; } }
+    const rockH = rock ? Math.atan2(rock.x - c.x, -(rock.z - c.z)) : 0;
     const look = (h, wide) => {
       const x = c.x + Math.sin(h) * PAPER.gap, z = c.z - Math.cos(h) * PAPER.gap;
       let top = 0;
-      for (let q = 0; q <= 8; q++) for (const sd of [-12, 0, 12]) {
-        const px = c.x + (x - c.x) * q / 8 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 8 + Math.sin(h) * sd;
+      for (let q = 0; q <= 14; q++) for (const sd of [-12, 0, 12]) {
+        const px = c.x + (x - c.x) * q / 14 + Math.cos(h) * sd, pz = c.z + (z - c.z) * q / 14 + Math.sin(h) * sd;
         top = Math.max(top, solidHeight(px, pz));
       }
       top = Math.max(top, 0);
@@ -602,11 +609,21 @@ export function createMissions(ctx) {
       // walls either side = flying through a gap or a valley: fun!
       const wl = solidHeight(x + Math.cos(h) * 170, z + Math.sin(h) * 170), wr = solidHeight(x - Math.cos(h) * 170, z - Math.sin(h) * 170);
       const gap = Math.min(wl, wr) > yEst + 25 ? -35 : Math.max(wl, wr) > yEst + 25 ? -12 : 0;
+      // something right beside the hoop (a hillside, a building) = flying round obstacles: more fun
+      let close = 0;
+      for (const sd of [40, 75]) {
+        const nl = solidHeight(x + Math.cos(h) * sd, z + Math.sin(h) * sd), nr = solidHeight(x - Math.cos(h) * sd, z - Math.sin(h) * sd);
+        close += (nl > yEst + 6 ? -12 : 0) + (nr > yEst + 6 ? -12 : 0);
+      }
+      // weave: lean the opposite way to the last turn
+      const lastTurn = Math.atan2(Math.sin(c.hdg - (run.prevHdg ?? c.hdg)), Math.cos(c.hdg - (run.prevHdg ?? c.hdg)));
+      const tn = Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg));
+      const weave = Math.abs(lastTurn) > 0.08 && Math.sign(tn) === -Math.sign(lastTurn) && Math.abs(tn) > 0.15 ? -8 : 0;
       const turn = Math.abs(Math.atan2(Math.sin(h - c.hdg), Math.cos(h - c.hdg)));
       const b = biomeAt(x, z);
       const seen = run.visited.get(Math.round(x / 400) + ',' + Math.round(z / 400)) || 0;
-      const pull = lure ? -lw * Math.cos(h - lureH) : 0;
-      const score = seen * 25 + climb * 4 + turn * (wide ? 5 : 15) + gap + pull + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 650) * 0.6
+      const pull = (lure && ld < 4000 ? -lw * Math.cos(h - lureH) : lure ? -lw * 0.5 * Math.cos(h - lureH) : 0) + (rock ? (rd < 800 ? -40 : -22) * Math.cos(h - rockH) : 0);
+      const score = seen * 25 + climb * 4 + turn * (wide ? 5 : 7) + gap + close + weave + pull + Math.max(0, top - 450) * 1.5 + Math.max(0, ahead - 650) * 0.6
         + (b === 'sea' ? 300 : b === 'forest' || b === 'mountain' ? -10 : 0) + r() * 12;
       return { h, x, z, fl, climb, score };
     };
