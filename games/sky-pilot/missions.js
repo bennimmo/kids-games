@@ -401,9 +401,9 @@ export function createMissions(ctx) {
     const now = ctx.now();
     for (const o of ctx.others()) {
       if (!run.who.includes(o.uid) || !o.ms || o.ms.n !== run.n) continue;
-      const k = +o.ms.k || 0, was = run.tk[o.uid];
+      const k = +o.ms.k || 0, was = run.tk[o.uid] ?? 0;          // everyone starts at ring 0
       run.tk[o.uid] = k;
-      if (was == null || k <= was) continue;
+      if (k <= was) continue;
       for (let q = was; q < k && q < was + 5; q++) {
         if (run.myT[q] && now - run.myT[q] < TOGETHER) { run.bonus += 5; run.myT[q] = 0; ctx.flash(`👫 Together with ${o.name}! +5`); ctx.sound.tone(660, 0.2, 'triangle', 0.1, 990); }
         else run.passT[q] = now;
@@ -1068,7 +1068,7 @@ export function createMissions(ctx) {
       <div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">🎯 Missions</h2>
       ${ctx.canAsk && ctx.canAsk() ? '<p class="ui-sub">👫 Friends flying near you will be asked to join. Play as a team!</p>' : ctx.inRoom() ? (host ? '<p class="ui-sub">Everyone in your group plays together, as a team</p>' : `<p class="ui-sub">${esc(ctx.hostName())} picks the mission</p>`) : ''}
       <div class="sp-mcards">${cards}</div>
-      <div class="ui-row">${!ctx.inRoom() && !(ctx.canAsk && ctx.canAsk()) ? '<button class="ui-btn sp-minvite">👫 With friends</button>' : ''}
+      <div class="ui-row">${!ctx.inRoom() && !(ctx.canAsk && ctx.canAsk()) ? '<button class="ui-btn sp-minvite">👫 Ask friends to come</button>' : ''}
         ${run && host ? '<button class="ui-btn ghost sp-mstop">⏹️ Stop mission</button>' : ''}
         <button class="ui-btn ghost sp-mclose">Close</button></div></div></div>`);
     box.querySelectorAll('.sp-mpick').forEach(b => tapBtn(b, () => { if (host) startMission(b.dataset.id); }));

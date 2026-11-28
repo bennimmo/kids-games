@@ -11,8 +11,8 @@
 import * as THREE from '../../js/vendor/three.module.min.js';
 import { myName, cleanName } from '../../js/engine/profile.js';
 import { sound, audioCtx } from '../../js/engine/sound.js';
-import { createRoom, joinRoom, joinPublic, serverNow, friendUids } from '../../js/engine/net.js';
-import { togetherButton, playTogether, takeJoinCode, joined, leftRoom, lobbyHTML, people, playerInfo } from '../../js/engine/together.js';
+import { joinPublic, serverNow, friendUids } from '../../js/engine/net.js';
+import { togetherButton, playTogether, takeJoinCode, joined, leftRoom } from '../../js/engine/together.js';
 import { buildHeights, AIRPORTS, CARRIER, HARBOUR, HELIPADS, TOWNS, VILLAGES, townMask, LANDMARKS, ROADS, LAKE, HALF, GRID, CELL, heights, regionWeights, placeName, runwayPoint, runwayLocal, surfaceAt, terrainHeight } from './island.js';
 import { createSky, DAY, START_TIME } from './sky.js';
 import { createTerrain } from './terrain.js';
@@ -128,7 +128,11 @@ export function mount(stage) {
       renderer.compile(scene, menuCam);
       S.phase = 'menu';
       render();
-      if (inviteCode) tryJoin(inviteCode);
+      if (inviteCode) {                     // a friend asked: into the shared sky with them
+        joined(GAME, inviteCode);
+        if (!prefs.shared) { prefs.shared = true; savePrefs(); }
+        S.mode = 'solo'; S.joinFriend = true; S.phase = 'hangar'; render();
+      }
     } catch (e) {
       console.error(e);
       ui.innerHTML = `<div class="ui-overlay"><div class="ui-panel"><div class="ui-kicker">Sky Pilot</div><h2 class="ui-title">Something went wrong</h2><p class="ui-sub">${String(e.message || e).slice(0, 120)}</p></div></div>`;
@@ -874,7 +878,7 @@ export function mount(stage) {
       },
       flash: t => players[0] && flash(players[0], t),
       respawnMe: () => { const p = players[0]; if (p) { p.crashAt = 0; respawn(p); } },
-      invite: () => hostRoomFlying(),
+      invite: async () => { const ok = await inviteToSky(); if (ok && players[0]) flash(players[0], '👫 Friends asked! When they\'re flying, tap 🎯'); },
     };
   }
   // change plane while flying (missions): keep the same player, HUD and controls
@@ -1363,57 +1367,18 @@ export function mount(stage) {
     }
   }
 
-  // friends room: "Play with friends" (together.js) makes a room and invites linked friends
-  async function hostRoom() {
-    S.busy = true; render();
+  // ---------------------------------------------------------------- flying with friends
+  // There's ONE shared sky (friends only). "Fly with friends" just pings your friends
+  // ("Kit wants to play Sky Pilot", together.js) and puts you in the shared sky; missions
+  // together start from there (🎯: friends flying get a Join button).
+  async function inviteToSky() {
     try {
-      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'fly' }));
-      S.busy = false;
-      if (!room) { render(); return; } // friends panel opened instead
-      if (!alive) { room.leave(); return; }
-      room.setMeta({ hostUid: room.uid }).catch(() => {});
-      goRoom(room);
-    } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
-  }
-  async function tryJoin(code) {
-    S.busy = true; render();
-    try {
-      const room = await joinRoom(GAME, code);
-      S.busy = false;
-      if (!alive) { if (room) room.leave(); return; }
-      if (!room) { S.gone = clock + 3; sound.bump(); render(); return; }
-      joined(GAME, code);
-      S.mode = 'solo';
-      goRoom(room);
-    } catch (e) { console.warn(e); S.busy = false; S.sad = clock + 2; render(); }
-  }
-  const stripHtml = () => lobbyHTML(people(net.players, net.hostUid).map(p => ({ ...p, host: true })), { hostDoing: 'flying', myUid: net.room && net.room.uid });
-  const updateStrip = () => ui.querySelectorAll('.sp-strip').forEach(e => { e.innerHTML = stripHtml(); });
-  async function hostRoomFlying() {
-    if (net.room) return;
-    try {
-      const room = await playTogether(GAME, () => createRoom(GAME, { state: 'fly' }));
-      if (!room) { if (players[0]) flash(players[0], '👫 Add friends on the main menu first'); return; }
-      if (!alive) { room.leave(); return; }
-      room.setMeta({ hostUid: room.uid }).catch(() => {});
-      goRoom(room, true);
-      if (players[0]) flash(players[0], '👫 Friends invited! Tap 🎯 when they arrive');
-    } catch (e) { console.warn(e); if (players[0]) flash(players[0], '😢 Could not invite'); }
-  }
-  function goRoom(room, stay = false) {
-    leavePublic();
-    net.room = room; net.code = room.code; net.hostUid = room.isHost ? room.uid : '';
-    room.setPlayer(room.uid + '_p0', { joined: room.now(), ...playerInfo(true) });
-    net.unsubs.push(room.onLive(l => { net.live = l; }));
-    net.unsubs.push(room.onPlayers(pl => { net.players = pl; updateStrip(); }));
-    net.unsubs.push(room.onMeta(m => {
-      if (!m && net.room === room) { leaveRoom(true); return; }
-      if (m && m.hostUid && m.hostUid !== net.hostUid) { net.hostUid = m.hostUid; updateStrip(); }
-      if (missions && net.room === room) missions.onMeta(m ? m.mission : null);
-    }));
-    if (room.onStatus) net.unsubs.push(room.onStatus(st => { net.status = st; }));
-    if (!stay) S.phase = 'hangar';
-    render();
+      const code = Math.floor(Math.random() * 4096).toString(16).padStart(3, '0');
+      const r = await playTogether(GAME, async () => ({ code }));      // null: the friends panel opened (no friends yet)
+      if (!r) return false;
+      if (!prefs.shared) { prefs.shared = true; savePrefs(); }
+      return true;
+    } catch (e) { console.warn(e); return false; }
   }
   function leaveRoom(gone = false) {
     if (!net.room) return;
@@ -1578,10 +1543,6 @@ export function mount(stage) {
     if (S.phase === 'menu') menuUI();
     if (S.phase === 'hangar') hangarUI();
     if (S.phase === 'fly' && S.paused) pauseUI();
-    if (S.phase === 'fly' && net.room) {
-      const b = el(`<div class="sp-roombadge sp-strip">${stripHtml()}</div>`);
-      ui.appendChild(b);
-    }
   }
 
   // Settings: one row per switch, a segmented Off/On control on the right.
@@ -1612,9 +1573,9 @@ export function mount(stage) {
       <div class="ui-row sp-play">
         <button class="ui-btn primary big sp-go" data-m="solo">${icon('play')}<span>Fly</span></button>
         <button class="ui-btn big sp-go" data-m="missions">🎯<span>Missions</span></button>
-        ${togetherButton()}
+        ${togetherButton('Fly with friends')}
       </div>
-      ${S.busy ? '<p class="ui-sub">Joining… ⏳</p>' : ''}${S.sad > clock ? '<p class="ui-sub">Couldn\'t join that game 😢</p>' : ''}${S.gone > clock ? '<p class="ui-sub">That game has finished 👋</p>' : ''}
+
       <div class="ui-label">Settings</div>
       ${settingsHTML(['easy', 'noDie', 'shared', 'sound'])}
       <div class="ui-row sp-foot"><button class="ui-btn ghost small sp-help-btn">${icon('keyboard')}<span>Controls</span></button></div>
@@ -1627,7 +1588,18 @@ export function mount(stage) {
       if (TOUCH && prefs.tilt) askTilt();
       S.phase = 'hangar'; S.who = 0; render();
     }));
-    click(box.querySelector('[data-together]'), () => { if (S.busy) return; sound.pop(); S.mode = 'solo'; hostRoom(); });
+    click(box.querySelector('[data-together]'), async () => {
+      if (S.busy) return;
+      sound.pop();
+      S.busy = true;
+      const ok = await inviteToSky();
+      S.busy = false;
+      if (!alive) return;
+      if (!ok) { render(); return; }
+      S.mode = 'solo'; S.openMis = false; S.joinFriend = true;
+      if (TOUCH && prefs.tilt) askTilt();
+      S.phase = 'hangar'; S.who = 0; render();
+    });
     click(box.querySelector('.sp-help-btn'), () => { S.help = true; helpUI(); });
     ui.appendChild(box);
   }
@@ -1668,7 +1640,7 @@ export function mount(stage) {
     if (!starts.find(s => s.id === prefs.start)) prefs.start = starts[0].id;
     const box = el(`<div class="ui-overlay sp-hangar"><div class="ui-panel wide left sp-hcard">
       <div class="sp-hhead"><div><div class="ui-kicker">Sky Pilot · Hangar</div><h2 class="ui-title">Choose your plane</h2></div>
-        ${net.room ? `<div class="sp-strip sp-hstrip">${stripHtml()}</div>` : ''}</div>
+        ${S.joinFriend ? '<p class="ui-sub sp-hjoin">👫 Pick a plane and fly: your friends are in the sky!</p>' : ''}</div>
       <div class="ui-choices tight sp-planes">${PLANE_ORDER.map(t => `<button class="ui-choice sp-pcard ${pl.type === t ? 'on' : ''}" data-t="${t}"><span class="i">${PLANES[t].icon}</span>${PLANES[t].name}<small>${'★'.repeat(PLANES[t].stars)}${'☆'.repeat(Math.max(0, 3 - PLANES[t].stars))}</small></button>`).join('')}</div>
       <div class="sp-hrow">
         <div class="sp-hcol"><div class="ui-label">Colour</div>
@@ -1709,7 +1681,6 @@ export function mount(stage) {
       <div class="ui-row sp-foot">
         <div class="ui-row">
           <button class="ui-btn ghost sp-quit" aria-label="Quit">${icon('home')}<span>Quit</span></button>
-          ${net.room ? `<button class="ui-btn ghost sp-leave" aria-label="Leave">${icon('leave')}<span>Leave friends</span></button>` : ''}
         </div>
         <button class="ui-btn ghost small sp-helpb" aria-label="Keys">${icon('keyboard')}<span>Controls</span></button>
       </div>
@@ -1724,8 +1695,7 @@ export function mount(stage) {
     click(box.querySelector('.sp-respawn'), () => { players.forEach(respawn); pause(false); });
     click(box.querySelector('.sp-plane'), () => { stopFlying(); S.phase = 'hangar'; render(); });
     click(box.querySelector('.sp-helpb'), () => helpUI());
-    click(box.querySelector('.sp-leave'), () => { leaveRoom(); render(); });
-    click(box.querySelector('.sp-quit'), () => { stopFlying(); if (net.room) leaveRoom(); S.phase = 'menu'; render(); });
+    click(box.querySelector('.sp-quit'), () => { stopFlying(); leftRoom(); S.joinFriend = false; S.phase = 'menu'; render(); });
     ui.appendChild(box);
   }
   function stopFlying() {
@@ -1760,7 +1730,7 @@ export function mount(stage) {
   const onVisible = () => { if (S.phase === 'fly' && document.visibilityState === 'visible') keepAwake(true); if (music.el && document.visibilityState !== 'visible') music.el.pause(); };
   document.addEventListener('visibilitychange', onVisible);
 
-  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, missions, music, hostTest: async () => { const r = await createRoom(GAME, { state: 'fly' }); r.setMeta({ hostUid: r.uid }); goRoom(r, true); return r.code; }, joinTest: c => tryJoin(c), players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
+  if (PARAMS.has('spdebug')) window.__sp = () => ({ S, tilt, missions, music, players, world, net, remotes, prefs, scene, renderer, startFlying, setMode: m => { S.mode = m; } });
 
   return () => {
     alive = false;
@@ -1768,6 +1738,7 @@ export function mount(stage) {
     try { if (world) stopFlying(); } catch (e) { /* */ }
     try { if (missions) missions.dispose(); } catch (e) { /* */ }
     if (net.room) leaveRoom();
+    leftRoom();
     removeEventListener('keydown', onKeyDown);
     removeEventListener('pointerdown', musicKick); removeEventListener('keydown', musicKick);
     if (music.el) { music.el.pause(); music.el.src = ''; }
