@@ -183,6 +183,30 @@ export function mount(stage, info) {
     return `<img class="axie-thumb" src="${thumbs[id]}" alt="">`;
   }
 
+  // ---------- Background music: the calm Glider soundtrack (also used by Sky Pilot's paper plane) ----------
+  const MUSIC_KEY = 'kg-axie-music';
+  let musicOn = (() => { try { return localStorage.getItem(MUSIC_KEY) !== 'off'; } catch (e) { return true; } })();
+  const music = { el: null, vol: 0 };
+  function musicTick(dt) {
+    const want = musicOn && document.visibilityState === 'visible';
+    if (want && !music.el) {
+      try {
+        music.el = new Audio(new URL('../sky-pilot/music/calm.mp3', import.meta.url).href);
+        music.el.loop = true; music.el.volume = 0; music.el.preload = 'auto';
+      } catch (e) { return; }
+    }
+    if (!music.el) return;
+    const level = !want ? 0 : pet && pet.asleep ? 0.12 : 0.3;   // quieter while it sleeps
+    music.vol += (level - music.vol) * Math.min(1, dt * (want ? 0.6 : 2));
+    music.el.volume = clamp(music.vol, 0, 1);
+    if (want && music.el.paused) music.el.play().catch(() => {});
+    if (!want && music.vol < 0.01 && !music.el.paused) music.el.pause();
+  }
+  // phones only start sound after a tap
+  const musicKick = () => { if (music.el && music.el.paused && musicOn) music.el.play().catch(() => {}); };
+  addEventListener('pointerdown', musicKick);
+  addEventListener('keydown', musicKick);
+
   // ---------- Layout ----------
   function layout() {
     W = view.width; H = view.height;
@@ -659,9 +683,17 @@ export function mount(stage, info) {
       <div class="ui-sub">Next birthday in about <b>${when}</b>${growingNow ? '' : '<br>⚠️ Not growing right now. Look after every need!'}</div>
       <div style="width:100%;height:14px;border-radius:7px;background:rgba(255,255,255,.12);overflow:hidden"><div style="height:100%;width:${Math.round(birthdayProgress(pet) * 100)}%;background:var(--accent)"></div></div>
       <div class="ui-row">
+        <button class="ui-btn small" data-music>${musicOn ? '🔊 Music on' : '🔇 Music off'}</button>
         <button class="ui-btn danger small" data-new>🥚 New pet</button>
         <button class="ui-btn primary" data-close>Done</button>
       </div>`, false);
+    const mb = ov.querySelector('[data-music]');
+    mb.addEventListener('click', () => {
+      musicOn = !musicOn;
+      try { localStorage.setItem(MUSIC_KEY, musicOn ? 'on' : 'off'); } catch (e) { /* private mode */ }
+      mb.textContent = musicOn ? '🔊 Music on' : '🔇 Music off';
+      sfx.click();
+    });
     const nb = ov.querySelector('[data-new]');
     let sure = false;
     nb.addEventListener('click', () => {
@@ -1053,6 +1085,7 @@ export function mount(stage, info) {
   // ---------- Update ----------
   function update(dt) {
     t += dt;
+    musicTick(dt);
     if (screen === 'egg') { egg.wob = Math.max(0, egg.wob - dt * 2); return; }
     if (screen !== 'tank' || !pet) return;
     layout();
@@ -1538,6 +1571,7 @@ export function mount(stage, info) {
   if (inviteCode && !(pet && pet.hatched)) setTimeout(() => hint('Hatch your own axolotl first, then join! 🥚', 4), 500);
 
   const onVis = () => {
+    if (document.hidden) music.el?.pause();   // the loop stops when hidden, so pause straight away
     if (!pet || screen !== 'tank') return;
     if (document.hidden) savePet(pet);
     else { catchUp(pet); refreshHud(); }
@@ -1547,6 +1581,9 @@ export function mount(stage, info) {
 
   return () => {
     save();
+    removeEventListener('pointerdown', musicKick);
+    removeEventListener('keydown', musicKick);
+    if (music.el) { music.el.pause(); music.el.src = ''; }
     if (pd) { const p = pd; pd = null; p.leave(); }
     stopLoop();
     document.removeEventListener('visibilitychange', onVis);

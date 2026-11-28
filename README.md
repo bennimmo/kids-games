@@ -189,6 +189,7 @@ Draw lines with your finger/mouse so the monster truck gets to the flag 🏁.
 - 📸 saves a PNG. Last 20 girls kept in the browser ("My girls"). Bump `LOOK_VERSION` in `look.js` on breaking changes; older saves just disappear.
 - 😊 Face / 👗 Clothes switch: zoom out to the whole girl and dress her (tops, bottoms, dresses, shoes and socks, bags, bracelets). A dress hides the top and bottoms; putting either back on takes the dress off.
 - 👭 Play with friends (uses `js/engine/net.js`): make a room or join with 3 pictures. Everyone makes their own girl; your girl and one friend's girl show big side by side, others as small faces to tap. 🎉 Show off sends confetti to everyone. Friends' girls are checked by `sanitizeLook()` before drawing.
+- 🎵 Background music: the calm Glider soundtrack from Sky Pilot (`../sky-pilot/music/calm.mp3`), soft (quieter while it sleeps), pauses when the app is hidden. ⚙️ → 🔊 Music on/off (saved, `kg-axie-music`).
 - Icons: buttons, needs, coins, wardrobe tabs and the games menu use drawn SVG icons (`icons.js`, `ic(name)`); shop/tray pictures reuse the `art.js` drawings (`thumb(id)`). Clothes still show as emoji in the wardrobe grid.
 - Files: `items.js` (data), `icons.js`, `draw.js` (SVG), `look.js` (state + actions), `gallery.js`, `online.js` (friends), `game.js` (screens).
 
